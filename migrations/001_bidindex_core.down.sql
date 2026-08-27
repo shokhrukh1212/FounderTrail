@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS api_rate_limit_events;
+DROP TABLE IF EXISTS product_metric_aggregates;
+DROP TABLE IF EXISTS product_outbound_click_events;
+DROP TABLE IF EXISTS product_updates;
+DROP TABLE IF EXISTS product_votes;
+DROP TABLE IF EXISTS product_owner_credentials;
+DROP TABLE IF EXISTS product_media;
+DROP TABLE IF EXISTS product_categories;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS products;

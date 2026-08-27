@@ -7,7 +7,20 @@ function int(name: string, fallback: number): number {
 
 export const config = {
   siteUrl: process.env.SITE_URL ?? "http://localhost:3000",
-  siteName: process.env.SITE_NAME ?? "yourhour",
+  siteName: process.env.SITE_NAME ?? "BidIndex",
+  siteDescription:
+    process.env.SITE_DESCRIPTION ??
+    "The live, verified discovery platform for bidding products.",
+  accentColor: process.env.SITE_ACCENT_COLOR ?? "#FF6154",
+  featurePromotions: process.env.FEATURE_PROMOTIONS === "true",
+  eventHashSalt: process.env.EVENT_HASH_SALT ?? process.env.IP_HASH_SALT ?? "dev-event-salt-change-me",
+  adminAccessSecret: process.env.ADMIN_ACCESS_SECRET ?? "",
+  upload: {
+    driver: process.env.UPLOAD_STORAGE_DRIVER ?? "local",
+    localDirectory: process.env.UPLOAD_LOCAL_DIR ?? ".data/uploads",
+  },
+  allowLocalPartnerOrigins:
+    process.env.NODE_ENV !== "production" && process.env.ALLOW_LOCAL_PARTNER_ORIGINS === "true",
 
   /** How long an unpaid bid checkout remains reusable. It never holds rank. */
   reservationMinutes: int("RESERVATION_MINUTES", 10),

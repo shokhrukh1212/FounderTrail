@@ -1,5 +1,5 @@
 {
-  "name": "yourhour",
+  "name": "bidindex",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,9 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit --incremental false",
     "migrate": "tsx --env-file=.env.local scripts/migrate.ts",
+    "migrate:down": "tsx --env-file=.env.local scripts/migrate-down.ts",
     "backup": "tsx --env-file=.env.local scripts/backup-json.ts",
     "seed:demo": "tsx --env-file=.env.local scripts/seed-demo.ts",
     "test": "node --import tsx --test lib/__tests__/*.test.ts",

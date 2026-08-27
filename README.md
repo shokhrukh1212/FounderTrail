@@ -1,8 +1,10 @@
-# YourHour
+# BidIndex
 
-YourHour is a permanent product leaderboard. The highest bidder owns the homepage; every completed buyer remains listed forever.
+BidIndex is the live, verified discovery platform for bidding products. This repository is an additive transformation of YourHour: the BidIndex discovery, ownership, voting, metrics, and partner-network tables are separate from the preserved legacy payment system.
 
-## Product model
+Start with [the product brief](docs/PRODUCT.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [architecture](docs/ARCHITECTURE.md), [partner guide](docs/PARTNER_INTEGRATION.md), and [current handoff](PASS.md).
+
+## Preserved legacy payment model
 
 - the first product bids $3
 - bids are whole US dollars
@@ -21,11 +23,11 @@ Legacy guaranteed-click payments are preserved in `leaderboard_migration_audits`
 npm install
 cp .env.example .env.local
 npm run migrate
-npm run seed:demo
+npm run seed:demo -- --confirm-demo
 npm run dev
 ```
 
-With Lemon Squeezy variables unset, checkout uses the local completion stub. The configured Lemon Squeezy variant must accept custom prices as low as $1 because an owner can buy a one-dollar upgrade. The webhook endpoint is `/api/webhooks/lemonsqueezy`.
+The BidIndex public application does not expose legacy bidding in normal navigation. With Lemon Squeezy variables unset, the preserved legacy checkout uses the local completion stub. The configured Lemon Squeezy variant must accept custom prices as low as $1 because an owner can buy a one-dollar legacy upgrade. The webhook endpoint remains `/api/webhooks/lemonsqueezy`.
 
 `/api/cron/tick` expires abandoned bid intents and retries durable analytics delivery. It does not promote campaigns, calculate capacity, or issue refunds.
 
@@ -45,7 +47,7 @@ Verify the migration audit, normalized totals, original tie order, and click tot
 ```bash
 npm test
 npm run lint
-npx tsc --noEmit --incremental false
+npm run typecheck
 npm run build
 ```
 

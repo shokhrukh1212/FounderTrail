@@ -1,68 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Logo } from "./Logo";
 
-const VISITOR_POLL_MS = 5_000;
-
-export function SiteHeader({ initialVisitors }: { initialVisitors: number }) {
+export function SiteHeader({ siteName, defaultQuery = "" }: { siteName: string; defaultQuery?: string }) {
   const [open, setOpen] = useState(false);
-  const [visitors, setVisitors] = useState(initialVisitors);
-
-  useEffect(() => {
-    let active = true;
-    let inFlight = false;
-    let controller: AbortController | null = null;
-
-    const read = async (register: boolean) => {
-      if (inFlight) return;
-      inFlight = true;
-      controller = new AbortController();
-      try {
-        const response = await fetch(register ? "/api/visitors" : "/api/visitors?peek=1", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const data = await response.json() as { visitors?: number };
-        if (active && typeof data.visitors === "number") setVisitors(data.visitors);
-      } catch {
-        // A transient network failure should not disturb the header; the next poll retries.
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void read(false);
-    };
-
-    void read(true);
-    const timer = window.setInterval(() => {
-      refreshWhenVisible();
-    }, VISITOR_POLL_MS);
-    window.addEventListener("focus", refreshWhenVisible);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
-    return () => {
-      active = false;
-      controller?.abort();
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshWhenVisible);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, []);
-
   return (
-    <header className="site-header">
-      <div className="site-shell site-header-inner">
-        <Link href="/" className="brand" aria-label="YourHour home"><Logo className="brand-mark" /><span>YourHour</span></Link>
-        <p className="visitor-total"><strong>{visitors.toLocaleString()}</strong> visitors so far</p>
-        <nav className="desktop-nav" aria-label="Main navigation"><a href="#leaderboard">Leaderboard</a><Link href="/rules">Rules</Link></nav>
-        <button className="menu-button" type="button" aria-expanded={open} aria-controls="mobile-menu" aria-label="Toggle menu" onClick={() => setOpen((value) => !value)}><span /><span /><span /></button>
+    <header className="discovery-header">
+      <div className="app-shell header-inner">
+        <Link href="/" className="brand-link" aria-label={`${siteName} home`}>
+          <Logo className="brand-logo" />
+          <span>{siteName}</span>
+        </Link>
+        <form className="header-search" action="/" method="get" role="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+          <input name="q" type="search" defaultValue={defaultQuery} placeholder="Search bidding products" aria-label="Search products" />
+        </form>
+        <nav className="header-nav" aria-label="Main navigation">
+          <Link href="/">Discover</Link>
+          <Link href="/leaderboards">Leaderboards</Link>
+          <Link href="/about">About</Link>
+          <Link href="/submit" className="primary-nav-action">Submit product</Link>
+        </nav>
+        <button className="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          <span /><span /><span />
+        </button>
       </div>
-      {open ? <nav id="mobile-menu" className="mobile-nav" aria-label="Mobile navigation"><a href="#leaderboard" onClick={() => setOpen(false)}>Leaderboard</a><Link href="/rules" onClick={() => setOpen(false)}>Rules</Link></nav> : null}
+      {open ? (
+        <div className="mobile-navigation">
+          <form action="/" method="get" role="search">
+            <input name="q" type="search" defaultValue={defaultQuery} placeholder="Search products" aria-label="Search products" />
+          </form>
+          <Link href="/" onClick={() => setOpen(false)}>Discover</Link>
+          <Link href="/leaderboards" onClick={() => setOpen(false)}>Leaderboards</Link>
+          <Link href="/about" onClick={() => setOpen(false)}>About</Link>
+          <Link href="/submit" className="primary-nav-action" onClick={() => setOpen(false)}>Submit product</Link>
+        </div>
+      ) : null}
     </header>
   );
 }

@@ -1,22 +1,23 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Script from "next/script";
 import localFont from "next/font/local";
 import { Suspense } from "react";
 import { VemetricScript } from "@vemetric/react";
 import { MetaPixelRouteTracker } from "@/components/MetaPixelRouteTracker";
+import { SiteHeader } from "@/components/SiteHeader";
 import { config } from "@/lib/config";
 import "./globals.css";
 
-const publicSiteUrl = new URL("https://yourhour.lol");
-const socialTitle = "YourHour — One Product Owns the Homepage";
-const socialDescription =
-  "Pay $1 more to take #1. Every buyer stays permanently on the leaderboard, ranked by total paid.";
+const publicSiteUrl = new URL(config.siteUrl);
+const socialTitle = `${config.siteName} — Live bidding-product discovery`;
+const socialDescription = config.siteDescription;
 const socialImage = {
   url: "/og2.png",
   width: 1200,
   height: 631,
   type: "image/png",
-  alt: "YourHour — One Product Owns the Homepage",
+  alt: `${config.siteName} discovery platform`,
 };
 
 // Next ships these exact variable fonts with the installed package. Loading them
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
   // together -- they are the same mark drawn twice.
   title: {
     default: socialTitle,
-    template: "%s · YourHour",
+    template: `%s · ${config.siteName}`,
   },
   description: socialDescription,
   alternates: {
@@ -50,7 +51,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "YourHour",
+    siteName: config.siteName,
     locale: "en_US",
     url: "/",
     title: socialTitle,
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ "--accent": config.accentColor } as CSSProperties}
     >
       <body className="min-h-full flex flex-col">
         {vemetricToken ? <VemetricScript token={vemetricToken} /> : null}
@@ -109,7 +111,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             twq('config','${config.xPixel.id}');`}
           </Script>
         ) : null}
+        <SiteHeader siteName={config.siteName} />
         {children}
+        <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{config.siteDescription}</span></div></footer>
       </body>
     </html>
   );
