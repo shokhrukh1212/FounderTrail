@@ -15,13 +15,13 @@ export function ProductRow({ product, position, voted = false, showPosition = tr
     <article className="product-row">
       <Link className="product-row-link" href={`/product/${product.slug}`} aria-label={`View ${product.name}`} />
       {showPosition ? <span className="product-position">{position}</span> : null}
-      <ProductLogo imageUrl={product.logoUrl} productUrl={null} productName={product.name} className="product-list-logo" />
+      <ProductLogo imageUrl={product.logoUrl} productUrl={product.websiteUrl} productName={product.name} className="product-list-logo" />
       <div className="product-row-copy">
         <div className="product-title-line">
           <h2>{product.name}</h2>
           {product.isDemo ? <span className="demo-label">Demo</span> : null}
-          {product.metrics.some((metric) => metric.source === "verified_live" || metric.source === "verified_by_bidindex")
-            ? <span className="verified-mark" title="Has at least one technically verified metric">✓</span>
+          {product.isVerified
+            ? <span className="verified-mark" title="BidIndex confirmed this product’s domain and badge installation. Metrics have separate source labels.">✓</span>
             : null}
         </div>
         <p className="product-tagline">{product.tagline}</p>

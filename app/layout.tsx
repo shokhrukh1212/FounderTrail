@@ -6,18 +6,19 @@ import { Suspense } from "react";
 import { VemetricScript } from "@vemetric/react";
 import { MetaPixelRouteTracker } from "@/components/MetaPixelRouteTracker";
 import { SiteHeader } from "@/components/SiteHeader";
+import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
 import "./globals.css";
 
 const publicSiteUrl = new URL(config.siteUrl);
-const socialTitle = `${config.siteName} — Live bidding-product discovery`;
-const socialDescription = config.siteDescription;
+const socialTitle = brandCopy.metaTitle;
+const socialDescription = brandCopy.metaDescription;
 const socialImage = {
-  url: "/og2.png",
+  url: "/og.jpg",
   width: 1200,
-  height: 631,
-  type: "image/png",
-  alt: `${config.siteName} discovery platform`,
+  height: 630,
+  type: "image/jpeg",
+  alt: `${config.siteName} — ${brandCopy.line}`,
 };
 
 // Next ships these exact variable fonts with the installed package. Loading them
@@ -75,6 +76,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       style={{ "--accent": config.accentColor } as CSSProperties}
     >
       <body className="min-h-full flex flex-col">
+        <Script id="owner-fragment-scrubber" strategy="beforeInteractive">
+          {`try{if(location.pathname.startsWith('/manage/')&&/^#(?:token|approval)=/.test(location.hash)){sessionStorage.setItem('bidindex-owner-fragment',location.hash);history.replaceState(null,'',location.pathname+location.search)}}catch{}`}
+        </Script>
         {vemetricToken ? <VemetricScript token={vemetricToken} /> : null}
         {config.metaPixel.id ? (
           <>
@@ -113,7 +117,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         ) : null}
         <SiteHeader siteName={config.siteName} />
         {children}
-        <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{config.siteDescription}</span></div></footer>
+        <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{brandCopy.line}</span></div></footer>
       </body>
     </html>
   );

@@ -20,8 +20,8 @@ declare global {
   }
 }
 
-/** The one thing every YourHour conversion is for. Constant, and not personal data. */
-export const PLACEMENT_CONTENT_NAME = "YourHour homepage placement";
+/** The one thing every preserved promotion conversion is for. Constant, and not personal data. */
+export const PLACEMENT_CONTENT_NAME = "BidIndex promotion placement";
 
 export type MetaEventName = "PageView" | "ViewContent" | "InitiateCheckout" | "Purchase";
 

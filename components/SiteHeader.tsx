@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Logo } from "./Logo";
 
-export function SiteHeader({ siteName, defaultQuery = "" }: { siteName: string; defaultQuery?: string }) {
+export function SiteHeader({ siteName }: { siteName: string; defaultQuery?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <header className="discovery-header">
@@ -13,12 +13,8 @@ export function SiteHeader({ siteName, defaultQuery = "" }: { siteName: string; 
           <Logo className="brand-logo" />
           <span>{siteName}</span>
         </Link>
-        <form className="header-search" action="/" method="get" role="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
-          <input name="q" type="search" defaultValue={defaultQuery} placeholder="Search bidding products" aria-label="Search products" />
-        </form>
         <nav className="header-nav" aria-label="Main navigation">
-          <Link href="/">Discover</Link>
+          <a href="https://yourhour.lol" target="_blank" rel="noopener noreferrer">Bid live on YourHour ↗</a>
           <Link href="/leaderboards">Leaderboards</Link>
           <Link href="/about">About</Link>
           <Link href="/submit" className="primary-nav-action">Submit product</Link>
@@ -29,10 +25,7 @@ export function SiteHeader({ siteName, defaultQuery = "" }: { siteName: string; 
       </div>
       {open ? (
         <div className="mobile-navigation">
-          <form action="/" method="get" role="search">
-            <input name="q" type="search" defaultValue={defaultQuery} placeholder="Search products" aria-label="Search products" />
-          </form>
-          <Link href="/" onClick={() => setOpen(false)}>Discover</Link>
+          <a href="https://yourhour.lol" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>Bid live on YourHour ↗</a>
           <Link href="/leaderboards" onClick={() => setOpen(false)}>Leaderboards</Link>
           <Link href="/about" onClick={() => setOpen(false)}>About</Link>
           <Link href="/submit" className="primary-nav-action" onClick={() => setOpen(false)}>Submit product</Link>

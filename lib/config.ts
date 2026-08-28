@@ -1,3 +1,5 @@
+import { brandCopy } from "./brand";
+
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -6,18 +8,32 @@ function int(name: string, fallback: number): number {
 }
 
 export const config = {
-  siteUrl: process.env.SITE_URL ?? "http://localhost:3000",
+  siteUrl: (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, ""),
   siteName: process.env.SITE_NAME ?? "BidIndex",
   siteDescription:
     process.env.SITE_DESCRIPTION ??
-    "The live, verified discovery platform for bidding products.",
+    brandCopy.metaDescription,
   accentColor: process.env.SITE_ACCENT_COLOR ?? "#FF6154",
   featurePromotions: process.env.FEATURE_PROMOTIONS === "true",
   eventHashSalt: process.env.EVENT_HASH_SALT ?? process.env.IP_HASH_SALT ?? "dev-event-salt-change-me",
   adminAccessSecret: process.env.ADMIN_ACCESS_SECRET ?? "",
+  email: {
+    resendApiKey: process.env.RESEND_API_KEY ?? "",
+    from: process.env.EMAIL_FROM ?? "",
+    replyTo: process.env.EMAIL_REPLY_TO ?? "",
+  },
   upload: {
     driver: process.env.UPLOAD_STORAGE_DRIVER ?? "local",
     localDirectory: process.env.UPLOAD_LOCAL_DIR ?? ".data/uploads",
+    s3: {
+      region: process.env.STORAGE_S3_REGION ?? "",
+      bucket: process.env.STORAGE_S3_BUCKET ?? "",
+      accessKeyId: process.env.STORAGE_S3_ACCESS_KEY_ID ?? "",
+      secretAccessKey: process.env.STORAGE_S3_SECRET_ACCESS_KEY ?? "",
+      publicBaseUrl: process.env.STORAGE_S3_PUBLIC_BASE_URL ?? "",
+      endpoint: process.env.STORAGE_S3_ENDPOINT ?? "",
+      forcePathStyle: process.env.STORAGE_S3_FORCE_PATH_STYLE === "true",
+    },
   },
   allowLocalPartnerOrigins:
     process.env.NODE_ENV !== "production" && process.env.ALLOW_LOCAL_PARTNER_ORIGINS === "true",
@@ -39,8 +55,7 @@ export const config = {
     token: process.env.VEMETRIC_TOKEN ?? "",
     // Retained for the analytics integration; it is no longer linked in the header.
     publicDashboardUrl:
-      process.env.VEMETRIC_PUBLIC_DASHBOARD_URL ??
-      "https://app.vemetric.com/public/yourhour.com",
+      process.env.VEMETRIC_PUBLIC_DASHBOARD_URL ?? "",
   },
 
   metaPixel: {

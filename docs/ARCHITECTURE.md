@@ -1,52 +1,76 @@
 # BidIndex architecture
 
-## Existing application
+## Existing application and preserved payments
 
-The repository is a Next.js 16.3.2 App Router application using React 19, strict TypeScript, Tailwind 4, raw `pg`, and PostgreSQL. Server Components read the database directly and Route Handlers expose JSON, webhook, and redirect endpoints.
+BidIndex remains the existing Next.js 16.3.2 App Router, React 19, strict TypeScript, Tailwind 4, and PostgreSQL/raw `pg` application. Server Components read through server-only modules; Route Handlers implement mutations, embeds, webhooks, and redirects. The local architecture and component system were extended rather than replaced.
 
-YourHour payment infrastructure consists of `campaigns`, `checkout_intents`, payment/accounting audit tables, Lemon Squeezy checkout creation, an HMAC-verified webhook, server-calculated amounts, a unique provider order ID, transactional settlement under a PostgreSQL advisory lock, and a development-only completion stub. The analytics ledger forwards durable events to Vemetric and X. This infrastructure remains intact.
+The legacy Lemon Squeezy checkout, server-calculated amounts, webhook signature validation, provider-order idempotency, advisory-lock settlement, transaction tables, and environment variables remain intact. They are absent from BidIndex organic ranking and owner verification. Promotions remain disabled.
 
-The legacy `/r/[id]` route records a deduplicated campaign click using an anonymous UUID cookie, hashed network address, bot and owner filtering, and database rate checks. BidIndex reuses those patterns but stores product activity separately.
+## Core data model
 
-## New model
+- `products` and `product_submission_metadata`: moderation lifecycle, approval/publication timestamps, approval-email delivery state, approved URL/domain, launch date, private submission contact, editable public copy, and extracted metadata.
+- `product_owner_credentials`: random owner token hashes; raw tokens are deliberately shown only through the one-time private management-link flow.
+- `product_media`, `product_updates`, `product_votes`: validated media, founder communication, and unique reversible community votes.
+- `product_integrations`: public project ID, normalized allowed domain, domain/badge/product verification timestamps, visitor activity, and optional server-secret hash.
+- `product_traffic_daily`, `product_daily_visitors`, `product_traffic_event_ids`, `product_referrer_daily`: pageview, approximate daily unique, badge impression/click, short-lived idempotency, and aggregate referrer data without raw IP storage.
+- `product_metric_events`: idempotent authenticated event ledger using integer minor currency units.
+- `product_metric_aggregates`: metric/source/currency totals, measurement period, source state, and update/receipt times.
+- `product_public_evidence`: pending, accepted, rejected, stale, or archived administrator-reviewed public sources.
+- `product_outbound_click_events` and `product_badge_referral_events`: separate BidIndex outbound and badge-referral accounting.
 
-- `products`, `categories`, and `product_categories` hold moderated discovery content.
-- `product_owner_credentials` holds only hashes of random owner tokens.
-- `product_media` stores validated adapter keys and public metadata.
-- `product_votes` stores one mutable active vote per product and hashed visitor.
-- `product_updates` stores plain-text founder announcements.
-- `product_outbound_click_events` stores counted and excluded redirect attempts without raw IP addresses.
-- `product_metric_aggregates` stores database-backed values with an exact source and optional currency.
-- `product_integrations`, `product_metric_events`, `product_badge_referral_events`, and `domain_verification_attempts` support the partner network.
-- `api_rate_limit_events` provides shared database-backed request limiting.
+Migration `005_verification_metric_trust.up.sql` is additive. It preserves existing integrations and metric history, maps old source names to the explicit trust model, makes revenue secrets optional, and adds verification/traffic/source-state columns and indexes. Normal operation is forward-only; the down migration exists for disposable local recovery, not routine production rollback.
 
-New tables are introduced by checksummed `up` migrations with companion `down` files. The historical `lib/schema.sql` stays as the legacy bootstrap and is not rewritten.
+## Important routes
 
-## Routes and flow
+- `/manage/[slug]` — owner dashboard with Product, Updates, and Verification & data tabs.
+- `POST /api/owner/products/[slug]/verify-domain` — checks the stored approved domain using meta or file verification.
+- `POST /api/owner/products/[slug]/check-badge` — checks the stored approved page for the configured badge script and project ID.
+- `POST /api/events/visitor` — origin-bound badge pageview/impression events.
+- `POST /api/partner/v1/events` — authenticated, versioned server events. The legacy integration endpoint remains as a compatibility adapter.
+- `/go/[slug]` — resolves only the approved product URL and records eligible BidIndex outbound clicks.
+- `POST /api/admin/products/[slug]/owner-link` — admin-only, same-origin rotation for a lost owner link; returns the replacement once and stores only its hash.
+- `PUT /api/admin/products/[slug]/status` — idempotently commits publication, then attempts the private approval email without rolling back publication on provider failure.
+- `POST /api/admin/products/[slug]/approval-email` — admin-only safe retry for a failed/not-sent approval email.
+- `POST /api/admin/approval-emails` — admin-confirmed, idempotent catch-up delivery for published non-demo products whose approval email was never sent.
+- `GET /api/owner/products/[slug]` — authenticated, uncached owner status used for manual and 30-second pending polling; it returns no private contact data.
+- `/from/[publicId]` — records badge clicks separately and routes to the BidIndex product page.
+- `/admin` and `/api/admin/evidence/[id]` — submission and public-evidence moderation.
 
-Public discovery uses `/`, `/leaderboards`, `/about`, `/submit`, and `/product/[slug]`. Server Components query a server-only data layer rather than making HTTP requests back into the application.
+All generated badge, verification, and endpoint URLs use `SITE_URL`. No production domain is compiled into the implementation.
 
-Submission creates a pending product and a hashed owner credential. A local-only one-time URL carries the raw token in a fragment; a POST exchange sets a product-scoped HTTP-only cookie and removes the fragment from history. Owner and admin authorization is repeated inside every mutation.
+## Approval and owner-email access
 
-`/go/[slug]` resolves only a stored product URL, records the attempt, and redirects even if counting fails. No redirect endpoint accepts a destination URL from the caller.
+Approval preserves the submission slug, writes `published` plus `approved_at`/`published_at` in one transaction, and records the moderation event. Public product, Newest, and UTC launch-date queries become eligible immediately because they already require the published status. Approval never inserts votes, traffic, metrics, revenue, or payment state.
 
-The partner badge script sends a domain-verified, origin-validated pageview without page content. Server revenue, purchase, and bid events use a Bearer secret, unique event ID, timestamp bounds, integer minor units, and transactionally updated per-currency aggregates. Badge referral tracking leads to the BidIndex profile and is isolated from `/go/[slug]` outbound click accounting.
+After commit, Resend receives responsive HTML and plain text using the private contact email. The initial provider idempotency key is `product-approved:{productId}:{approvedAt}`; database delivery state prevents later duplicates, while failed attempts can safely retry the same deterministic payload. Provider failures are stored as sanitized codes and shown to administrators only.
 
-## Ranking
+The original raw owner token cannot be recovered from its hash. Approval email therefore carries a deterministic HMAC-signed access value in the URL fragment. A `beforeInteractive` scrubber moves that fragment into tab-scoped session storage and removes it from the address before analytics initialize; the owner access component immediately consumes and deletes it before POSTing it to the owner-session endpoint, which stores it only in the existing HTTP-only product cookie. The signature binds product ID, approval time, and credential version; administrator link rotation increments that version and invalidates both link forms. Resend click/open tracking must remain disabled for this transactional domain.
 
-- Today uses the effective launch timestamp inside the current UTC day.
-- Trending uses active unique votes first created in the rolling previous seven days, with counted BidIndex outbound clicks from the same period as tie-breaker.
-- Newest uses publication time descending.
-- Verified requires at least one technically verified metric.
-- Most upvoted uses all-time active unique votes.
-- Metric leaderboards accept only technically verified or publicly sourced values and never combine currencies.
+## Verification flow
 
-Stable publication time and ID tie-breakers follow the documented criteria. Legacy bids and all payment fields are absent from organic queries.
+```text
+Owner proves stored domain ──> domain_verified_at
+Owner installs badge ────────> badge_installed_at
+Both present ────────────────> product_verified_at
 
-## Security decisions
+Badge activity ──────────────> measured traffic (separate state)
+Optional server events ──────> Partner connected metrics
+Admin-reviewed public page ──> Publicly sourced metrics
+Future official connector ───> Processor verified metrics
+```
 
-All SQL is parameterized. User content remains plain text and React-escaped. Mutation endpoints validate content type, body size, client input, authorization, and same-origin requests where applicable. Remote HTML verification uses DNS resolution, private-address rejection, pinned connections, redirect validation, byte limits, and timeouts. Media uses server-generated names and magic-byte validation. Raw IP addresses, owner tokens, and integration secrets are never stored or logged.
+Low traffic does not remove product verification. Domain verification never marks a metric verified. Each metric retains its own source, period, currency, and update time.
 
-## Payment preservation
+## Traffic privacy and security
 
-The current Lemon Squeezy integration, webhook signature verification, amount validation, order idempotency, checkout tables, environment variables, analytics delivery, and legacy routes remain available for regression and in-flight compatibility. BidIndex public navigation does not expose the old bidding UI. Promotions remain disabled; a future promotion flow requires its own records, fixed price/duration, webhook-only activation, and explicitly labelled rendering outside every organic query.
+The badge is asynchronous and uses `sendBeacon` with a safe fetch fallback. It sends only a public project ID, random per-event ID, event type, and referrer hostname when available. It does not read host cookies/local storage, DOM content, forms, names, emails, payment details, full query strings, fragments, or keystrokes.
+
+The event endpoint validates the request Origin against the verified allowed domain, filters obvious bots, rate-limits, and deduplicates event IDs. Approximate daily uniques use an HMAC of project ID, UTC date, a truncated server-observed network, and a coarse user-agent category. Raw IP addresses and full user agents never enter analytics tables; visitor hashes expire after their usefulness window.
+
+Verification fetches derive targets from the stored product URL. In production they require HTTPS, reject credentials/private/reserved/loopback/link-local addresses, screen all DNS answers, pin the validated address while preserving TLS hostname verification, revalidate redirects, restrict redirects to the same normalized domain, cap redirects/bytes/time, accept expected content types, and forward no user cookies or application credentials.
+
+Owner mutations require the product-scoped owner credential and same-origin requests. Admin mutations require the admin session. SQL is parameterized, React escapes founder copy, uploads reject SVG/HTML and validate MIME/magic bytes/size/dimensions, redirect routes never accept client destinations, and secrets are hashed at rest.
+
+## Ranking and production visibility
+
+All public product queries require `published`; production additionally requires `NOT is_demo`. Verified discovery uses `product_verified_at`. Trending remains weekly unique votes with eligible BidIndex clicks as tie-breaker. Revenue/visitor/click leaderboards exclude unavailable and founder-reported numbers, preserve original currencies, and show source labels. Payment tables are not read by organic ranking SQL.

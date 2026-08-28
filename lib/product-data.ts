@@ -4,8 +4,8 @@ import { query } from "./db";
 export const DISCOVERY_VIEWS = ["today", "trending", "verified", "newest"] as const;
 export type DiscoveryView = (typeof DISCOVERY_VIEWS)[number];
 export type ProductStatus = "draft" | "pending" | "published" | "rejected" | "archived";
-export type MetricSource = "verified_live" | "verified_by_bidindex" | "publicly_sourced" | "founder_reported";
-export type MetricType = "visitors" | "revenue" | "outbound_clicks" | "bids" | "purchases" | "current_bid" | "highest_bid";
+export type MetricSource = "measured_by_bidindex" | "processor_verified" | "partner_connected" | "publicly_sourced" | "founder_reported";
+export type MetricType = "visitors" | "revenue" | "outbound_clicks" | "bids" | "purchases" | "refunds" | "current_bid" | "highest_bid" | "partner_product_clicks";
 
 export type ProductMetric = {
   type: MetricType;
@@ -15,6 +15,7 @@ export type ProductMetric = {
   sourceUrl: string | null;
   updatedAt: Date;
   lastEventAt: Date | null;
+  measurementPeriod: "all_time" | "today" | "last_30_days";
 };
 
 export type ProductCardData = {
@@ -33,6 +34,7 @@ export type ProductCardData = {
   weeklyClicks: number;
   updateCount: number;
   metrics: ProductMetric[];
+  isVerified: boolean;
 };
 
 type ProductCardRow = {
@@ -58,17 +60,26 @@ type ProductCardRow = {
     sourceUrl: string | null;
     updatedAt: string;
     lastEventAt: string | null;
+    measurementPeriod: "all_time" | "today" | "last_30_days";
   }> | null;
+  product_verified_at: Date | null;
 };
 
 const CARD_COLUMNS = `
   p.id::text, p.slug, p.website_url, p.name, p.tagline, p.launch_at,
   p.published_at, p.is_demo,
-  (SELECT pm.public_url FROM product_media pm
-    WHERE pm.product_id = p.id AND pm.kind = 'logo' LIMIT 1) AS logo_url,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name) ORDER BY pc.position)
-    FROM product_categories pc JOIN categories c ON c.id = pc.category_id
-    WHERE pc.product_id = p.id), '[]'::jsonb) AS categories,
+  (SELECT i.product_verified_at FROM product_integrations i WHERE i.product_id=p.id) AS product_verified_at,
+  COALESCE(
+    (SELECT pm.public_url FROM product_media pm
+      WHERE pm.product_id = p.id AND pm.kind = 'logo' LIMIT 1),
+    (SELECT '/api/products/' || p.slug || '/logo' FROM product_submission_metadata sm
+      WHERE sm.product_id = p.id LIMIT 1)
+  ) AS logo_url,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name))
+    FROM categories c WHERE c.id = p.primary_category_id),
+    (SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name) ORDER BY pc.position)
+      FROM product_categories pc JOIN categories c ON c.id = pc.category_id
+      WHERE pc.product_id = p.id), '[]'::jsonb) AS categories,
   (SELECT count(*)::int FROM product_votes v
     WHERE v.product_id = p.id AND v.active AND (p.is_demo OR NOT v.is_demo)) AS vote_count,
   (SELECT count(*)::int FROM product_votes v
@@ -81,10 +92,34 @@ const CARD_COLUMNS = `
   COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'type', a.metric_type, 'source', a.source, 'currency', a.currency,
       'value', a.value::text, 'sourceUrl', a.source_url,
-      'updatedAt', a.updated_at, 'lastEventAt', a.last_event_at)
-    ORDER BY CASE a.source WHEN 'verified_by_bidindex' THEN 1 WHEN 'verified_live' THEN 2
-      WHEN 'publicly_sourced' THEN 3 ELSE 4 END, a.metric_type, a.currency)
-    FROM product_metric_aggregates a WHERE a.product_id = p.id), '[]'::jsonb) AS metrics
+      'updatedAt', a.updated_at, 'lastEventAt', a.last_event_at, 'measurementPeriod', a.measurement_period)
+    ORDER BY CASE a.source WHEN 'measured_by_bidindex' THEN 1 WHEN 'processor_verified' THEN 2
+      WHEN 'partner_connected' THEN 3 WHEN 'publicly_sourced' THEN 4 ELSE 5 END, a.metric_type, a.currency)
+    FROM (
+      SELECT metric_type,source,currency,
+             CASE WHEN metric_type='highest_bid' THEN max(value)
+                  WHEN metric_type='current_bid' THEN (array_agg(value ORDER BY updated_at DESC))[1]
+                  ELSE sum(value) END AS value,
+             max(source_url) AS source_url,max(updated_at) AS updated_at,max(last_event_at) AS last_event_at,
+             (array_agg(measurement_period ORDER BY updated_at DESC))[1] AS measurement_period
+        FROM (
+          SELECT metric_type,
+                 CASE WHEN source='verified_by_bidindex' THEN 'measured_by_bidindex'
+                      WHEN source='verified_live' AND metric_type='visitors' THEN 'measured_by_bidindex'
+                      WHEN source='verified_live' THEN 'partner_connected' ELSE source END AS source,
+                 currency,value,source_url,updated_at,last_event_at,measurement_period
+            FROM product_metric_aggregates stored
+           WHERE stored.product_id=p.id AND stored.source_status='active'
+             AND NOT (stored.metric_type='visitors' AND stored.source IN ('measured_by_bidindex','verified_live')
+               AND EXISTS (SELECT 1 FROM product_traffic_daily td WHERE td.product_id=p.id))
+        ) normalized
+       GROUP BY metric_type,source,currency
+      UNION ALL
+      SELECT 'visitors','measured_by_bidindex','',sum(td.daily_uniques),NULL,max(td.updated_at),max(td.updated_at),'last_30_days'
+        FROM product_traffic_daily td
+       WHERE td.product_id=p.id AND td.metric_date >= (now() AT TIME ZONE 'UTC')::date - 29
+       HAVING sum(td.daily_uniques)>0
+    ) a), '[]'::jsonb) AS metrics
 `;
 
 const ORDER: Record<DiscoveryView, string> = {
@@ -116,6 +151,7 @@ function card(row: ProductCardRow): ProductCardData {
       updatedAt: new Date(metric.updatedAt),
       lastEventAt: metric.lastEventAt ? new Date(metric.lastEventAt) : null,
     })),
+    isVerified: row.product_verified_at !== null,
   };
 }
 
@@ -137,13 +173,11 @@ export async function getDiscoveryProducts(input: {
   ];
   const params: unknown[] = [];
   if (view === "today") {
-    filters.push(`p.launch_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-      AND p.launch_at < (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day') AT TIME ZONE 'UTC'`);
+    filters.push(`p.launch_date = (now() AT TIME ZONE 'UTC')::date`);
   }
   if (view === "verified") {
-    filters.push(`EXISTS (SELECT 1 FROM product_metric_aggregates verified
-      WHERE verified.product_id = p.id
-        AND verified.source IN ('verified_live','verified_by_bidindex'))`);
+    filters.push(`EXISTS (SELECT 1 FROM product_integrations verified
+      WHERE verified.product_id = p.id AND verified.product_verified_at IS NOT NULL)`);
   }
   if (search) {
     params.push(`%${search.replace(/[\\%_]/g, "\\$&")}%`);
@@ -168,7 +202,7 @@ export type EcosystemSnapshot = {
   products: number;
   verifiedPartners: number;
   revenueByCurrency: Array<{ currency: string; value: number }>;
-  outboundClicks: number;
+  outboundClicks: number | null;
 };
 
 export async function getEcosystemSnapshot(): Promise<EcosystemSnapshot> {
@@ -177,12 +211,12 @@ export async function getEcosystemSnapshot(): Promise<EcosystemSnapshot> {
     query<{ products: string; verified: string; clicks: string }>(
       `SELECT count(*)::text AS products,
               count(*) FILTER (WHERE EXISTS (
-                SELECT 1 FROM product_metric_aggregates a
-                 WHERE a.product_id = p.id AND a.source IN ('verified_live','verified_by_bidindex')
+                SELECT 1 FROM product_integrations i
+                 WHERE i.product_id = p.id AND i.product_verified_at IS NOT NULL
               ))::text AS verified,
               COALESCE((SELECT sum(a.value) FROM product_metric_aggregates a
                 JOIN products cp ON cp.id = a.product_id
-               WHERE a.metric_type = 'outbound_clicks' AND a.source = 'verified_by_bidindex'
+               WHERE a.metric_type = 'outbound_clicks' AND a.source IN ('measured_by_bidindex','verified_by_bidindex')
                  AND cp.status = 'published' AND ($1::boolean OR NOT cp.is_demo)), 0)::text AS clicks
          FROM products p WHERE p.status = 'published' AND ($1::boolean OR NOT p.is_demo)`,
       [includeDemo],
@@ -191,7 +225,7 @@ export async function getEcosystemSnapshot(): Promise<EcosystemSnapshot> {
       `SELECT a.currency, sum(a.value)::text AS value
          FROM product_metric_aggregates a JOIN products p ON p.id = a.product_id
         WHERE a.metric_type = 'revenue'
-          AND a.source IN ('verified_live','publicly_sourced')
+          AND a.source IN ('processor_verified','partner_connected','publicly_sourced','verified_live') AND a.source_status='active'
           AND p.status = 'published' AND ($1::boolean OR NOT p.is_demo)
         GROUP BY a.currency ORDER BY a.currency`,
       [includeDemo],
@@ -200,7 +234,7 @@ export async function getEcosystemSnapshot(): Promise<EcosystemSnapshot> {
   return {
     products: Number(counts[0]?.products ?? 0),
     verifiedPartners: Number(counts[0]?.verified ?? 0),
-    outboundClicks: Number(counts[0]?.clicks ?? 0),
+    outboundClicks: Number(counts[0]?.clicks ?? 0) || null,
     revenueByCurrency: revenue.map((row) => ({ currency: row.currency, value: Number(row.value) })),
   };
 }
@@ -242,8 +276,9 @@ export async function getActiveVoteSlugs(voterHash: string | null): Promise<Set<
   if (!voterHash) return new Set();
   const rows = await query<{ slug: string }>(
     `SELECT p.slug FROM product_votes v JOIN products p ON p.id = v.product_id
-      WHERE v.voter_hash = $1 AND v.active AND p.status = 'published'`,
-    [voterHash],
+      WHERE v.voter_hash = $1 AND v.active AND p.status = 'published'
+        AND ($2::boolean OR NOT p.is_demo)`,
+    [voterHash, process.env.NODE_ENV !== "production"],
   );
   return new Set(rows.map((row) => row.slug));
 }
@@ -270,13 +305,32 @@ export async function getMetricLeaderboard(input: {
             ranked.source AS leaderboard_source
        FROM products p
        JOIN LATERAL (
-         SELECT a.value, a.source
-           FROM product_metric_aggregates a
-          WHERE a.product_id = p.id AND a.metric_type = $1
-            AND a.source IN ('verified_live','verified_by_bidindex','publicly_sourced')
-            AND ($2 = '' OR a.currency = $2)
-          ORDER BY CASE a.source WHEN 'verified_by_bidindex' THEN 1 WHEN 'verified_live' THEN 2 ELSE 3 END
-          LIMIT 1
+         SELECT candidate.value,candidate.source FROM (
+           SELECT CASE WHEN metric_type='highest_bid' THEN max(value)
+                       WHEN metric_type='current_bid' THEN (array_agg(value ORDER BY updated_at DESC))[1]
+                       ELSE sum(value) END AS value,source
+             FROM (
+               SELECT a.metric_type,a.currency,a.value,a.updated_at,
+                      CASE WHEN a.source='verified_by_bidindex' THEN 'measured_by_bidindex'
+                           WHEN a.source='verified_live' AND a.metric_type='visitors' THEN 'measured_by_bidindex'
+                           WHEN a.source='verified_live' THEN 'partner_connected' ELSE a.source END AS source
+                 FROM product_metric_aggregates a
+                WHERE a.product_id=p.id AND a.metric_type=$1 AND a.source_status='active'
+                  AND a.source IN ('measured_by_bidindex','processor_verified','partner_connected','publicly_sourced','verified_by_bidindex','verified_live')
+                  AND NOT ($1='visitors' AND a.source IN ('measured_by_bidindex','verified_live')
+                    AND EXISTS (SELECT 1 FROM product_traffic_daily td WHERE td.product_id=p.id))
+                  AND ($2='' OR a.currency=$2)
+             ) normalized
+            GROUP BY metric_type,source,currency
+           UNION ALL
+           SELECT sum(td.daily_uniques),'measured_by_bidindex'
+             FROM product_traffic_daily td
+            WHERE $1='visitors' AND td.product_id=p.id
+              AND td.metric_date >= (now() AT TIME ZONE 'UTC')::date - 29
+            HAVING sum(td.daily_uniques)>0
+         ) candidate
+         ORDER BY CASE candidate.source WHEN 'measured_by_bidindex' THEN 1 WHEN 'processor_verified' THEN 2 WHEN 'partner_connected' THEN 3 ELSE 4 END
+         LIMIT 1
        ) ranked ON true
       WHERE p.status = 'published' AND ($4::boolean OR NOT p.is_demo)
       ORDER BY ranked.value DESC, p.published_at DESC, p.id LIMIT $3`,
@@ -290,7 +344,7 @@ export async function getMetricLeaderboard(input: {
 }
 
 export function preferredMetrics(metrics: ProductMetric[], limit = 3): ProductMetric[] {
-  const order: MetricType[] = ["revenue", "visitors", "outbound_clicks", "bids", "purchases", "highest_bid", "current_bid"];
+  const order: MetricType[] = ["revenue", "visitors", "outbound_clicks", "bids", "purchases", "refunds", "highest_bid", "current_bid", "partner_product_clicks"];
   const selected: ProductMetric[] = [];
   for (const type of order) {
     const metric = metrics.find((item) => item.type === type);
@@ -301,10 +355,10 @@ export function preferredMetrics(metrics: ProductMetric[], limit = 3): ProductMe
 }
 
 export type ProductDetail = ProductCardData & {
-  description: string;
-  founderName: string;
+  description: string | null;
+  founderName: string | null;
   founderSocialHandle: string | null;
-  biddingMechanism: string;
+  biddingMechanism: string | null;
   minimumBidMinor: number | null;
   currentBidMinor: number | null;
   bidCurrency: string | null;
@@ -317,8 +371,8 @@ export type ProductDetail = ProductCardData & {
 
 export async function getProductDetail(slug: string): Promise<ProductDetail | null> {
   const cards = await query<ProductCardRow & {
-    description: string; founder_name: string; founder_social_handle: string | null;
-    bidding_mechanism: string; minimum_bid_minor: string | null; current_bid_minor: string | null;
+    description: string | null; founder_name: string | null; founder_social_handle: string | null;
+    bidding_mechanism: string | null; minimum_bid_minor: string | null; current_bid_minor: string | null;
     bid_currency: string | null; public_analytics_url: string | null; data_disclosure: string | null;
     weekly_position: number | null;
   }>(
@@ -336,6 +390,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
                   (SELECT count(*) FROM product_outbound_click_events e WHERE e.product_id = candidate.id
                     AND e.outcome = 'counted' AND e.created_at >= now() - interval '7 days') AS weekly_clicks
                 FROM products candidate WHERE candidate.status = 'published'
+                  AND ($2::boolean OR NOT candidate.is_demo)
               ) ranked
             ) positions WHERE positions.id = p.id) AS weekly_position
        FROM products p WHERE p.slug = $1 AND p.status = 'published'
@@ -377,13 +432,14 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
 export type ManagedProduct = ProductDetail & {
   status: ProductStatus;
   contactEmail: string;
+  approvedAt: Date | null;
 };
 
-export async function getManagedProduct(slug: string): Promise<(ManagedProduct & { ownerTokenHash: string }) | null> {
+export async function getManagedProduct(slug: string): Promise<(ManagedProduct & { ownerTokenHash: string; ownerTokenVersion: number }) | null> {
   const rows = await query<{
-    id: string; status: ProductStatus; contact_email: string; token_hash: string;
+    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number;
   }>(
-    `SELECT p.id::text, p.status, p.contact_email, o.token_hash
+    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version
        FROM products p JOIN product_owner_credentials o ON o.product_id = p.id
       WHERE p.slug = $1 LIMIT 1`,
     [slug],
@@ -391,21 +447,22 @@ export async function getManagedProduct(slug: string): Promise<(ManagedProduct &
   const auth = rows[0];
   if (!auth) return null;
   const publicDetail = await getProductDetailIncludingUnpublished(slug);
-  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, ownerTokenHash: auth.token_hash } : null;
+  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
 }
 
 async function getProductDetailIncludingUnpublished(slug: string): Promise<ProductDetail | null> {
   const rows = await query<{
     id: string; slug: string; website_url: string; name: string; tagline: string; launch_at: Date;
-    published_at: Date | null; is_demo: boolean; description: string; founder_name: string;
-    founder_social_handle: string | null; bidding_mechanism: string; minimum_bid_minor: string | null;
+    published_at: Date | null; is_demo: boolean; description: string | null; founder_name: string | null;
+    founder_social_handle: string | null; bidding_mechanism: string | null; minimum_bid_minor: string | null;
     current_bid_minor: string | null; bid_currency: string | null; public_analytics_url: string | null;
-    data_disclosure: string | null;
+    data_disclosure: string | null; product_verified_at: Date | null;
   }>(
     `SELECT id::text, slug, website_url, name, tagline, launch_at, published_at, is_demo,
             description, founder_name, founder_social_handle, bidding_mechanism,
             minimum_bid_minor::text, current_bid_minor::text, bid_currency,
-            public_analytics_url, data_disclosure
+            public_analytics_url, data_disclosure,
+            (SELECT i.product_verified_at FROM product_integrations i WHERE i.product_id=products.id) AS product_verified_at
        FROM products WHERE slug = $1 LIMIT 1`, [slug],
   );
   const row = rows[0];
@@ -414,7 +471,7 @@ async function getProductDetailIncludingUnpublished(slug: string): Promise<Produ
     query<{ slug: string; name: string }>(`SELECT c.slug, c.name FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id = $1 ORDER BY pc.position`, [row.id]),
     query<{ id: string; kind: string; public_url: string; alt_text: string | null; position: number }>(`SELECT id::text, kind, public_url, alt_text, position FROM product_media WHERE product_id = $1 ORDER BY kind, position`, [row.id]),
     query<{ id: string; type: string; title: string; body: string; link_url: string | null; published_at: Date; image_url: string | null }>(`SELECT u.id::text, u.type, u.title, u.body, u.link_url, u.published_at, m.public_url AS image_url FROM product_updates u LEFT JOIN product_media m ON m.id = u.image_media_id WHERE u.product_id = $1 ORDER BY u.published_at DESC`, [row.id]),
-    query<{ metric_type: MetricType; source: MetricSource; currency: string; value: string; source_url: string | null; updated_at: Date; last_event_at: Date | null }>(`SELECT metric_type, source, currency, value::text, source_url, updated_at, last_event_at FROM product_metric_aggregates WHERE product_id = $1`, [row.id]),
+    query<{ metric_type: MetricType; source: MetricSource; currency: string; value: string; source_url: string | null; updated_at: Date; last_event_at: Date | null; measurement_period: "all_time"|"today"|"last_30_days" }>(`SELECT metric_type,source,currency,(CASE WHEN metric_type='highest_bid' THEN max(value) WHEN metric_type='current_bid' THEN (array_agg(value ORDER BY updated_at DESC))[1] ELSE sum(value) END)::text AS value,max(source_url) AS source_url,max(updated_at) AS updated_at,max(last_event_at) AS last_event_at,(array_agg(measurement_period ORDER BY updated_at DESC))[1] AS measurement_period FROM (SELECT metric_type,CASE WHEN source='verified_by_bidindex' THEN 'measured_by_bidindex' WHEN source='verified_live' AND metric_type='visitors' THEN 'measured_by_bidindex' WHEN source='verified_live' THEN 'partner_connected' ELSE source END AS source,currency,value,source_url,updated_at,last_event_at,measurement_period FROM product_metric_aggregates WHERE product_id=$1 AND source_status='active') normalized GROUP BY metric_type,source,currency`, [row.id]),
     query<{ count: number }>(`SELECT count(*)::int AS count FROM product_votes WHERE product_id = $1 AND active`, [row.id]),
   ]);
   return {
@@ -422,7 +479,8 @@ async function getProductDetailIncludingUnpublished(slug: string): Promise<Produ
     launchAt: new Date(row.launch_at), publishedAt: new Date(row.published_at ?? row.launch_at), isDemo: row.is_demo,
     logoUrl: media.find((item) => item.kind === "logo")?.public_url ?? null, categories,
     voteCount: votes[0]?.count ?? 0, weeklyVotes: 0, weeklyClicks: 0, updateCount: updates.length,
-    metrics: metrics.map((item) => ({ type: item.metric_type, source: item.source, currency: item.currency, value: Number(item.value), sourceUrl: item.source_url, updatedAt: new Date(item.updated_at), lastEventAt: item.last_event_at ? new Date(item.last_event_at) : null })),
+    metrics: metrics.map((item) => ({ type: item.metric_type, source: item.source, currency: item.currency, value: Number(item.value), sourceUrl: item.source_url, updatedAt: new Date(item.updated_at), lastEventAt: item.last_event_at ? new Date(item.last_event_at) : null, measurementPeriod: item.measurement_period })),
+    isVerified: row.product_verified_at !== null,
     description: row.description, founderName: row.founder_name, founderSocialHandle: row.founder_social_handle,
     biddingMechanism: row.bidding_mechanism, minimumBidMinor: row.minimum_bid_minor === null ? null : Number(row.minimum_bid_minor),
     currentBidMinor: row.current_bid_minor === null ? null : Number(row.current_bid_minor), bidCurrency: row.bid_currency,

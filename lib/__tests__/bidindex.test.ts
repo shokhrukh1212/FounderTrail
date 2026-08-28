@@ -9,7 +9,7 @@ const coreMigration = readFileSync(new URL("../../migrations/001_bidindex_core.u
 const partnerMigration = readFileSync(new URL("../../migrations/002_partner_network.up.sql", import.meta.url), "utf8");
 const voteRoute = readFileSync(new URL("../../app/api/products/[slug]/vote/route.ts", import.meta.url), "utf8");
 const clickRoute = readFileSync(new URL("../product-click.ts", import.meta.url), "utf8");
-const eventRoute = readFileSync(new URL("../../app/api/integrations/[publicId]/events/route.ts", import.meta.url), "utf8");
+const partnerEvents = readFileSync(new URL("../partner-events.ts", import.meta.url), "utf8");
 const productData = readFileSync(new URL("../product-data.ts", import.meta.url), "utf8");
 
 test("votes are unique, reversible, and cannot seed production totals", () => {
@@ -57,15 +57,19 @@ test("money events require integer minor units and idempotent identifiers", () =
   assert.equal(validEventTime("2026-08-27T10:00:00.000Z", Date.parse("2026-08-27T10:05:00.000Z"))?.toISOString(), "2026-08-27T10:00:00.000Z");
   assert.match(partnerMigration, /UNIQUE \(integration_id, event_id\)/);
   assert.match(partnerMigration, /value_minor\s+bigint/);
-  assert.match(eventRoute, /Number\.isSafeInteger\(valueMinor\)/);
-  assert.match(eventRoute, /ON CONFLICT \(integration_id,event_id\) DO NOTHING/);
+  assert.match(partnerEvents, /Number\.isSafeInteger\(amount\)/);
+  assert.match(partnerEvents, /ON CONFLICT \(integration_id,event_id\) DO NOTHING/);
+  assert.match(partnerEvents, /currency\.toUpperCase\(\)/);
 });
 
 test("product submission validates required public fields", () => {
   const form = new FormData();
-  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "Transparent bids", description: "A useful and sufficiently detailed description.", founderName: "Maker", contactEmail: "maker@example.com", launchDate: "2026-08-27", biddingMechanism: "The highest settled bid wins." }).forEach(([key,value]) => form.set(key,value));
-  form.append("categories", "pay-to-rank");
+  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "Transparent bids", contactEmail: "maker@example.com", launchDate: "2026-08-27", ownershipConsent: "on" }).forEach(([key,value]) => form.set(key,value));
   assert.equal(validateProductSubmission(form).ok, true);
+  assert.equal(form.has("categories"), false);
+  form.delete("contactEmail");
+  assert.equal(validateProductSubmission(form).ok, false);
+  form.set("contactEmail","maker@example.com");
   form.set("websiteUrl", "http://localhost:3000/internal");
   assert.equal(validateProductSubmission(form).ok, false);
 });

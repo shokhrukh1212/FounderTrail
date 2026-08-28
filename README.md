@@ -1,21 +1,8 @@
 # BidIndex
 
-BidIndex is the live, verified discovery platform for bidding products. This repository is an additive transformation of YourHour: the BidIndex discovery, ownership, voting, metrics, and partner-network tables are separate from the preserved legacy payment system.
+BidIndex is the discovery platform for bidding products. Discovery, submission, ownership, voting, metrics, evidence, and partner-network records remain isolated from the preserved legacy payment infrastructure.
 
-Start with [the product brief](docs/PRODUCT.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [architecture](docs/ARCHITECTURE.md), [partner guide](docs/PARTNER_INTEGRATION.md), and [current handoff](PASS.md).
-
-## Preserved legacy payment model
-
-- the first product bids $3
-- bids are whole US dollars
-- paying $1 more than a product beats that position
-- the same domain maps to one listing
-- an owner upgrading an existing listing pays only the difference
-- rank is calculated when payment completes; checkout does not reserve a position
-- completed bids are final and non-refundable
-- outbound visits use `/r/{listingId}` and count once per eligible visitor per product
-
-Legacy guaranteed-click payments are preserved in `leaderboard_migration_audits` before being rounded up to whole-dollar leaderboard totals. The old delivery columns remain temporarily for rollback but are no longer used by the application.
+Read [the product brief](docs/PRODUCT.md), [three-phase plan](docs/IMPLEMENTATION_PLAN.md), [architecture](docs/ARCHITECTURE.md), [partner guide](docs/PARTNER_INTEGRATION.md), [future processor connector rules](docs/PROCESSOR_CONNECTORS.md), and [current handoff](PASS.md).
 
 ## Local setup
 
@@ -23,24 +10,18 @@ Legacy guaranteed-click payments are preserved in `leaderboard_migration_audits`
 npm install
 cp .env.example .env.local
 npm run migrate
-npm run seed:demo -- --confirm-demo
 npm run dev
 ```
 
-The BidIndex public application does not expose legacy bidding in normal navigation. With Lemon Squeezy variables unset, the preserved legacy checkout uses the local completion stub. The configured Lemon Squeezy variant must accept custom prices as low as $1 because an owner can buy a one-dollar legacy upgrade. The webhook endpoint remains `/api/webhooks/lemonsqueezy`.
-
-`/api/cron/tick` expires abandoned bid intents and retries durable analytics delivery. It does not promote campaigns, calculate capacity, or issue refunds.
-
-## Production migration
-
-Back up the database and briefly pause checkout before applying the schema:
+To add explicit synthetic development fixtures to a disposable non-production database:
 
 ```bash
-npm run backup
-npm run migrate
+npm run seed:demo -- --confirm-demo
 ```
 
-Verify the migration audit, normalized totals, original tie order, and click totals before resuming checkout. Do not remove the legacy delivery columns until the new model has been stable for at least seven days.
+Production never returns demo records even if they exist in the database. Migrations never insert demo products.
+
+Approval email uses Resend after the publication transaction commits. Set the server-only `RESEND_API_KEY` and `EMAIL_FROM` values after verifying the sending domain; `EMAIL_REPLY_TO` is optional and must be a monitored inbox. Keep Resend click/open tracking disabled so private management-link fragments are not rewritten. Missing email configuration never prevents an administrator from publishing a product.
 
 ## Verification
 
@@ -51,4 +32,20 @@ npm run typecheck
 npm run build
 ```
 
-Before production launch, complete both a $3 new-listing checkout and a $1 existing-owner upgrade in the Lemon Squeezy test store.
+The Lemon Squeezy webhook remains `/api/webhooks/lemonsqueezy`. Checkout amounts are server-calculated, completed provider order IDs are idempotent, and payment state never affects BidIndex organic ranking. `FEATURE_PROMOTIONS` must remain `false` until a separate webhook-confirmed promotion model is implemented.
+
+## Deployment preparation
+
+1. Back up the target database.
+2. Configure the production variables listed in `PASS.md` in the deployment provider—never in a committed file.
+3. Run `npm run migrate` against the intended database.
+4. Run the verification commands above.
+5. Preview locally with `npm start` or create a provider preview deployment.
+
+Recommended production deployment command after those checks:
+
+```bash
+npx vercel deploy --prod
+```
+
+Do not run the demo seed against production.

@@ -49,12 +49,13 @@ async function main() {
       `INSERT INTO products
          (slug, website_url, normalized_domain, name, tagline, description,
           founder_name, contact_email, bidding_mechanism, minimum_bid_minor,
-          bid_currency, data_disclosure, status, is_demo, launch_at, published_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'USD',$11,'published',true,$12,now())
+          bid_currency, data_disclosure, status, is_demo, launch_at, launch_date,
+          submitted_url, published_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'USD',$11,'published',true,$12,$13,$2,now())
        RETURNING id::text`,
       [item.slug, item.url, new URL(item.url).hostname, item.name, item.tagline, item.description,
        item.founder, `${item.slug}@demo.invalid`, item.mechanism, 100,
-       "Demo values are synthetic and exist only for local development.", launchAt],
+       "Demo values are synthetic and exist only for local development.", launchAt,launchAt.toISOString().slice(0,10)],
     );
     const productId = rows[0].id;
     for (const [position, category] of item.categories.entries()) {
@@ -93,17 +94,17 @@ async function main() {
   }
 
   const metrics = [
-    ["bidboard", "revenue", "verified_live", "USD", 124800, null],
-    ["bidboard", "visitors", "verified_live", "", 18400, null],
-    ["bidboard", "outbound_clicks", "verified_by_bidindex", "", 3204, null],
+    ["bidboard", "revenue", "partner_connected", "USD", 124800, null],
+    ["bidboard", "visitors", "measured_by_bidindex", "", 18400, null],
+    ["bidboard", "outbound_clicks", "measured_by_bidindex", "", 3204, null],
     ["yourhour", "revenue", "publicly_sourced", "USD", 12700, "https://yourhour.lol"],
-    ["yourhour", "outbound_clicks", "verified_by_bidindex", "", 618, null],
+    ["yourhour", "outbound_clicks", "measured_by_bidindex", "", 618, null],
     ["attention-exchange", "revenue", "founder_reported", "USD", 84000, null],
-    ["attention-exchange", "visitors", "verified_live", "", 9600, null],
-    ["toplink", "outbound_clicks", "verified_by_bidindex", "", 2100, null],
+    ["attention-exchange", "visitors", "measured_by_bidindex", "", 9600, null],
+    ["toplink", "outbound_clicks", "measured_by_bidindex", "", 2100, null],
     ["sponsor-stack", "revenue", "publicly_sourced", "EUR", 49000, "https://sponsor-stack.example/public"],
-    ["pixel-bid", "bids", "verified_live", "", 312, null],
-    ["pixel-bid", "highest_bid", "verified_live", "USD", 4800, null],
+    ["pixel-bid", "bids", "partner_connected", "", 312, null],
+    ["pixel-bid", "highest_bid", "partner_connected", "USD", 4800, null],
     ["rank-race", "visitors", "founder_reported", "", 4300, null],
   ] as const;
   for (const [slug, type, source, currency, value, sourceUrl] of metrics) {

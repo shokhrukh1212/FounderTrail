@@ -14,6 +14,6 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
   if (!TYPES.has(type) || !title || title.length > 140 || !updateBody || updateBody.length > 1500) return NextResponse.json({ error: "Enter a valid update type, title, and short body." }, { status: 400 });
   let link: string | null = null;
   if (typeof body?.linkUrl === "string" && body.linkUrl.trim()) { const checked = publicHttpUrl(body.linkUrl); if (!checked.ok) return NextResponse.json({ error: "Enter a valid public update URL." }, { status: 400 }); link = checked.url; }
-  await query(`INSERT INTO product_updates (product_id,type,title,body,link_url) VALUES ($1::uuid,$2,$3,$4,$5)`, [owner.productId,type,title,updateBody,link]);
-  return NextResponse.json({ message: "Published." }, { status: 201 });
+  const inserted=await query<{id:string;published_at:Date}>(`INSERT INTO product_updates (product_id,type,title,body,link_url) VALUES ($1::uuid,$2,$3,$4,$5) RETURNING id::text,published_at`, [owner.productId,type,title,updateBody,link]);
+  return NextResponse.json({ message: "Published.", update: { id: inserted[0].id, type, title, body: updateBody, linkUrl: link, publishedAt: inserted[0].published_at.toISOString(), imageUrl: null } }, { status: 201 });
 }

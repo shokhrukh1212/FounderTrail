@@ -20,7 +20,7 @@ export function ownerTokenFromRequest(request: Request, productId: string): stri
     const [name, ...rest] = part.trim().split("=");
     if (name !== expectedName) continue;
     const token = decodeURIComponent(rest.join("="));
-    return TOKEN.test(token) ? token : null;
+    return (TOKEN.test(token) || (token.startsWith("v1.") && token.length <= 512)) ? token : null;
   }
   return null;
 }

@@ -13,7 +13,7 @@ export function DiscoverySidebar({ snapshot, updates }: { snapshot: EcosystemSna
           <div><dt>Public revenue</dt><dd>{snapshot.revenueByCurrency.length
             ? snapshot.revenueByCurrency.slice(0, 2).map((item) => formatMinorUnits(item.value, item.currency)).join(" · ")
             : "Not available"}</dd></div>
-          <div><dt>Outbound clicks</dt><dd>{formatCompactNumber(snapshot.outboundClicks)}</dd></div>
+          <div><dt>Outbound clicks</dt><dd>{snapshot.outboundClicks === null ? "—" : formatCompactNumber(snapshot.outboundClicks)}</dd></div>
         </dl>
         <p className="sidebar-note">Currencies are shown separately. Founder-reported revenue is excluded.</p>
       </section>

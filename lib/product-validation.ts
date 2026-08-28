@@ -1,8 +1,6 @@
 import { isIP } from "node:net";
 
-const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CURRENCY = /^[A-Z]{3}$/;
 const PRIVATE_HOSTS = new Set(["localhost", "0.0.0.0", "::", "::1"]);
 
 export type ProductSubmission = {
@@ -10,17 +8,13 @@ export type ProductSubmission = {
   normalizedDomain: string;
   name: string;
   tagline: string;
-  description: string;
-  founderName: string;
+  founderName: string | null;
   contactEmail: string;
   founderSocialHandle: string | null;
+  launchDate: string;
   launchAt: Date;
-  categories: string[];
-  biddingMechanism: string;
-  minimumBidMinor: number | null;
-  currentBidMinor: number | null;
-  bidCurrency: string | null;
-  publicAnalyticsUrl: string | null;
+  consentVersion: string;
+  metadataToken: string | null;
 };
 
 export type ValidationResult = { ok: true; value: ProductSubmission } | { ok: false; error: string; field?: string };
@@ -67,28 +61,11 @@ export function publicHttpUrl(raw: string): { ok: true; url: string; domain: str
   return { ok: true, url: parsed.toString(), domain: host };
 }
 
-function optionalPublicUrl(raw: string): string | null | false {
-  if (!raw.trim()) return null;
-  const checked = publicHttpUrl(raw);
-  return checked.ok ? checked.url : false;
-}
-
-function moneyMinor(raw: string): number | null | false {
-  const value = raw.trim();
-  if (!value) return null;
-  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return false;
-  const [whole, fraction = ""] = value.split(".");
-  const minor = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
-  return Number.isSafeInteger(minor) && minor >= 0 ? minor : false;
-}
-
 export function validateProductSubmission(form: FormData): ValidationResult {
   const website = publicHttpUrl(text(form, "websiteUrl", 2048));
   if (!website.ok) return { ok: false, error: website.error, field: "websiteUrl" };
   const required: Array<[keyof ProductSubmission, string, number]> = [
-    ["name", "name", 80], ["tagline", "tagline", 180], ["description", "description", 5000],
-    ["founderName", "founderName", 120], ["contactEmail", "contactEmail", 320],
-    ["biddingMechanism", "biddingMechanism", 2000],
+    ["name", "name", 80], ["tagline", "tagline", 160], ["contactEmail", "contactEmail", 320],
   ];
   const values: Record<string, string> = {};
   for (const [, field, max] of required) {
@@ -101,23 +78,15 @@ export function validateProductSubmission(form: FormData): ValidationResult {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(launchDate)) return { ok: false, error: "Choose a valid launch date.", field: "launchDate" };
   const launchAt = new Date(`${launchDate}T12:00:00.000Z`);
   if (Number.isNaN(launchAt.getTime())) return { ok: false, error: "Choose a valid launch date.", field: "launchDate" };
-  const categories = [...new Set(form.getAll("categories").map(String).filter((value) => SLUG.test(value)))];
-  if (categories.length < 1 || categories.length > 3) return { ok: false, error: "Choose between one and three categories.", field: "categories" };
-  const minimumBidMinor = moneyMinor(String(form.get("minimumBid") ?? ""));
-  const currentBidMinor = moneyMinor(String(form.get("currentBid") ?? ""));
-  if (minimumBidMinor === false || currentBidMinor === false) return { ok: false, error: "Bid values must be positive amounts with at most two decimal places.", field: "minimumBid" };
-  const currencyRaw = text(form, "bidCurrency", 3).toUpperCase();
-  const bidCurrency = minimumBidMinor !== null || currentBidMinor !== null ? currencyRaw : null;
-  if (bidCurrency && !CURRENCY.test(bidCurrency)) return { ok: false, error: "Enter a three-letter currency code.", field: "bidCurrency" };
-  const analytics = optionalPublicUrl(String(form.get("publicAnalyticsUrl") ?? ""));
-  if (analytics === false) return { ok: false, error: "Enter a valid public analytics URL.", field: "publicAnalyticsUrl" };
-  const social = text(form, "founderSocialHandle", 120);
+  if (form.get("ownershipConsent") !== "on") return { ok: false, error: "Confirm that you are authorized to submit this product.", field: "ownershipConsent" };
+  const founderName = text(form, "founderName", 120);
+  const social = text(form, "founderSocialHandle", 120).replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "");
+  if (social && !/^[A-Za-z0-9_]{1,15}$/.test(social)) return { ok: false, error: "Enter an X handle such as @founder.", field: "founderSocialHandle" };
   return { ok: true, value: {
     websiteUrl: website.url, normalizedDomain: website.domain,
-    name: values.name, tagline: values.tagline, description: values.description,
-    founderName: values.founderName, contactEmail: values.contactEmail.toLowerCase(),
-    founderSocialHandle: social || null, launchAt, categories,
-    biddingMechanism: values.biddingMechanism, minimumBidMinor, currentBidMinor,
-    bidCurrency, publicAnalyticsUrl: analytics,
+    name: values.name, tagline: values.tagline,
+    founderName: founderName || null, contactEmail: values.contactEmail.toLowerCase(),
+    founderSocialHandle: social ? `@${social}` : null, launchDate, launchAt,
+    consentVersion: "2026-08-27", metadataToken: text(form, "metadataToken", 8192) || null,
   } };
 }

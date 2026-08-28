@@ -1,14 +1,189 @@
 "use client";
+
 import { useState } from "react";
 
-type Integration={publicId:string;allowedDomain:string;verificationToken:string;domainStatus:string;lastEventAt:string|null}|null;
-export function IntegrationManager({slug,initial,siteUrl}: {slug:string;initial:Integration;siteUrl:string}){const [integration,setIntegration]=useState(initial);const [secret,setSecret]=useState<string|null>(null);const [message,setMessage]=useState("");const [busy,setBusy]=useState(false);async function setup(action:"create"|"rotate"){if(action==="rotate"&&!confirm("Rotate the integration secret? Existing server event senders will stop working immediately."))return;setBusy(true);setMessage("");const response=await fetch(`/api/owner/products/${encodeURIComponent(slug)}/integration`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action})});const data=await response.json() as {error?:string;publicId?:string;secret?:string|null;message?:string};setBusy(false);if(!response.ok){setMessage(data.error||"Could not configure integration.");return;}setSecret(data.secret??null);setMessage(data.message||"Saved.");if(!integration&&data.publicId)window.location.reload();}
-  async function verify(){setBusy(true);const response=await fetch(`/api/owner/products/${encodeURIComponent(slug)}/verify-domain`,{method:"POST"});const data=await response.json() as {verified?:boolean;error?:string;outcome?:string};setBusy(false);setMessage(data.verified?"Domain verified.":data.error||`Verification failed: ${data.outcome}.`);if(data.verified&&integration)setIntegration({...integration,domainStatus:"verified"});}
-  if(!integration)return <section className="manager-card integration-setup"><h2>Create the partner integration</h2><p>This generates a public browser identifier and a separate server secret. The server secret is shown once.</p><button className="button button-primary" disabled={busy} onClick={()=>setup("create")}>Create integration</button>{message?<p>{message}</p>:null}</section>;
-  const snippet=(style:string)=>`<script async src="${siteUrl}/embed/badge.js" data-project="${integration.publicId}" data-style="${style}"></script>`;
-  return <div className="integration-manager"><section className="manager-card"><p className="eyebrow">Integration status</p><h1>{integration.allowedDomain}</h1><dl className="product-facts"><div><dt>Public project ID</dt><dd><code>{integration.publicId}</code></dd></div><div><dt>Domain</dt><dd>{integration.domainStatus}</dd></div><div><dt>Last event</dt><dd>{integration.lastEventAt?new Date(integration.lastEventAt).toLocaleString():"No events yet"}</dd></div></dl></section>
-    {secret?<section className="secret-once"><strong>Copy this server secret now</strong><code>{secret}</code><p>It is never stored in recoverable form and will not be shown again.</p></section>:null}{message?<p className="manager-notice">{message}</p>:null}
-    <section className="manager-card"><h2>1. Verify the domain</h2><p>Publish this exact value at <code>https://{integration.allowedDomain}/.well-known/bidindex-verification.txt</code>, then run verification.</p><pre>{integration.verificationToken}</pre><button className="button button-secondary" disabled={busy} onClick={verify}>Check domain</button></section>
-    <section className="manager-card"><h2>2. Install a badge and visitor tracking</h2><p>The same lightweight script renders the selected badge and reports a privacy-conscious daily unique visitor. Header placement is never required.</p>{["light","dark","compact"].map(style=><div className="snippet-row" key={style}><strong>{style}</strong><pre>{snippet(style)}</pre></div>)}</section>
-    <section className="manager-card"><h2>3. Send verified server events</h2><p>Send purchases, bids, and revenue only from your server. See the partner guide for the JSON contract and examples.</p><button className="button button-secondary" disabled={busy} onClick={()=>setup("rotate")}>Rotate server secret</button></section>
-  </div>}
+export type IntegrationState = {
+  publicId: string;
+  allowedDomain: string;
+  verificationToken: string;
+  domainStatus: string;
+  domainVerifiedAt: string | null;
+  domainLastCheckedAt: string | null;
+  domainCheckOutcome: string | null;
+  verificationMethod: "meta" | "file";
+  badgeStatus: string;
+  badgeInstalledAt: string | null;
+  badgeLastCheckedAt: string | null;
+  badgeLastSeenAt: string | null;
+  lastVisitorEventAt: string | null;
+  productVerifiedAt: string | null;
+  lastEventAt: string | null;
+  hasSecret: boolean;
+} | null;
+
+type Notice = { text: string; tone: "success" | "error" } | null;
+type StatusTone = "neutral" | "waiting" | "active" | "failed";
+
+function CopyButton({ value, label, copyKey, copiedKey, onCopy }: { value: string; label: string; copyKey: string; copiedKey: string; onCopy: (value: string, key: string) => void }) {
+  const copied = copiedKey === copyKey;
+  return <button className="copy-value-button" type="button" onClick={() => onCopy(value, copyKey)} aria-label={`Copy ${label}`} title={`Copy ${label}`}>
+    {copied ? <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m4 10 3.5 3.5L16 5" /></svg> : <svg aria-hidden="true" viewBox="0 0 20 20"><rect x="7" y="3" width="9" height="11" rx="2" /><path d="M13 16v1H5a2 2 0 0 1-2-2V7h1" /></svg>}
+    <span>{copied ? "Copied" : "Copy"}</span>
+  </button>;
+}
+
+function CopyBlock(props: { value: string; label: string; copyKey: string; copiedKey: string; onCopy: (value: string, key: string) => void }) {
+  return <div className="copy-value-block"><pre>{props.value}</pre><CopyButton {...props} /></div>;
+}
+
+function Status({ label, value, tone, detail }: { label: string; value: string; tone: StatusTone; detail: string }) {
+  return <div className="verification-status-item"><span>{label}</span><strong className={`status-dot status-${tone}`}>{value}</strong><small>{detail}</small></div>;
+}
+
+function localTime(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : "Never";
+}
+
+export function IntegrationManager({ slug, initial, siteUrl, websiteUrl }: { slug: string; initial: IntegrationState; siteUrl: string; websiteUrl: string }) {
+  const [integration, setIntegration] = useState(initial);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [copiedKey, setCopiedKey] = useState("");
+  const [busy, setBusy] = useState("");
+  const [method, setMethod] = useState<"meta" | "file">(initial?.verificationMethod ?? "meta");
+  const [badgeStyle, setBadgeStyle] = useState<"light" | "dark" | "compact">("light");
+
+  async function copyValue(value: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => current === key ? "" : current), 1800);
+    } catch { setNotice({ text: "Could not copy automatically. Select the value and copy it manually.", tone: "error" }); }
+  }
+
+  async function request(path: string, body?: object) {
+    const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    const data = await response.json() as Record<string, unknown>;
+    if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "The request could not be completed.");
+    return data;
+  }
+
+  async function createIntegration() {
+    setBusy("create"); setNotice(null);
+    try { await request(`/api/owner/products/${encodeURIComponent(slug)}/integration`, { action: "create" }); window.location.reload(); }
+    catch (error) { setNotice({ text: error instanceof Error ? error.message : "Could not start verification.", tone: "error" }); setBusy(""); }
+  }
+
+  async function verifyDomain() {
+    setBusy("domain"); setNotice(null);
+    try {
+      const data = await request(`/api/owner/products/${encodeURIComponent(slug)}/verify-domain`, { method });
+      setIntegration((current) => current ? { ...current, domainStatus: "verified", domainVerifiedAt: data.verifiedAt as string, domainLastCheckedAt: data.checkedAt as string, domainCheckOutcome: "verified", verificationMethod: method, productVerifiedAt: data.productVerifiedAt as string | null } : current);
+      setNotice({ text: "Domain ownership verified.", tone: "success" });
+    } catch (error) { setNotice({ text: error instanceof Error ? error.message : "Domain verification failed.", tone: "error" }); }
+    finally { setBusy(""); }
+  }
+
+  async function checkBadge() {
+    setBusy("badge"); setNotice(null);
+    try {
+      const data = await request(`/api/owner/products/${encodeURIComponent(slug)}/check-badge`);
+      setIntegration((current) => current ? { ...current, badgeStatus: "active", badgeInstalledAt: data.installedAt as string, badgeLastCheckedAt: data.checkedAt as string, productVerifiedAt: data.productVerifiedAt as string | null } : current);
+      setNotice({ text: data.productVerifiedAt ? "Badge found. Your product is now verified." : "Badge found. Verify the domain to complete product verification.", tone: "success" });
+    } catch (error) { setNotice({ text: error instanceof Error ? error.message : "Badge installation was not found.", tone: "error" }); }
+    finally { setBusy(""); }
+  }
+
+  async function manageSecret(action: "create_secret" | "rotate") {
+    if (action === "rotate" && !window.confirm("Rotate the server secret? The old secret will stop working immediately.")) return;
+    setBusy("secret"); setNotice(null);
+    try {
+      const data = await request(`/api/owner/products/${encodeURIComponent(slug)}/integration`, { action });
+      setSecret(data.secret as string);
+      setIntegration((current) => current ? { ...current, hasSecret: true } : current);
+      setNotice({ text: "New server secret created. Copy it now; it cannot be recovered.", tone: "success" });
+    } catch (error) { setNotice({ text: error instanceof Error ? error.message : "Could not create the secret.", tone: "error" }); }
+    finally { setBusy(""); }
+  }
+
+  if (!integration) return <section className="manager-card integration-setup">
+    <p className="step-label">Verification & data</p><h2>Verify your product</h2>
+    <p>Start with domain ownership and the BidIndex badge. Revenue integration is optional and is not required for a Verified product.</p>
+    <button className="button button-primary" disabled={busy === "create"} onClick={createIntegration}>{busy === "create" ? "Starting…" : "Start verification"}</button>
+    {notice ? <p className={`manager-notice is-${notice.tone}`}>{notice.text}</p> : null}
+  </section>;
+
+  const verificationUrl = `https://${integration.allowedDomain}/.well-known/bidindex-verification.txt`;
+  const metaTag = `<meta name="bidindex-verification" content="${integration.verificationToken}">`;
+  const snippet = `<script async src="${siteUrl}/embed/badge.js" data-project="${integration.publicId}" data-style="${badgeStyle}"></script>`;
+  const eventEndpoint = `${siteUrl}/api/partner/v1/events`;
+  const eventExample = `curl --request POST "${eventEndpoint}" \\
+  --header "Authorization: Bearer YOUR_SERVER_SECRET" \\
+  --header "Content-Type: application/json" \\
+  --data '{
+    "project_id": "${integration.publicId}",
+    "event_id": "order_12345678",
+    "type": "purchase",
+    "occurred_at": "CURRENT_UTC_TIMESTAMP",
+    "amount_minor": 12700,
+    "currency": "USD"
+  }'`;
+  const copyProps = { copiedKey, onCopy: copyValue };
+  const domainActive = Boolean(integration.domainVerifiedAt);
+  const badgeActive = Boolean(integration.badgeInstalledAt);
+  const visitorActive = Boolean(integration.lastVisitorEventAt);
+  const revenueActive = Boolean(integration.lastEventAt);
+
+  return <div className="integration-manager">
+    <section className={`product-verification-summary ${integration.productVerifiedAt ? "is-verified" : ""}`}>
+      <div><span className="verified-mark" aria-hidden="true">✓</span><div><strong>{integration.productVerifiedAt ? "Verified product" : "Product not verified yet"}</strong><p>Verified product means BidIndex confirmed the product&apos;s domain and badge installation. Individual metrics have their own source labels.</p></div></div>
+    </section>
+    <div className="verification-status-grid">
+      <Status label="Domain ownership" value={domainActive ? "Active" : integration.domainStatus === "failed" ? "Failed" : "Not started"} tone={domainActive ? "active" : integration.domainStatus === "failed" ? "failed" : "neutral"} detail={`Last check: ${localTime(integration.domainLastCheckedAt)}`} />
+      <Status label="Badge installation" value={badgeActive ? "Active" : integration.badgeStatus === "failed" ? "Failed" : domainActive ? "Waiting" : "Not started"} tone={badgeActive ? "active" : integration.badgeStatus === "failed" ? "failed" : domainActive ? "waiting" : "neutral"} detail={`Last check: ${localTime(integration.badgeLastCheckedAt)}`} />
+      <Status label="Visitor tracking" value={visitorActive ? "Active" : badgeActive ? "Waiting" : "Not started"} tone={visitorActive ? "active" : badgeActive ? "waiting" : "neutral"} detail={visitorActive ? `Last event: ${localTime(integration.lastVisitorEventAt)}` : "Begins after the badge loads"} />
+      <Status label="Revenue connection" value={revenueActive ? "Active" : integration.hasSecret ? "Waiting" : "Optional"} tone={revenueActive ? "active" : integration.hasSecret ? "waiting" : "neutral"} detail={revenueActive ? `Last event: ${localTime(integration.lastEventAt)}` : "Not required for verification"} />
+    </div>
+    {notice ? <p className={`manager-notice is-${notice.tone}`} role="status">{notice.text}</p> : null}
+
+    <section className="manager-card integration-instructions">
+      <p className="step-label">1 · Verify domain ownership</p><h2>Add a verification tag</h2>
+      <p>This confirms control of <strong>{integration.allowedDomain}</strong>. It does not verify revenue, traffic, purchases, or bids.</p>
+      <div className="segmented-control" role="group" aria-label="Domain verification method">
+        <button type="button" className={method === "meta" ? "is-active" : ""} onClick={() => setMethod("meta")}>Meta tag · Recommended</button>
+        <button type="button" className={method === "file" ? "is-active" : ""} onClick={() => setMethod("file")}>Text file</button>
+      </div>
+      {method === "meta" ? <>
+        <p className="form-hint">Paste this tag inside the <code>&lt;head&gt;</code> of the website at <a href={websiteUrl} target="_blank" rel="noopener noreferrer nofollow">your approved URL ↗</a>, deploy, then check verification.</p>
+        <CopyBlock value={metaTag} label="verification meta tag" copyKey="meta-tag" {...copyProps} />
+      </> : <>
+        <p className="form-hint">Publish a plain-text file containing only the token at the URL below, deploy, and confirm the URL opens before checking.</p>
+        <div className="integration-value"><strong>Verification URL</strong><CopyBlock value={verificationUrl} label="verification URL" copyKey="verification-url" {...copyProps} /></div>
+        <div className="integration-value"><strong>File contents</strong><CopyBlock value={integration.verificationToken} label="verification token" copyKey="verification-token" {...copyProps} /></div>
+      </>}
+      <div className="integration-action-row"><button className="button button-secondary" disabled={busy === "domain"} onClick={verifyDomain}>{busy === "domain" ? "Checking…" : "Check verification"}</button><span>Verified: {localTime(integration.domainVerifiedAt)}</span></div>
+    </section>
+
+    <section className="manager-card integration-instructions">
+      <p className="step-label">2 · Install the BidIndex badge</p><h2>Choose a badge style</h2>
+      <p>Place the badge anywhere appropriate on your product site. The public project ID is safe for browser code; server secrets are never included.</p>
+      <div className="integration-value"><strong>Public project ID</strong><CopyBlock value={integration.publicId} label="public project ID" copyKey="project-id" {...copyProps} /></div>
+      <div className="segmented-control" role="group" aria-label="Badge style">
+        {(["light", "dark", "compact"] as const).map((style) => <button type="button" key={style} className={badgeStyle === style ? "is-active" : ""} onClick={() => setBadgeStyle(style)}>{style}</button>)}
+      </div>
+      <div className={`badge-preview badge-${badgeStyle}`}><span>{badgeStyle === "compact" ? "Live on BidIndex" : integration.productVerifiedAt ? "Live on BidIndex · Verified product" : "Live on BidIndex"}</span></div>
+      <CopyBlock value={snippet} label="badge code" copyKey="badge-snippet" {...copyProps} />
+      <details className="installation-help"><summary>Installation help</summary><p>HTML: paste the snippet before <code>&lt;/body&gt;</code>. Next.js or React: render it with the framework&apos;s script component after interactive hydration. Website builders: use a custom HTML/embed block. Deploy before checking.</p><p>The script measures pageviews, approximate daily unique visitors, and badge impressions. It does not read page content, forms, host cookies, local storage, query strings, or fragments.</p></details>
+      <div className="integration-action-row"><button className="button button-secondary" disabled={busy === "badge"} onClick={checkBadge}>{busy === "badge" ? "Checking…" : "Check installation"}</button><span>Installed: {localTime(integration.badgeInstalledAt)}</span></div>
+    </section>
+
+    <section className="manager-card integration-instructions">
+      <p className="step-label">Optional</p><h2>Connect revenue and product events</h2>
+      <p>Domain verification and the badge are enough to verify your product. Connect your server only if you want to display live revenue, purchases, bids, refunds, or other private product events.</p>
+      <dl className="product-facts compact-facts"><div><dt>Connection</dt><dd>{integration.hasSecret ? "Secret created" : "Not connected"}</dd></div><div><dt>Last accepted event</dt><dd>{localTime(integration.lastEventAt)}</dd></div></dl>
+      {secret ? <div className="secret-once"><strong>Copy this server secret now</strong><p>It is shown once and cannot be recovered. Store it only in your server&apos;s encrypted environment settings.</p><CopyBlock value={secret} label="server secret" copyKey="server-secret" {...copyProps} /></div> : null}
+      <div className="integration-action-row"><button className="button button-secondary" disabled={busy === "secret"} onClick={() => manageSecret(integration.hasSecret ? "rotate" : "create_secret")}>{busy === "secret" ? "Working…" : integration.hasSecret ? "Rotate server secret" : "Create server secret"}</button></div>
+      <details className="installation-help"><summary>Documentation and code example</summary><p>Send events from your server over HTTPS. Authentication confirms which partner sent the data; it does not independently audit the founder&apos;s business.</p><CopyBlock value={eventExample} label="server event example" copyKey="event-example" {...copyProps} /><ul className="integration-notes"><li>Replace <code>YOUR_SERVER_SECRET</code> and <code>CURRENT_UTC_TIMESTAMP</code>.</li><li>Use integer minor units: <code>12700</code> means USD 127.00.</li><li>Never send customer names, emails, card information, or other personal data.</li><li>Use one stable event ID for retries so duplicate events cannot inflate totals.</li></ul></details>
+    </section>
+  </div>;
+}

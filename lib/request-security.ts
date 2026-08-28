@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import { config } from "./config";
 
 export function eventHash(context: string, value: string): string {
@@ -18,6 +19,31 @@ export function requestIp(request: Request): string {
 export function networkHash(request: Request, context: string): string {
   const userAgent = (request.headers.get("user-agent") ?? "unknown").trim().slice(0, 500);
   return eventHash(`${context}:network`, `${requestIp(request)}\n${userAgent}`);
+}
+
+function truncatedNetwork(request: Request): string {
+  const ip = requestIp(request).toLowerCase();
+  if (isIP(ip) === 4) {
+    const parts = ip.split(".");
+    return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+  }
+  if (isIP(ip) === 6) return `${ip.split(":").slice(0, 3).join(":")}::/48`;
+  return "unknown";
+}
+
+function userAgentCategory(request: Request): string {
+  const ua = (request.headers.get("user-agent") ?? "").toLowerCase();
+  const device = /bot|crawler|spider/.test(ua) ? "bot" : /mobile|android|iphone/.test(ua) ? "mobile" : "desktop";
+  const browser = /firefox\//.test(ua) ? "firefox" : /edg\//.test(ua) ? "edge" : /chrome\//.test(ua) ? "chrome" : /safari\//.test(ua) ? "safari" : "other";
+  return `${device}:${browser}`;
+}
+
+/** Daily, project-scoped estimate. Raw addresses and full user agents never leave request memory. */
+export function dailyVisitorHash(request: Request, projectId: string, utcDate: string): string {
+  const dailySalt = eventHash("partner-visitor-daily-salt", utcDate);
+  return createHmac("sha256", dailySalt)
+    .update(`${projectId}\0${utcDate}\0${truncatedNetwork(request)}\0${userAgentCategory(request)}`)
+    .digest("hex");
 }
 
 export function requestOriginIsSameSite(request: Request): boolean {

@@ -227,7 +227,7 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "user-agent": "Mozilla/5.0 (compatible; yourhourbot/1.0; +https://yourhour.lol)",
+        "user-agent": "Mozilla/5.0 (compatible; bidindexbot/1.0)",
         accept: "text/html",
       },
     });

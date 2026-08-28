@@ -2,7 +2,7 @@
 
 A click is added when a request to `/r/:listingId` meets every condition below:
 
-1. The request has a stable anonymous `yourhour_visitor` UUID cookie.
+1. The request has a stable anonymous visitor UUID cookie. The legacy cookie name remains for backward compatibility.
 2. That visitor has not previously added a click to the same product. PostgreSQL enforces unique `(campaign_id, visitor_id)` values.
 3. The request is not an obvious crawler, link-preview fetch, or prefetch.
 4. It stays below the rolling ten-minute limits of five attempts per visitor and twenty per hashed network address.
@@ -12,4 +12,4 @@ The redirect still works when an attempt is excluded. Every attempt stores a dia
 
 `campaigns.verified_clicks` is the public canonical counter. During migration it is backfilled from the previously verified `total_clicks_delivered`, preserving all historical totals. New eligible visits increment it only after the visitor/product uniqueness insert succeeds.
 
-Owner exclusion is best-effort. An owner on a new browser and network cannot be identified reliably without invasive tracking, which YourHour does not use.
+Owner exclusion is best-effort. An owner on a new browser and network cannot be identified reliably without invasive tracking, which BidIndex does not use.

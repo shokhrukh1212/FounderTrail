@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { DiscoverySidebar } from "@/components/DiscoverySidebar";
 import { ProductRow } from "@/components/ProductRow";
 import { BIDINDEX_VISITOR_COOKIE } from "@/lib/bidindex-visitor";
+import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
 import { eventHash } from "@/lib/request-security";
 import {
@@ -22,6 +23,12 @@ const tabs: Array<{ view: DiscoveryView; label: string }> = [
   { view: "verified", label: "Verified" },
   { view: "newest", label: "Newest" },
 ];
+const emptyCopy: Record<DiscoveryView, string> = {
+  today: "No products have launched today yet.",
+  trending: "Trending products will appear as founders and visitors participate.",
+  verified: "No products have connected verified data yet.",
+  newest: "No approved products yet. Be the first founder to submit.",
+};
 
 export default async function Home({ searchParams }: {
   searchParams: Promise<{ view?: string; q?: string }>;
@@ -43,18 +50,17 @@ export default async function Home({ searchParams }: {
     <main>
       <section className="intro-section app-shell">
         <div>
-          <p className="eyebrow">Live bidding-product discovery</p>
-          <h1>Discover the bidding products actually getting traction.</h1>
-          <p>Explore new pay-to-rank products with transparent launches, community signals and verified live numbers.</p>
+          <h1>{brandCopy.homepageHeadline}</h1>
+          <p>{brandCopy.homepageDescription}</p>
         </div>
         <div className="intro-actions">
-          <Link className="button button-primary" href="/submit">Submit your product — free</Link>
-          <Link className="button button-secondary" href="/?view=verified">See verified products</Link>
+          <Link className="button button-primary" href="#products">Explore products</Link>
+          <Link className="button button-secondary" href="/submit">Submit your product — free</Link>
         </div>
       </section>
 
       <div className="app-shell discovery-layout">
-        <section className="discovery-main" aria-labelledby="discovery-heading">
+        <section id="products" className="discovery-main" aria-labelledby="discovery-heading">
           <div className="discovery-toolbar">
             <div>
               <h2 id="discovery-heading">Discover products</h2>
@@ -77,7 +83,7 @@ export default async function Home({ searchParams }: {
             )) : (
               <div className="empty-state">
                 <h3>No products found</h3>
-                <p>{search ? "Try a broader search or another filter." : "There are no published products in this view yet."}</p>
+                <p>{search ? "Try a broader search or another filter." : emptyCopy[view]}</p>
                 <Link href="/submit">Submit the first product</Link>
               </div>
             )}

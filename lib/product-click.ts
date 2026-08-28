@@ -1,7 +1,8 @@
 import type { PoolClient } from "pg";
 import { isObviousBot } from "./click";
 import { withTransaction } from "./db";
-import { ownerTokenFromRequest, tokenHashMatches } from "./bidindex-owner";
+import { ownerTokenFromRequest } from "./bidindex-owner";
+import { ownerCredentialMatches } from "./owner-auth";
 import { ensureBidIndexVisitor } from "./bidindex-visitor";
 import { networkHash } from "./request-security";
 import { publicHttpUrl } from "./product-validation";
@@ -16,15 +17,15 @@ export async function recordProductClick(request: Request, slug: string) {
   const source = "product" as const;
   const visitor = ensureBidIndexVisitor(request);
   return withTransaction(async (client) => {
-    const products = await client.query<{ id: string; website_url: string; token_hash: string | null }>(
-      `SELECT p.id::text, p.website_url, o.token_hash FROM products p LEFT JOIN product_owner_credentials o ON o.product_id = p.id WHERE p.slug = $1 AND p.status = 'published' LIMIT 1`, [slug]);
+    const products = await client.query<{ id: string; website_url: string; approved_at: Date | null; token_hash: string; token_version: number }>(
+      `SELECT p.id::text,p.website_url,p.approved_at,o.token_hash,o.token_version FROM products p JOIN product_owner_credentials o ON o.product_id=p.id WHERE p.slug=$1 AND p.status='published' AND ($2::boolean OR NOT p.is_demo) LIMIT 1`, [slug,process.env.NODE_ENV!=="production"]);
     const product = products.rows[0];
     if (!product) return { destination: null, visitor, outcome: "not_found" as const };
     const destination = publicHttpUrl(product.website_url);
     if (!destination.ok) return { destination: null, visitor, outcome: "error" as const };
     const requestNetworkHash = networkHash(request, "outbound-click");
     const ownerToken = ownerTokenFromRequest(request, product.id);
-    if (tokenHashMatches(product.token_hash, ownerToken)) {
+    if (ownerCredentialMatches({ productId: product.id, tokenHash: product.token_hash, tokenVersion: product.token_version, approvedAt: product.approved_at }, ownerToken)) {
       await insertOutcome(client, { productId: product.id, visitorHash: visitor.hash, networkHash: requestNetworkHash, outcome: "owner", source });
       return { destination: destination.url, visitor, outcome: "owner" as const };
     }
@@ -47,7 +48,7 @@ export async function recordProductClick(request: Request, slug: string) {
     }
     await client.query(
       `INSERT INTO product_metric_aggregates (product_id, metric_type, source, currency, value, last_event_at)
-       VALUES ($1::uuid,'outbound_clicks','verified_by_bidindex','',1,now())
+       VALUES ($1::uuid,'outbound_clicks','measured_by_bidindex','',1,now())
        ON CONFLICT (product_id, metric_type, source, currency) DO UPDATE SET value = product_metric_aggregates.value + 1, last_event_at = now(), updated_at = now()`,
       [product.id]);
     return { destination: destination.url, visitor, outcome: "counted" as const };

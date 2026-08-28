@@ -44,7 +44,7 @@ export async function createCheckout(input: CheckoutInput): Promise<string> {
             },
           },
           product_options: {
-            name: `YourHour leaderboard bid`,
+            name: `BidIndex promotion placement`,
             description,
             redirect_url: successUrl,
             receipt_button_text: "See the leaderboard",

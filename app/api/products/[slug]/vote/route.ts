@@ -41,8 +41,8 @@ export async function PUT(request: Request, context: RouteContext<"/api/products
       });
       if (!visitorAllowed || !networkAllowed) return { rateLimited: true as const };
       const product = await client.query<{ id: string; is_demo: boolean }>(
-        `SELECT id::text, is_demo FROM products WHERE slug = $1 AND status = 'published'`,
-        [slug],
+        `SELECT id::text, is_demo FROM products WHERE slug = $1 AND status = 'published' AND ($2::boolean OR NOT is_demo)`,
+        [slug,process.env.NODE_ENV!=="production"],
       );
       if (!product.rows[0]) return { notFound: true as const };
       await client.query(

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { runCampaignMaintenance } from "@/lib/delivery";
+import { cleanupPartnerTracking } from "@/lib/partner-maintenance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,10 +21,10 @@ async function handle(request: Request) {
   }
 
   const started = Date.now();
-  const reconciled = await runCampaignMaintenance();
+  const [reconciled, partnerCleanup] = await Promise.all([runCampaignMaintenance(), cleanupPartnerTracking()]);
 
   return NextResponse.json(
-    { ok: true, ms: Date.now() - started, reconciled },
+    { ok: true, ms: Date.now() - started, reconciled, partnerCleanup },
     { headers: { "cache-control": "no-store" } },
   );
 }

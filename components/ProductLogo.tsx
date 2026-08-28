@@ -21,10 +21,11 @@ export function ProductLogo({
   /** The live hero is above the fold; Wall logos remain lazy. */
   eager?: boolean;
 }) {
-  const source = productImageUrl(imageUrl, productUrl);
-  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const candidates = [imageUrl, faviconUrl(productUrl)].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+  const [failedSources, setFailedSources] = useState<string[]>([]);
+  const source = candidates.find((candidate) => !failedSources.includes(candidate)) ?? null;
   const size = className ?? (compact ? "h-7 w-7 rounded-lg" : "h-12 w-12 rounded-[14px]");
-  const color = fallbackColor(productName ?? productUrl ?? "yourhour");
+  const color = fallbackColor(productName ?? productUrl ?? "bidindex");
 
   return (
     <span
@@ -36,7 +37,7 @@ export function ProductLogo({
         backgroundColor: `${color}18`,
       }}
     >
-      {source && source !== failedSource ? (
+      {source ? (
         // Product hosts are arbitrary, so next/image cannot safely enumerate them in
         // remotePatterns. The fixed box still prevents layout shift.
         // eslint-disable-next-line @next/next/no-img-element
@@ -46,7 +47,7 @@ export function ProductLogo({
           loading={eager ? "eager" : "lazy"}
           referrerPolicy="no-referrer"
           className="h-full w-full object-cover"
-          onError={() => setFailedSource(source)}
+          onError={() => setFailedSources((current) => current.includes(source) ? current : [...current, source])}
         />
       ) : (
         <span>{productInitials(productName, productUrl)}</span>
