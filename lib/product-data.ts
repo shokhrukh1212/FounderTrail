@@ -198,6 +198,11 @@ export async function getDiscoveryProducts(input: {
   return rows.map(card);
 }
 
+export async function getFoundingProducts(): Promise<ProductCardData[]> {
+  const rows=await query<ProductCardRow>(`SELECT ${CARD_COLUMNS} FROM products p WHERE p.status='published' AND p.founding_position IS NOT NULL AND ($1::boolean OR NOT p.is_demo) ORDER BY p.founding_position`,[process.env.NODE_ENV!=="production"]);
+  return rows.map(card);
+}
+
 export type EcosystemSnapshot = {
   products: number;
   verifiedPartners: number;
@@ -433,21 +438,26 @@ export type ManagedProduct = ProductDetail & {
   status: ProductStatus;
   contactEmail: string;
   approvedAt: Date | null;
+  marketingOptedIn: boolean;
+  marketingSuppressed: boolean;
 };
 
 export async function getManagedProduct(slug: string): Promise<(ManagedProduct & { ownerTokenHash: string; ownerTokenVersion: number }) | null> {
   const rows = await query<{
-    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number;
+    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean;
   }>(
-    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version
+    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,
+            (pref.marketing_opt_in_at IS NOT NULL AND pref.marketing_unsubscribed_at IS NULL) AS marketing_opted_in,
+            (pref.marketing_unsubscribed_at IS NOT NULL OR EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_suppressed
        FROM products p JOIN product_owner_credentials o ON o.product_id = p.id
+       JOIN founder_email_preferences pref ON pref.id=p.email_preference_id
       WHERE p.slug = $1 LIMIT 1`,
     [slug],
   );
   const auth = rows[0];
   if (!auth) return null;
   const publicDetail = await getProductDetailIncludingUnpublished(slug);
-  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
+  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, marketingOptedIn:auth.marketing_opted_in,marketingSuppressed:auth.marketing_suppressed,ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
 }
 
 async function getProductDetailIncludingUnpublished(slug: string): Promise<ProductDetail | null> {

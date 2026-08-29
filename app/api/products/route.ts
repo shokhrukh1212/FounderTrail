@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { newBidIndexOwnerToken, hashBidIndexOwnerToken, ownerCookieName, ownerCookieOptions } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
 import { withTransaction } from "@/lib/db";
+import { ensureFounderPreference } from "@/lib/email-preferences";
 import { validateProductSubmission } from "@/lib/product-validation";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { networkHash, requestOriginIsSameSite } from "@/lib/request-security";
@@ -58,17 +59,18 @@ export async function POST(request: Request) {
       if (!allowed) throw new Error("RATE_LIMITED");
       const slug = await uniqueSlug(client, validated.value.name);
       const metadata = submittedMetadata;
+      const emailPreferenceId = await ensureFounderPreference(client, validated.value.contactEmail, form.get("marketingOptIn") === "on");
       const product = await client.query<{ id: string }>(
         `INSERT INTO products
            (slug, website_url, submitted_url, normalized_domain, name, tagline, founder_name,
             contact_email, founder_social_handle, launch_at, launch_date, status,
-            submission_consent_at, submission_consent_version)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',now(),$12)
+            submission_consent_at, submission_consent_version, email_preference_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',now(),$12,$13::uuid)
          RETURNING id::text`,
         [slug, validated.value.websiteUrl, validated.value.websiteUrl, validated.value.normalizedDomain,
          validated.value.name, validated.value.tagline, validated.value.founderName,
          validated.value.contactEmail, validated.value.founderSocialHandle, validated.value.launchAt,
-         validated.value.launchDate, validated.value.consentVersion],
+         validated.value.launchDate, validated.value.consentVersion, emailPreferenceId],
       );
       const productId = product.rows[0].id;
       await client.query(`INSERT INTO product_owner_credentials (product_id, token_hash) VALUES ($1::uuid,$2)`, [productId, ownerHash]);

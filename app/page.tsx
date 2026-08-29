@@ -5,6 +5,7 @@ import { ProductRow } from "@/components/ProductRow";
 import { BIDINDEX_VISITOR_COOKIE } from "@/lib/bidindex-visitor";
 import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
+import { query } from "@/lib/db";
 import { eventHash } from "@/lib/request-security";
 import {
   DISCOVERY_VIEWS,
@@ -36,10 +37,11 @@ export default async function Home({ searchParams }: {
   const params = await searchParams;
   const view = DISCOVERY_VIEWS.includes(params.view as DiscoveryView) ? params.view as DiscoveryView : "trending";
   const search = (params.q ?? "").trim().slice(0, 80);
-  const [products, snapshot, updates] = await Promise.all([
+  const [products, snapshot, updates,foundingBanner] = await Promise.all([
     getDiscoveryProducts({ view, query: search }),
     getEcosystemSnapshot(),
     getLatestUpdates(3),
+    query<{founding_banner_enabled:boolean;founding_banner_ends_at:Date|null}>(`SELECT founding_banner_enabled,founding_banner_ends_at FROM site_config WHERE singleton=true`),
   ]);
   const cookieStore = await cookies();
   const visitorId = cookieStore.get(BIDINDEX_VISITOR_COOKIE)?.value ?? cookieStore.get("yourhour_visitor")?.value ?? null;
@@ -58,6 +60,8 @@ export default async function Home({ searchParams }: {
           <Link className="button button-secondary" href="/submit">Submit your product — free</Link>
         </div>
       </section>
+
+      {foundingBanner[0]?.founding_banner_enabled&&(!foundingBanner[0].founding_banner_ends_at||new Date(foundingBanner[0].founding_banner_ends_at)>new Date())?<aside className="founding-banner app-shell"><div><strong>Founding products are live</strong><p>Discover the first products building the bidding-product ecosystem.</p></div><Link className="button button-secondary" href="/founding">Explore all founding products</Link></aside>:null}
 
       <div className="app-shell discovery-layout">
         <section id="products" className="discovery-main" aria-labelledby="discovery-heading">

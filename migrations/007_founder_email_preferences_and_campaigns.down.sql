@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS admin_notifications;
+DROP TABLE IF EXISTS founder_email_sequence_state;
+DROP TABLE IF EXISTS resend_webhook_events;
+DROP TABLE IF EXISTS email_campaign_audit_events;
+DROP TABLE IF EXISTS email_campaign_batches;
+DROP TABLE IF EXISTS email_campaign_recipients;
+DROP TABLE IF EXISTS email_campaigns;
+ALTER TABLE site_config DROP COLUMN IF EXISTS founding_banner_ends_at, DROP COLUMN IF EXISTS founding_banner_enabled;
+DROP INDEX IF EXISTS products_founding_position_idx;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_founding_position_check, DROP COLUMN IF EXISTS founding_position;
+DROP TABLE IF EXISTS founder_email_suppressions;
+DROP INDEX IF EXISTS products_email_preference_idx;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_email_preference_fk, DROP COLUMN IF EXISTS email_preference_id;
+DROP TABLE IF EXISTS founder_email_preferences;

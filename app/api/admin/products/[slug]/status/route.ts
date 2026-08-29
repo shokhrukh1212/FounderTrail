@@ -72,6 +72,11 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
         `INSERT INTO product_moderation_events (product_id,from_status,to_status,internal_reason) VALUES ($1::uuid,$2,$3,$4)`,
         [product.id, product.status, body.status, reason],
       );
+      if (body.status === "published") await client.query(
+        `INSERT INTO founder_email_sequence_state(product_id,reminder_due_at)
+         VALUES($1::uuid,COALESCE($2::timestamptz,now())+interval '36 hours')
+         ON CONFLICT(product_id) DO NOTHING`, [product.id,updated.rows[0].approved_at],
+      );
       if (body.status === "rejected") return { rejected: true };
       return { id: product.id, slug: updated.rows[0].slug, name: updated.rows[0].name, approvedAt: new Date(updated.rows[0].approved_at!), newlyPublished: true };
     });

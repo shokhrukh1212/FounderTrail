@@ -293,6 +293,7 @@ export function SubmissionForm() {
             </div>
           </div>
           <p className="form-hint">Optional founder details are displayed on your product page if provided.</p>
+          <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" /> <span>Send me BidIndex growth, leaderboard and milestone updates.</span></label>
         </fieldset>
 
         <fieldset>

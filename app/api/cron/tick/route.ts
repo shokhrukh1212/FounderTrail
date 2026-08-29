@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { runCampaignMaintenance } from "@/lib/delivery";
 import { cleanupPartnerTracking } from "@/lib/partner-maintenance";
+import { dispatchCampaignBatches } from "@/lib/founder-email-campaigns";
+import { runFounderEmailMaintenance } from "@/lib/founder-email-maintenance";
+import { syncVemetricDailyVisitors } from "@/lib/vemetric-stats";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,10 +24,14 @@ async function handle(request: Request) {
   }
 
   const started = Date.now();
-  const [reconciled, partnerCleanup] = await Promise.all([runCampaignMaintenance(), cleanupPartnerTracking()]);
+  const [reconciled, partnerCleanup, founderEmail, campaignDelivery, vemetricDays] = await Promise.all([
+    runCampaignMaintenance(), cleanupPartnerTracking(), runFounderEmailMaintenance(), dispatchCampaignBatches(),
+    // Each day has to be captured while Vemetric still buckets it daily.
+    syncVemetricDailyVisitors().catch((error) => { console.error("vemetric sync failed", error instanceof Error ? error.message : "unknown"); return 0; }),
+  ]);
 
   return NextResponse.json(
-    { ok: true, ms: Date.now() - started, reconciled, partnerCleanup },
+    { ok: true, ms: Date.now() - started, reconciled, partnerCleanup, founderEmail, campaignDelivery, vemetricDays },
     { headers: { "cache-control": "no-store" } },
   );
 }

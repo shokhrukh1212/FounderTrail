@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { query } from "@/lib/db";
+import { updateOwnerMarketingPreference } from "@/lib/email-preferences";
 import { authenticateOwner } from "@/lib/owner-auth";
 import { canonicalProductUrl, xLaunchIntent } from "@/lib/product-share";
 import { requestOriginIsSameSite } from "@/lib/request-security";
@@ -34,8 +35,10 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
   const name = clean(body?.name, 80), tagline = clean(body?.tagline, 160), founder = clean(body?.founderName, 120);
   const socialRaw = typeof body?.founderSocialHandle === "string" ? body.founderSocialHandle.trim().replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "") : "";
   const social = socialRaw ? `@${socialRaw}` : null;
+  const marketingOptIn = body?.marketingOptIn === true || body?.marketingOptIn === "on";
   if (!name || !tagline) return NextResponse.json({ error: "Product name and one-line description are required." }, { status: 400 });
   if (socialRaw && !/^[A-Za-z0-9_]{1,15}$/.test(socialRaw)) return NextResponse.json({ error: "Enter an X handle such as @alexsmith." }, { status: 400 });
   await query(`UPDATE products SET name=$2, tagline=$3, founder_name=$4, founder_social_handle=$5, updated_at=now() WHERE id=$1::uuid`, [owner.productId, name, tagline, founder, social]);
-  return NextResponse.json({ message: "Saved." });
+  const marketingPreference = await updateOwnerMarketingPreference(owner.productId, marketingOptIn);
+  return NextResponse.json({ message: "Saved.", marketingPreference });
 }

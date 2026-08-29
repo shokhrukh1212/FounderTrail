@@ -5,6 +5,7 @@ import localFont from "next/font/local";
 import { Suspense } from "react";
 import { VemetricScript } from "@vemetric/react";
 import { MetaPixelRouteTracker } from "@/components/MetaPixelRouteTracker";
+import { BidIndexVisitorTracker } from "@/components/BidIndexVisitorTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
@@ -116,6 +117,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </Script>
         ) : null}
         <SiteHeader siteName={config.siteName} />
+        <Suspense fallback={null}><BidIndexVisitorTracker /></Suspense>
         {children}
         <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{brandCopy.line}</span></div></footer>
       </body>

@@ -17,8 +17,11 @@ export const config = {
   featurePromotions: process.env.FEATURE_PROMOTIONS === "true",
   eventHashSalt: process.env.EVENT_HASH_SALT ?? process.env.IP_HASH_SALT ?? "dev-event-salt-change-me",
   adminAccessSecret: process.env.ADMIN_ACCESS_SECRET ?? "",
+  adminAuditActor: process.env.ADMIN_AUDIT_ACTOR ?? "Shokhrukh Karimov",
+  adminNotificationEmail: process.env.ADMIN_NOTIFICATION_EMAIL ?? "",
   email: {
     resendApiKey: process.env.RESEND_API_KEY ?? "",
+    webhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? "",
     from: process.env.EMAIL_FROM ?? "",
     replyTo: process.env.EMAIL_REPLY_TO ?? "",
   },
@@ -53,9 +56,11 @@ export const config = {
 
   vemetric: {
     token: process.env.VEMETRIC_TOKEN ?? "",
-    // Retained for the analytics integration; it is no longer linked in the header.
+    // Private read key for the analytics query API. Server-only; never NEXT_PUBLIC_.
+    apiKey: process.env.VEMETRIC_API_KEY ?? "",
+    // Linked from the admin subnav's all-time visitor stat, not from the public header.
     publicDashboardUrl:
-      process.env.VEMETRIC_PUBLIC_DASHBOARD_URL ?? "",
+      process.env.VEMETRIC_PUBLIC_DASHBOARD_URL ?? "https://app.vemetric.com/public/bidindex.dev",
   },
 
   metaPixel: {

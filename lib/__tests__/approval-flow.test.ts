@@ -17,11 +17,11 @@ const ownerAccess = readFileSync(new URL("../../components/OwnerAccess.tsx", imp
 test("X launch intent contains encoded copy and canonical attributed product URL", () => {
   const intent = new URL(xLaunchIntent({ siteUrl: "https://bidindex.dev", slug: "one & two", productName: "Bid & Win", description: "A useful launch." }));
   assert.equal(intent.origin + intent.pathname, "https://x.com/intent/tweet");
-  assert.match(intent.searchParams.get("text") ?? "", /^My product, Bid & Win is now live on BidIndex 🚀/);
+  assert.match(intent.searchParams.get("text") ?? "", /^My product, Bid & Win, is one of the 15 founding products on BidIndex 🚀/);
   const shared = new URL(intent.searchParams.get("url")!);
   assert.equal(shared.pathname, "/product/one%20%26%20two");
   assert.deepEqual(Object.fromEntries(shared.searchParams), {
-    utm_source: "x", utm_medium: "social", utm_campaign: "founder_launch", utm_content: "approval_share", share_version: "2",
+    ref: "one & two", utm_source: "x", utm_medium: "social", utm_campaign: "founder_launch", utm_content: "one & two",
   });
 });
 
@@ -33,13 +33,13 @@ test("long descriptions are shortened at a word boundary without truncating the 
   assert.doesNotMatch(text, /tract…/);
 });
 
-test("X launch copy separates the short product name from its complete listing title", () => {
+test("X launch copy preserves the complete product name", () => {
   const text = launchPostText(
     "YourHour - Pay less, Get more. #1 product gets featured on the homepage.",
     "Pay $1 more to take #1. Every buyer stays permanently on the leaderboard, ranked by total paid.",
   );
-  assert.match(text, /^My product, YourHour is now live on BidIndex 🚀\n\nYourHour - Pay less, Get more\. #1 product gets featured on the homepage\.\n\n/);
-  assert.match(text, /\n\nCheck it out and support the launch:$/);
+  assert.match(text, /^My product, YourHour - Pay less, Get more\. #1 product gets featured on the homepage\., is one of the 15 founding products on BidIndex 🚀/);
+  assert.match(text, /\n\nDiscover it and support the launch:$/);
   assert.ok(Array.from(text).length + 24 <= 280);
 });
 

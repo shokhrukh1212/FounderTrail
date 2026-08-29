@@ -5,22 +5,6 @@ function codePointLength(value: string): number {
   return Array.from(value).length;
 }
 
-function wordSafeDescription(value: string, maxLength: number): string {
-  const normalized = value.trim().replace(/\s+/g, " ");
-  if (maxLength < 2 || !normalized) return "";
-  if (codePointLength(normalized) <= maxLength) return normalized;
-  const candidate = Array.from(normalized).slice(0, Math.max(1, maxLength - 1)).join("");
-  const boundary = candidate.lastIndexOf(" ");
-  const trimmed = (boundary >= Math.floor(candidate.length * 0.55) ? candidate.slice(0, boundary) : candidate).trim();
-  return trimmed ? `${trimmed}…` : "";
-}
-
-function shortProductName(value: string): string {
-  const normalized = value.trim().replace(/\s+/g, " ");
-  const delimiter = normalized.search(/\s(?:-|—)\s/);
-  return delimiter > 0 ? normalized.slice(0, delimiter).trim() : normalized;
-}
-
 export function canonicalProductUrl(siteUrl: string, slug: string): string {
   return new URL(`/product/${encodeURIComponent(slug)}`, `${siteUrl.replace(/\/+$/, "")}/`).toString();
 }
@@ -28,33 +12,39 @@ export function canonicalProductUrl(siteUrl: string, slug: string): string {
 export function productLaunchUrl(siteUrl: string, slug: string): string {
   const url = new URL(canonicalProductUrl(siteUrl, slug));
   url.search = new URLSearchParams({
+    ref: slug,
     utm_source: "x",
     utm_medium: "social",
     utm_campaign: "founder_launch",
-    utm_content: "approval_share",
-    share_version: "2",
+    utm_content: slug,
   }).toString();
   return url.toString();
 }
 
-export function launchPostText(productName: string, description: string): string {
+export function launchPostText(productName: string, description: string, foundingProductCount = 15): string {
+  void description;
   const fullName = productName.trim().replace(/\s+/g, " ");
-  const launchName = shortProductName(fullName);
-  const heading = `My product, ${launchName} is now live on BidIndex 🚀`;
-  const nameParagraph = launchName === fullName ? "" : `\n\n${fullName}`;
-  const closing = "Check it out and support the launch:";
-  const withoutDescription = `${heading}${nameParagraph}\n\n${closing}`;
+  const heading = `My product, ${fullName}, is one of the ${foundingProductCount} founding products on BidIndex 🚀`;
+  const closing = "Discover it and support the launch:";
+  const withoutDescription = `${heading}\n\n${closing}`;
   const textBudget = X_POST_LIMIT - X_SHORT_URL_LENGTH - 1;
-  const descriptionBudget = textBudget - codePointLength(withoutDescription) - 2;
-  const shortened = wordSafeDescription(description, descriptionBudget);
-  return shortened ? `${heading}${nameParagraph}\n\n${shortened}\n\n${closing}` : withoutDescription;
+  if (codePointLength(withoutDescription) <= textBudget) return withoutDescription;
+  // The product name is never truncated. If an unusually long valid name leaves no
+  // room for the full surrounding copy, retain the name and the required CTA line.
+  return `${fullName}\n\n${closing}`;
 }
 
-export function xLaunchIntent(input: { siteUrl: string; slug: string; productName: string; description: string }): string {
+export function xLaunchIntent(input: { siteUrl: string; slug: string; productName: string; description: string; foundingProductCount?: number }): string {
   const publicUrl = productLaunchUrl(input.siteUrl, input.slug);
   const parameters = new URLSearchParams({
-    text: launchPostText(input.productName, input.description),
+    text: launchPostText(input.productName, input.description, input.foundingProductCount),
     url: publicUrl,
   });
   return `https://x.com/intent/tweet?${parameters.toString()}`;
+}
+
+export function trackedXShareUrl(siteUrl: string, slug: string, source: "owner" | "product" | "email" | "admin" | "unknown" = "unknown"): string {
+  const url = new URL(`/share/x/${encodeURIComponent(slug)}`, `${siteUrl.replace(/\/+$/, "")}/`);
+  url.searchParams.set("source", source);
+  return url.toString();
 }

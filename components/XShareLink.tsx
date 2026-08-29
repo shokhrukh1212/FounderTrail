@@ -1,4 +1,4 @@
-import { xLaunchIntent } from "@/lib/product-share";
+import { trackedXShareUrl } from "@/lib/product-share";
 
 export function XShareLink({
   siteUrl,
@@ -7,6 +7,7 @@ export function XShareLink({
   description,
   className = "button button-secondary",
   children = "Share on X",
+  source = "product",
 }: {
   siteUrl: string;
   slug: string;
@@ -14,7 +15,9 @@ export function XShareLink({
   description: string;
   className?: string;
   children?: React.ReactNode;
+  source?: "owner" | "product" | "email" | "admin" | "unknown";
 }) {
-  const href = xLaunchIntent({ siteUrl, slug, productName, description });
+  void productName; void description;
+  const href = trackedXShareUrl(siteUrl, slug, source);
   return <a className={className} href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
 }
