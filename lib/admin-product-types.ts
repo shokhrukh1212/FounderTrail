@@ -1,0 +1,83 @@
+export type AdminProductSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  websiteUrl: string;
+  founderName: string | null;
+  contactEmail: string;
+  founderSocialHandle: string | null;
+  status: string;
+  verificationStatus: "verified" | "domain_verified" | "not_verified";
+  upvotes: number;
+  productViews: number;
+  referredVisitors: number;
+  submittedAt: string;
+  approvedAt: string | null;
+  approvalEmailStatus: string;
+  approvalEmailSentAt: string | null;
+  logoUrl: string | null;
+};
+
+export type AdminProductDetail = {
+  product: {
+    id: string;
+    slug: string;
+    name: string;
+    tagline: string;
+    description: string | null;
+    websiteUrl: string;
+    submittedUrl: string;
+    normalizedDomain: string;
+    founderName: string | null;
+    contactEmail: string;
+    founderSocialHandle: string | null;
+    status: string;
+    launchDate: string;
+    submittedAt: string;
+    publishedAt: string | null;
+    approvedAt: string | null;
+    consentAt: string | null;
+    consentVersion: string | null;
+    category: string | null;
+    domainOverrideApproved: boolean;
+    foundingPosition: number | null;
+    biddingMechanism: string | null;
+    minimumBidMinor: number | null;
+    currentBidMinor: number | null;
+    bidCurrency: string | null;
+    publicAnalyticsUrl: string | null;
+    dataDisclosure: string | null;
+  };
+  email: {
+    marketingOptedIn: boolean;
+    marketingUnsubscribedAt: string | null;
+    suppressions: string[];
+    approvalStatus: string;
+    approvalSentAt: string | null;
+    approvalLastAttemptAt: string | null;
+    approvalFailure: string | null;
+  };
+  verification: {
+    domainStatus: string;
+    allowedDomain: string | null;
+    verificationMethod: string | null;
+    domainVerifiedAt: string | null;
+    badgeStatus: string;
+    badgeInstalledAt: string | null;
+    productVerifiedAt: string | null;
+  };
+  ownerCredential: { createdAt: string | null; rotatedAt: string | null };
+  metadata: {
+    originalUrl: string;
+    finalUrl: string;
+    fetchStatus: string;
+    extractedName: string | null;
+    extractedTagline: string | null;
+    extractedLogoUrl: string | null;
+    extractedImageUrl: string | null;
+    fetchedAt: string | null;
+  } | null;
+  media: Array<{ id: string; kind: string; url: string; mimeType: string; byteSize: number; width: number | null; height: number | null; altText: string | null; position: number }>;
+  moderation: Array<{ fromStatus: string; toStatus: string; reason: string | null; createdAt: string }>;
+  metrics: { upvotes: number; productViews: number; referredVisitors: number; outboundClicks: number };
+};

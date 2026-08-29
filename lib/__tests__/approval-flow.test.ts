@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { approvalAccessMatches, approvalAccessToken, approvalManagementUrl } from "../approval-access";
-import { canonicalProductUrl, launchPostText, productLaunchUrl, xLaunchIntent } from "../product-share";
+import { canonicalProductUrl, launchPostText, productLaunchUrl, validXHandle, xLaunchIntent } from "../product-share";
 
 const approvalRoute = readFileSync(new URL("../../app/api/admin/products/[slug]/status/route.ts", import.meta.url), "utf8");
 const retryRoute = readFileSync(new URL("../../app/api/admin/products/[slug]/approval-email/route.ts", import.meta.url), "utf8");
@@ -17,7 +17,7 @@ const ownerAccess = readFileSync(new URL("../../components/OwnerAccess.tsx", imp
 test("X launch intent contains encoded copy and canonical attributed product URL", () => {
   const intent = new URL(xLaunchIntent({ siteUrl: "https://bidindex.dev", slug: "one & two", productName: "Bid & Win", description: "A useful launch." }));
   assert.equal(intent.origin + intent.pathname, "https://x.com/intent/tweet");
-  assert.match(intent.searchParams.get("text") ?? "", /^My product, Bid & Win, is one of the 15 founding products on BidIndex 🚀/);
+  assert.match(intent.searchParams.get("text") ?? "", /^My product, Bid & Win, is one of the first 21 products on BidIndex 🚀/);
   const shared = new URL(intent.searchParams.get("url")!);
   assert.equal(shared.pathname, "/product/one%20%26%20two");
   assert.deepEqual(Object.fromEntries(shared.searchParams), {
@@ -38,9 +38,18 @@ test("X launch copy preserves the complete product name", () => {
     "YourHour - Pay less, Get more. #1 product gets featured on the homepage.",
     "Pay $1 more to take #1. Every buyer stays permanently on the leaderboard, ranked by total paid.",
   );
-  assert.match(text, /^My product, YourHour - Pay less, Get more\. #1 product gets featured on the homepage\., is one of the 15 founding products on BidIndex 🚀/);
+  assert.match(text, /^My product, YourHour - Pay less, Get more\. #1 product gets featured on the homepage\., is one of the first 21 products on BidIndex 🚀/);
   assert.match(text, /\n\nDiscover it and support the launch:$/);
   assert.ok(Array.from(text).length + 24 <= 280);
+});
+
+test("X attribution is added only for a valid configured handle", () => {
+  assert.equal(validXHandle("@BidIndexHQ"), "BidIndexHQ");
+  assert.equal(validXHandle("not a handle"), null);
+  const valid = new URL(xLaunchIntent({siteUrl:"https://bidindex.dev",slug:"atlas",productName:"Atlas",bidIndexHandle:"@BidIndexHQ"}));
+  const invalid = new URL(xLaunchIntent({siteUrl:"https://bidindex.dev",slug:"atlas",productName:"Atlas",bidIndexHandle:"bad handle"}));
+  assert.equal(valid.searchParams.get("via"), "BidIndexHQ");
+  assert.equal(invalid.searchParams.has("via"), false);
 });
 
 test("signed approval access is deterministic and invalidated by owner token rotation", () => {

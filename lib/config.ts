@@ -19,6 +19,7 @@ export const config = {
   adminAccessSecret: process.env.ADMIN_ACCESS_SECRET ?? "",
   adminAuditActor: process.env.ADMIN_AUDIT_ACTOR ?? "Shokhrukh Karimov",
   adminNotificationEmail: process.env.ADMIN_NOTIFICATION_EMAIL ?? "",
+  bidIndexXHandle: process.env.NEXT_PUBLIC_BIDINDEX_X_HANDLE ?? "",
   email: {
     resendApiKey: process.env.RESEND_API_KEY ?? "",
     webhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? "",

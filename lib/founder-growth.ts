@@ -15,6 +15,9 @@ export async function createReachedMilestones(client:PoolClient,total:number):Pr
   let created=0;
   for(const setting of settings.rows){
     const template=CAMPAIGN_TEMPLATES.visitor_milestone;
+    const subject=setting.threshold===100?template.subject:`BidIndex reached ${setting.threshold} visitors 🚀`;
+    const heading=setting.threshold===100?template.heading:`We reached ${setting.threshold} visitors 🚀`;
+    const body=setting.threshold===100?template.body:`Hi {founder_name},\n\nBidIndex has reached ${setting.threshold} visitors.\n\nWhen you share {product_name}, people can discover and support your product. Real upvotes can move it higher in the Most Upvoted leaderboard.\n\nThank you for helping BidIndex grow.\n\n— Shokhrukh Karimov\nBidIndex`;
     const campaign=await client.query<{id:string}>(
       `INSERT INTO email_campaigns
        (internal_name,template_key,message_class,product_specific,subject,preview_text,heading,body,
@@ -23,8 +26,8 @@ export async function createReachedMilestones(client:PoolClient,total:number):Pr
        VALUES ($1,'visitor_milestone','marketing',false,$2,$3,$4,$5,$6,$7,$8,$9,$10,
         'BidIndex',NULL,$11::jsonb,$12::jsonb,'draft','system:visitor-milestone','system:visitor-milestone')
        RETURNING id::text`,[
-        `Visitor milestone ${setting.threshold}`,setting.threshold===100?template.subject:"BidIndex reached {visitor_count} visitors 🚀",template.previewText,template.heading,
-        template.body,template.includeProductLogo,template.primaryButtonLabel,template.primaryButtonUrl,
+        `Visitor milestone ${setting.threshold}`,subject,template.previewText,heading,
+        body,template.includeProductLogo,template.primaryButtonLabel,template.primaryButtonUrl,
         template.secondaryButtonLabel,template.secondaryButtonUrl,
         JSON.stringify({selectAll:true,statuses:["published"],marketingOptedIn:true}),
         JSON.stringify({visitor_count:setting.threshold,milestone_threshold:setting.threshold}),

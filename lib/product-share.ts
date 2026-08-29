@@ -21,10 +21,10 @@ export function productLaunchUrl(siteUrl: string, slug: string): string {
   return url.toString();
 }
 
-export function launchPostText(productName: string, description: string, foundingProductCount = 15): string {
-  void description;
+export function launchPostText(productName: string, description = "", foundingProductCount = 21): string {
+  void description; void foundingProductCount;
   const fullName = productName.trim().replace(/\s+/g, " ");
-  const heading = `My product, ${fullName}, is one of the ${foundingProductCount} founding products on BidIndex 🚀`;
+  const heading = `My product, ${fullName}, is one of the first 21 products on BidIndex 🚀`;
   const closing = "Discover it and support the launch:";
   const withoutDescription = `${heading}\n\n${closing}`;
   const textBudget = X_POST_LIMIT - X_SHORT_URL_LENGTH - 1;
@@ -34,12 +34,18 @@ export function launchPostText(productName: string, description: string, foundin
   return `${fullName}\n\n${closing}`;
 }
 
-export function xLaunchIntent(input: { siteUrl: string; slug: string; productName: string; description: string; foundingProductCount?: number }): string {
+export function validXHandle(value: string | null | undefined): string | null {
+  const handle = (value ?? "").trim().replace(/^@/, "");
+  return /^[A-Za-z0-9_]{1,15}$/.test(handle) ? handle : null;
+}
+
+export function xLaunchIntent(input: { siteUrl: string; slug: string; productName: string; description?: string; foundingProductCount?: number; bidIndexHandle?: string | null }): string {
   const publicUrl = productLaunchUrl(input.siteUrl, input.slug);
   const parameters = new URLSearchParams({
     text: launchPostText(input.productName, input.description, input.foundingProductCount),
     url: publicUrl,
   });
+  const handle=validXHandle(input.bidIndexHandle);if(handle)parameters.set("via",handle);
   return `https://x.com/intent/tweet?${parameters.toString()}`;
 }
 
