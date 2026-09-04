@@ -6,11 +6,12 @@ import { BIDINDEX_VISITOR_COOKIE } from "@/lib/bidindex-visitor";
 import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
 import { query } from "@/lib/db";
+import { pageWindow } from "@/lib/discovery-pagination";
 import { eventHash } from "@/lib/request-security";
 import {
   DISCOVERY_VIEWS,
   getActiveVoteSlugs,
-  getDiscoveryProducts,
+  getDiscoveryPage,
   getEcosystemSnapshot,
   getLatestUpdates,
   type DiscoveryView,
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 const tabs: Array<{ view: DiscoveryView; label: string }> = [
   { view: "today", label: "Launching today" },
-  { view: "trending", label: "Trending this week" },
+  { view: "trending", label: "Trending" },
   { view: "verified", label: "Verified" },
   { view: "newest", label: "Newest" },
 ];
@@ -32,13 +33,14 @@ const emptyCopy: Record<DiscoveryView, string> = {
 };
 
 export default async function Home({ searchParams }: {
-  searchParams: Promise<{ view?: string; q?: string }>;
+  searchParams: Promise<{ view?: string; q?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const view = DISCOVERY_VIEWS.includes(params.view as DiscoveryView) ? params.view as DiscoveryView : "trending";
   const search = (params.q ?? "").trim().slice(0, 80);
-  const [products, snapshot, updates,foundingBanner] = await Promise.all([
-    getDiscoveryProducts({ view, query: search }),
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const [listing, snapshot, updates,foundingBanner] = await Promise.all([
+    getDiscoveryPage({ view, query: search, page: Number.isFinite(requestedPage) ? requestedPage : 1 }),
     getEcosystemSnapshot(),
     getLatestUpdates(3),
     query<{founding_banner_enabled:boolean;founding_banner_ends_at:Date|null}>(`SELECT founding_banner_enabled,founding_banner_ends_at FROM site_config WHERE singleton=true`),
@@ -46,7 +48,14 @@ export default async function Home({ searchParams }: {
   const cookieStore = await cookies();
   const visitorId = cookieStore.get(BIDINDEX_VISITOR_COOKIE)?.value ?? cookieStore.get("yourhour_visitor")?.value ?? null;
   const voted = await getActiveVoteSlugs(visitorId ? eventHash("bidindex:visitor", visitorId) : null);
+  const { products, total, page, pageCount, offset } = listing;
   const demoVisible = products.some((product) => product.isDemo);
+  const pageHref = (target: number) => {
+    const linkParams = new URLSearchParams({ view });
+    if (search) linkParams.set("q", search);
+    if (target > 1) linkParams.set("page", String(target));
+    return `/?${linkParams.toString()}#products`;
+  };
 
   return (
     <main>
@@ -83,7 +92,7 @@ export default async function Home({ searchParams }: {
           {demoVisible ? <p className="demo-notice"><strong>Demo data</strong> — these local development products and numbers are synthetic.</p> : null}
           <div className="product-list">
             {products.length ? products.map((product, index) => (
-              <ProductRow key={product.id} product={product} position={index + 1} voted={voted.has(product.slug)} />
+              <ProductRow key={product.id} product={product} position={offset + index + 1} voted={voted.has(product.slug)} />
             )) : (
               <div className="empty-state">
                 <h3>No products found</h3>
@@ -92,6 +101,30 @@ export default async function Home({ searchParams }: {
               </div>
             )}
           </div>
+          {total ? (
+            <footer className="discovery-footer">
+              {pageCount > 1 ? (
+                <nav className="pagination" aria-label="Discovery pages">
+                  {page > 1
+                    ? <Link className="pagination-step" href={pageHref(page - 1)} rel="prev">Previous</Link>
+                    : <span className="pagination-step is-disabled" aria-hidden="true">Previous</span>}
+                  {pageWindow(page, pageCount).map((item, index) => item === null
+                    ? <span key={`gap-${index}`} className="pagination-gap" aria-hidden="true">…</span>
+                    : item === page
+                      ? <span key={item} className="is-current" aria-current="page">{item}</span>
+                      : <Link key={item} href={pageHref(item)} aria-label={`Page ${item}`}>{item}</Link>)}
+                  {page < pageCount
+                    ? <Link className="pagination-step" href={pageHref(page + 1)} rel="next">Next</Link>
+                    : <span className="pagination-step is-disabled" aria-hidden="true">Next</span>}
+                </nav>
+              ) : null}
+              <p className="discovery-count">
+                Showing <strong>{offset + 1}–{offset + products.length}</strong> of <strong>{total}</strong>{" "}
+                {total === 1 ? "product" : "products"}
+                {pageCount > 1 ? <> · Page {page} of {pageCount}</> : null}
+              </p>
+            </footer>
+          ) : null}
         </section>
         <DiscoverySidebar snapshot={snapshot} updates={updates} />
       </div>

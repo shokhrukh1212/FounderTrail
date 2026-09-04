@@ -68,6 +68,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .filter-tabs a { min-height: 38px; display: inline-flex; flex: 0 0 auto; align-items: center; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .filter-tabs a:hover { background: var(--surface); color: var(--text); }
 .filter-tabs a.is-active { background: var(--accent-soft); color: #c83930; }
+.discovery-footer { display: grid; justify-items: center; gap: 10px; padding: 22px 0 6px; }
+.discovery-count { margin: 0; color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
+.discovery-count strong { color: var(--text); font-weight: 650; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.pagination a, .pagination span { min-width: 38px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; padding: 0 11px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pagination a:hover { border-color: #ffc0ba; color: var(--accent); }
+.pagination .is-current { border-color: var(--accent); background: var(--accent-soft); color: #c83930; }
+.pagination .is-disabled { opacity: .45; }
+.pagination .pagination-gap { min-width: 0; padding: 0 2px; border: 0; background: none; }
 .demo-notice { margin: 0 0 10px; padding: 9px 12px; border: 1px solid #ffd6d1; border-radius: 8px; background: #fff9f8; color: #82443f; font-size: 12px; }
 .product-list { border-top: 1px solid var(--border); }
 .product-row { position: relative; min-height: 126px; display: grid; grid-template-columns: 30px 54px minmax(0, 1fr) 72px; align-items: center; gap: 15px; padding: 18px 8px; border-bottom: 1px solid var(--border); transition: background .12s ease; }

@@ -22,21 +22,24 @@ test("all eligible founders are returned once and remain separate sends",()=>{
   assert.equal(review.excludedCount,0);
 });
 
-test("normalized-email duplicates send once, preferring published then newest",()=>{
+test("normalized-email duplicates are grouped, send once, and prefer published then newest",()=>{
   const rows=[candidate({product_id:"old-pending",name:"Old pending",status:"pending",submitted_at:new Date("2026-08-20")}),candidate({product_id:"published",name:"Published choice",status:"published",submitted_at:new Date("2026-08-01")}),candidate({product_id:"new-pending",name:"New pending",status:"pending",submitted_at:new Date("2026-08-25")})];
   const review=evaluateAudience(rows,"marketing");
   assert.equal(review.eligibleCount,1);
   assert.equal(review.recipients[0]?.product.id,"published");
   assert.equal(review.recipients[0]?.groupedProducts.length,3);
-  assert.equal(review.excludedCount,2);
-  assert.ok(review.exclusions.every(item=>item.reasons[0]?.includes("Duplicate normalized email")));
+  assert.equal(review.selectedCount,1);
+  assert.equal(review.excludedCount,0);
+  assert.equal(review.exclusions.length,0);
 });
 
-test("marketing excludes non-opt-in and unsubscribed founders with explicit reasons",()=>{
-  const review=evaluateAudience([candidate({product_id:"no-consent",normalized_email:"no@example.com",marketing_opt_in_at:null}),candidate({product_id:"unsubscribed",normalized_email:"stop@example.com",marketing_unsubscribed_at:new Date("2026-08-28"),suppression_reasons:["unsubscribe"]})],"marketing");
-  assert.equal(review.eligibleCount,0);
-  assert.equal(review.excludedCount,2);
-  assert.match(review.exclusions.find(item=>item.product.id==="no-consent")!.reasons.join(" "),/Did not opt in/);
+test("marketing defaults existing founders to subscribed and excludes explicit unsubscribe",()=>{
+  const review=evaluateAudience([candidate({product_id:"implicit-default",normalized_email:"default@example.com",marketing_opt_in_at:null}),candidate({product_id:"unsubscribed",normalized_email:"stop@example.com",marketing_unsubscribed_at:new Date("2026-08-28"),suppression_reasons:["unsubscribe"]})],"marketing");
+  assert.equal(review.eligibleCount,1);
+  assert.equal(review.recipients[0]?.product.id,"implicit-default");
+  assert.equal(review.marketingAudience.eligible,1);
+  assert.equal(review.marketingAudience.total,2);
+  assert.equal(review.excludedCount,1);
   assert.match(review.exclusions.find(item=>item.product.id==="unsubscribed")!.reasons.join(" "),/Unsubscribed/);
 });
 

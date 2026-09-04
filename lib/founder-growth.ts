@@ -29,7 +29,7 @@ export async function createReachedMilestones(client:PoolClient,total:number):Pr
         `Visitor milestone ${setting.threshold}`,subject,template.previewText,heading,
         body,template.includeProductLogo,template.primaryButtonLabel,template.primaryButtonUrl,
         template.secondaryButtonLabel,template.secondaryButtonUrl,
-        JSON.stringify({selectAll:true,statuses:["published"],marketingOptedIn:true}),
+        JSON.stringify({selectAll:true,statuses:["published"]}),
         JSON.stringify({visitor_count:setting.threshold,milestone_threshold:setting.threshold}),
       ],
     );

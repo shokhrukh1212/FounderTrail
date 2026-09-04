@@ -17,7 +17,8 @@ export function allowedOrigin(origin: string | null, allowedDomain: string): boo
 export function validEventId(value: unknown): value is string { return typeof value === "string" && /^[A-Za-z0-9_.:-]{8,120}$/.test(value); }
 export function validEventTime(value: unknown, now=Date.now()): Date | null { if(typeof value!=="string")return null; const date=new Date(value); return Number.isFinite(date.getTime())&&Math.abs(date.getTime()-now)<=10*60_000?date:null; }
 
-export type TrendingSignals = { weeklyVotes: number; weeklyClicks: number; publishedAt: Date; id: string };
+/** Mirrors the discovery ORDER BY: all-time upvotes, then all-time eligible outbound clicks. */
+export type TrendingSignals = { voteCount: number; totalClicks: number; publishedAt: Date; id: string };
 export function compareTrending(a: TrendingSignals, b: TrendingSignals): number {
-  return b.weeklyVotes - a.weeklyVotes || b.weeklyClicks - a.weeklyClicks || b.publishedAt.getTime() - a.publishedAt.getTime() || a.id.localeCompare(b.id);
+  return b.voteCount - a.voteCount || b.totalClicks - a.totalClicks || b.publishedAt.getTime() - a.publishedAt.getTime() || a.id.localeCompare(b.id);
 }

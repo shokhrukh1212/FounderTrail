@@ -4,6 +4,8 @@
 
 Owner-management, verification/data simplification, approval publication/email/X sharing, final BidIndex brand refresh, and submission UX hardening — complete, migrated, locally tested, and production-build ready. Earlier BidIndex work was deployed; the approval-notification pass in this handoff was not deployed. No Git push was performed.
 
+Upvote integrity and all-time discovery ranking — code complete, locally tested, and ready to deploy. The one production data correction in this pass (BidBit's upvotes) is already applied to the live database and does not wait on the deployment.
+
 ## Completed work
 
 - Replaced the long owner form with responsive Product, Updates, and Verification & data tabs. Product editing now shows only name, one-line description, optional founder fields, read-only approved URL, logo, and up to four screenshots.
@@ -51,6 +53,15 @@ Owner-management, verification/data simplification, approval publication/email/X
 - Deployed and live-verified cache rotation as production deployment `dpl_65f7RH49Jxa6ijtQLMwzqwzgp5RK`; the Share on X intent and `og:image`/`twitter:image` now all carry the version-2 cache key.
 - Updated the shared website/email X formatter: listing titles containing ` - ` or ` — ` use the short leading product name in the opening sentence, show the complete listing title as its own paragraph, then the one-line description and closing prompt. The 280-character budget still shortens only the description at a word boundary.
 
+- Investigated the 64 upvotes on BidBit against ~500 all-time visits. No seeded, admin-injected, or synthetically inflated votes exist: `scripts/seed-demo.ts` only ever attaches `is_demo` votes to `is_demo` products, which production filters out, no admin route writes `product_votes`, and the card count is a plain `count(*)`. The rows were structurally valid but not trustworthy, because voter identity is the `bidindex_visitor` cookie the voter controls, and 64 upvotes against 9 outbound clicks inverted the ratio every other product shows.
+- Fixed the two rate limits that could not bind. `vote:visitor` is keyed on the visitor hash, which a cookie-less caller re-mints on every request, so it never triggered for exactly the callers it was meant to stop; `vote:network` mixed the caller-supplied user-agent into its key, so editing one character of the UA string opened a fresh bucket.
+- Added `networkBlockHash()` in `lib/request-security.ts`, which keys the vote abuse bucket on the truncated address block (`/24`, `/48`) alone — the part of a request a sender cannot rewrite in a header. Other routes keep the existing `networkHash`.
+- Capped upvotes at three active per product per address block (`VOTES_PER_PRODUCT_PER_NETWORK`), the shape vote stuffing always takes. Cookie-less callers additionally consume a `vote:new-visitor` bucket of three per hour per block, and `vote:network` moved from 40 per 10 minutes to 10 per hour. Blocked attempts are recorded as `rate_limited` in `product_vote_events`; nothing is silently dropped.
+- Kept first-click voting intact: a brand-new visitor and a founder upvoting another founder's product are both counted immediately and receive the visitor cookie in the same response, with no reload or retry prompt. Owners still cannot upvote their own product.
+- Withdrew BidBit's surplus upvotes to 1 with `npm run votes:set -- bidbit 1 --apply` against the live database on 2026-09-05 (65 active at the time, 64 withdrawn). Nothing was deleted: the rows remain in `product_votes` with `active = false`, so the vote rows and `product_vote_events` are still there for a later audit. No other product's votes were touched.
+- Switched discovery ranking from weekly to all-time. Launching today and Trending now order by all-time upvotes, then all-time eligible outbound clicks, then the newer launch. `CARD_COLUMNS` gained a `total_clicks` figure; the weekly vote and click figures stay in the card data, unranked. `compareTrending` in `lib/integration-validation.ts` mirrors the new SQL.
+- Renamed the product-detail `weeklyPosition` to `boardPosition` and rebuilt it on the same all-time signals, so a founder's stated position matches where the homepage actually places them. The field had no UI reader yet.
+
 ## Database migrations applied
 
 - `001_bidindex_core.up.sql`, `002_partner_network.up.sql`, `003_moderation.up.sql`, `004_submission_simplification.up.sql` were already applied.
@@ -65,6 +76,9 @@ Migrations 005 and 006 are additive and forward-only in normal production use. T
 - `npm run typecheck` — passed.
 - `npm run lint` — passed.
 - `npm test` — passed: 16 test files, including approval publication/email/share/access contracts, submission field/upload UX validation, exact-brand/OG contracts, payment regression, submission, SSRF, demo visibility, source labels, verification, visitor privacy, event authentication/idempotency, money, and owner authorization contracts.
+- `npm test` after the upvote-integrity and all-time-ranking pass — passed, 133 tests, including four new contracts: the per-network upvote cap, the user-agent-free abuse bucket, first-click voting for new visitors, and all-time discovery ordering.
+- `npm run typecheck` and `npm run lint` after the same pass — both passed.
+- `npm run votes:set -- bidbit 1` — dry run reported `65 -> 1` against the live Neon database before `--apply` was used, and a repeat dry run afterwards reported `1 -> 1`.
 - `npm run build` — passed optimized production build.
 - `git diff --check` — passed.
 - Local production server QA — `/`, `/leaderboards`, `/about`, `/submit`, `/product/yourhour`, `/manage/yourhour`, and `/admin` returned 200 with no page error or horizontal overflow at 1440, 1024, 390, and 375 pixels. The final product page had one merged metric card and correct titles.
@@ -87,6 +101,7 @@ The unauthenticated management view was verified. Full owner-tab interaction req
 - `lib/brand.ts`, `lib/__tests__/branding.test.ts`, `app/layout.tsx`, `app/page.tsx`, `app/about/page.tsx`, `app/rules/page.tsx`, `public/og.jpg`
 - `app/api/owner/products/[slug]/{verify-domain,check-badge,integration}/route.ts`
 - `app/api/events/visitor/route.ts`, `app/api/partner/v1/events/route.ts`, `app/embed/badge.js/route.ts`, `app/from/[publicId]/route.ts`
+- `app/api/products/[slug]/vote/route.ts`, `lib/request-security.ts` (`networkBlockHash`), `scripts/set-product-upvotes.ts`, `lib/__tests__/discovery-pagination.test.ts`
 - `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/PARTNER_INTEGRATION.md`, `docs/PROCESSOR_CONNECTORS.md`, `docs/IMPLEMENTATION_PLAN.md`, `.env.example`, `README.md`
 
 ## Environment variables
@@ -124,10 +139,14 @@ Keep `ALLOW_LOCAL_PARTNER_ORIGINS=false` in production. Only pixel/Vemetric iden
 - Approval email cannot be exercised against Resend until its DNS records finish verification and `RESEND_API_KEY` and `EMAIL_FROM` are configured in Vercel. Publication safely succeeds without them and the administrator can retry afterward.
 - The shared-secret administrator architecture cannot identify a named approving administrator. The existing moderation event records the transition; named attribution requires a future admin-account model.
 - Existing production data was not reset or deleted in this pass. Demo visibility protections remain enforced.
+- Upvotes remain anonymous. The address-block cap raises the cost of stuffing but cannot make a cookie mean a person: a determined voter with several networks, or a mobile connection that changes address, can still add a few. Sign-in — an emailed magic link over the existing Resend setup, or GitHub OAuth — is the only change that makes "one upvote, one person" true, and it was deliberately postponed.
+- The address-block cap and the 10-per-hour network limit are shared by everyone behind one `/24`. A large office or a carrier NAT could see a genuine second or fourth voter refused with a 429. At the current traffic this is unlikely; raise `VOTES_PER_PRODUCT_PER_NETWORK` or the limit if real users report it.
+- BidBit's 64 withdrawn rows were not analysed per network before withdrawal, because the correction was requested directly. `product_vote_events` and the `active = false` rows still hold the evidence if that audit is wanted later.
+- The all-time visitor figure still counts one row per browser per UTC day, so it reports visits rather than people. The number was not changed in this pass; the label is the honest thing to revisit.
 
 ## Exact next task
 
-Verify the Resend sending domain, add `RESEND_API_KEY`, `EMAIL_FROM`, and optional `EMAIL_REPLY_TO` to the production environment, deploy the current tree, then submit one pending test product and approve it. Confirm publication remains immediate, exactly one approval email arrives, Share on X opens the attributed public URL, the email management link opens the owner dashboard, and retry does not duplicate delivery. Do not run the demo seed against production.
+Deploy the current tree. Then open the homepage and confirm Trending is ordered by all-time upvotes with BidBit showing 1, upvote any product once from a clean browser and see the count rise on the first click with no reload, and confirm a second upvote attempt on the same product from the same network still works up to three and is refused with a 429 after that. The earlier Resend task remains open: verify the sending domain, add `RESEND_API_KEY`, `EMAIL_FROM`, and optional `EMAIL_REPLY_TO` in Vercel, then submit and approve one pending test product and confirm exactly one approval email arrives. Do not run the demo seed against production.
 
 ## Working tree note
 

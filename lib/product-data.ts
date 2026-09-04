@@ -32,6 +32,7 @@ export type ProductCardData = {
   voteCount: number;
   weeklyVotes: number;
   weeklyClicks: number;
+  totalClicks: number;
   updateCount: number;
   metrics: ProductMetric[];
   isVerified: boolean;
@@ -51,6 +52,7 @@ type ProductCardRow = {
   vote_count: number;
   weekly_votes: number;
   weekly_clicks: number;
+  total_clicks: number;
   update_count: number;
   metrics: Array<{
     type: MetricType;
@@ -88,6 +90,8 @@ const CARD_COLUMNS = `
   (SELECT count(*)::int FROM product_outbound_click_events oce
     WHERE oce.product_id = p.id AND oce.outcome = 'counted'
       AND oce.created_at >= now() - interval '7 days') AS weekly_clicks,
+  (SELECT count(*)::int FROM product_outbound_click_events oce
+    WHERE oce.product_id = p.id AND oce.outcome = 'counted') AS total_clicks,
   (SELECT count(*)::int FROM product_updates pu WHERE pu.product_id = p.id) AS update_count,
   COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'type', a.metric_type, 'source', a.source, 'currency', a.currency,
@@ -122,9 +126,14 @@ const CARD_COLUMNS = `
     ) a), '[]'::jsonb) AS metrics
 `;
 
+/**
+ * All-time, not weekly. A seven-day window said almost nothing while most products were
+ * days old, and it quietly reshuffled the board every night. Upvotes lead, eligible
+ * outbound clicks break ties, then the newer launch.
+ */
 const ORDER: Record<DiscoveryView, string> = {
-  today: `weekly_votes DESC, weekly_clicks DESC, p.published_at DESC, p.id`,
-  trending: `weekly_votes DESC, weekly_clicks DESC, p.published_at DESC, p.id`,
+  today: `vote_count DESC, total_clicks DESC, p.published_at DESC, p.id`,
+  trending: `vote_count DESC, total_clicks DESC, p.published_at DESC, p.id`,
   verified: `p.published_at DESC, p.id`,
   newest: `p.published_at DESC, p.id`,
 };
@@ -144,6 +153,7 @@ function card(row: ProductCardRow): ProductCardData {
     voteCount: Number(row.vote_count),
     weeklyVotes: Number(row.weekly_votes),
     weeklyClicks: Number(row.weekly_clicks),
+    totalClicks: Number(row.total_clicks),
     updateCount: Number(row.update_count),
     metrics: (row.metrics ?? []).map((metric) => ({
       ...metric,
@@ -155,18 +165,21 @@ function card(row: ProductCardRow): ProductCardData {
   };
 }
 
-export async function getDiscoveryProducts(input: {
-  view?: string;
-  query?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<ProductCardData[]> {
-  const view: DiscoveryView = DISCOVERY_VIEWS.includes(input.view as DiscoveryView)
-    ? input.view as DiscoveryView
-    : "trending";
-  const search = (input.query ?? "").trim().slice(0, 80);
-  const limit = Math.max(1, Math.min(input.limit ?? 30, 50));
-  const offset = Math.max(0, Math.min(input.offset ?? 0, 10_000));
+export const DISCOVERY_PAGE_SIZE = 30;
+
+export type DiscoveryPage = {
+  products: ProductCardData[];
+  /** Every published product the current view and search match, not just this page. */
+  total: number;
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  /** Rows skipped before this page, so list positions keep counting across pages. */
+  offset: number;
+};
+
+/** The filters the count and the page share, so the pager can never disagree with the list. */
+function discoveryFilters(view: DiscoveryView, search: string): { where: string; params: unknown[] } {
   const filters = [
     `p.status = 'published'`,
     process.env.NODE_ENV === "production" ? `p.is_demo = false` : `true`,
@@ -186,16 +199,44 @@ export async function getDiscoveryProducts(input: {
       OR EXISTS (SELECT 1 FROM product_categories search_pc JOIN categories search_c ON search_c.id = search_pc.category_id
         WHERE search_pc.product_id = p.id AND search_c.name ILIKE $${index} ESCAPE '\\'))`);
   }
-  params.push(limit, offset);
+  return { where: filters.join(" AND "), params };
+}
+
+/**
+ * One page of the discovery list together with the totals the header and pager need. The
+ * page is clamped into range, so a hand-typed ?page= never renders an empty list while
+ * products exist.
+ */
+export async function getDiscoveryPage(input: {
+  view?: string;
+  query?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<DiscoveryPage> {
+  const view: DiscoveryView = DISCOVERY_VIEWS.includes(input.view as DiscoveryView)
+    ? input.view as DiscoveryView
+    : "trending";
+  const search = (input.query ?? "").trim().slice(0, 80);
+  const pageSize = Math.max(1, Math.min(Math.trunc(input.pageSize ?? DISCOVERY_PAGE_SIZE), 50));
+  const { where, params } = discoveryFilters(view, search);
+  const totals = await query<{ total: number }>(
+    `SELECT count(*)::int AS total FROM products p WHERE ${where}`,
+    params,
+  );
+  const total = totals[0]?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const requested = Number.isFinite(input.page) ? Math.trunc(input.page as number) : 1;
+  const page = Math.min(Math.max(1, requested), pageCount);
+  const offset = (page - 1) * pageSize;
   const rows = await query<ProductCardRow>(
     `SELECT ${CARD_COLUMNS}
        FROM products p
-      WHERE ${filters.join(" AND ")}
+      WHERE ${where}
       ORDER BY ${ORDER[view]}
-      LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params,
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, pageSize, offset],
   );
-  return rows.map(card);
+  return { products: rows.map(card), total, page, pageCount, pageSize, offset };
 }
 
 export async function getFoundingProducts(): Promise<ProductCardData[]> {
@@ -369,7 +410,7 @@ export type ProductDetail = ProductCardData & {
   bidCurrency: string | null;
   publicAnalyticsUrl: string | null;
   dataDisclosure: string | null;
-  weeklyPosition: number | null;
+  boardPosition: number | null;
   media: Array<{ id: string; kind: string; url: string; altText: string | null; position: number }>;
   updates: Array<{ id: string; type: string; title: string; body: string; linkUrl: string | null; publishedAt: Date; imageUrl: string | null }>;
 };
@@ -379,25 +420,25 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     description: string | null; founder_name: string | null; founder_social_handle: string | null;
     bidding_mechanism: string | null; minimum_bid_minor: string | null; current_bid_minor: string | null;
     bid_currency: string | null; public_analytics_url: string | null; data_disclosure: string | null;
-    weekly_position: number | null;
+    board_position: number | null;
   }>(
     `SELECT ${CARD_COLUMNS}, p.description, p.founder_name, p.founder_social_handle,
             p.bidding_mechanism, p.minimum_bid_minor::text, p.current_bid_minor::text,
             p.bid_currency, p.public_analytics_url, p.data_disclosure,
             (SELECT position FROM (
               SELECT ranked.id, row_number() OVER (
-                ORDER BY ranked.weekly_votes DESC, ranked.weekly_clicks DESC, ranked.published_at DESC, ranked.id
+                ORDER BY ranked.vote_count DESC, ranked.total_clicks DESC, ranked.published_at DESC, ranked.id
               )::int AS position
               FROM (
                 SELECT candidate.id, candidate.published_at,
                   (SELECT count(*) FROM product_votes v WHERE v.product_id = candidate.id AND v.active
-                    AND v.first_upvoted_at >= now() - interval '7 days') AS weekly_votes,
+                    AND (candidate.is_demo OR NOT v.is_demo)) AS vote_count,
                   (SELECT count(*) FROM product_outbound_click_events e WHERE e.product_id = candidate.id
-                    AND e.outcome = 'counted' AND e.created_at >= now() - interval '7 days') AS weekly_clicks
+                    AND e.outcome = 'counted') AS total_clicks
                 FROM products candidate WHERE candidate.status = 'published'
                   AND ($2::boolean OR NOT candidate.is_demo)
               ) ranked
-            ) positions WHERE positions.id = p.id) AS weekly_position
+            ) positions WHERE positions.id = p.id) AS board_position
        FROM products p WHERE p.slug = $1 AND p.status = 'published'
          AND ($2::boolean OR NOT p.is_demo) LIMIT 1`,
     [slug, process.env.NODE_ENV !== "production"],
@@ -428,7 +469,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     bidCurrency: row.bid_currency,
     publicAnalyticsUrl: row.public_analytics_url,
     dataDisclosure: row.data_disclosure,
-    weeklyPosition: row.weekly_position,
+    boardPosition: row.board_position,
     media: media.map((item) => ({ id: item.id, kind: item.kind, url: item.public_url, altText: item.alt_text, position: item.position })),
     updates: updates.map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, linkUrl: item.link_url, publishedAt: new Date(item.published_at), imageUrl: item.image_url })),
   };
@@ -447,7 +488,7 @@ export async function getManagedProduct(slug: string): Promise<(ManagedProduct &
     id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean;
   }>(
     `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,
-            (pref.marketing_opt_in_at IS NOT NULL AND pref.marketing_unsubscribed_at IS NULL) AS marketing_opted_in,
+            (pref.marketing_unsubscribed_at IS NULL AND NOT EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_opted_in,
             (pref.marketing_unsubscribed_at IS NOT NULL OR EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_suppressed
        FROM products p JOIN product_owner_credentials o ON o.product_id = p.id
        JOIN founder_email_preferences pref ON pref.id=p.email_preference_id
@@ -488,13 +529,13 @@ async function getProductDetailIncludingUnpublished(slug: string): Promise<Produ
     id: row.id, slug: row.slug, websiteUrl: row.website_url, name: row.name, tagline: row.tagline,
     launchAt: new Date(row.launch_at), publishedAt: new Date(row.published_at ?? row.launch_at), isDemo: row.is_demo,
     logoUrl: media.find((item) => item.kind === "logo")?.public_url ?? null, categories,
-    voteCount: votes[0]?.count ?? 0, weeklyVotes: 0, weeklyClicks: 0, updateCount: updates.length,
+    voteCount: votes[0]?.count ?? 0, weeklyVotes: 0, weeklyClicks: 0, totalClicks: 0, updateCount: updates.length,
     metrics: metrics.map((item) => ({ type: item.metric_type, source: item.source, currency: item.currency, value: Number(item.value), sourceUrl: item.source_url, updatedAt: new Date(item.updated_at), lastEventAt: item.last_event_at ? new Date(item.last_event_at) : null, measurementPeriod: item.measurement_period })),
     isVerified: row.product_verified_at !== null,
     description: row.description, founderName: row.founder_name, founderSocialHandle: row.founder_social_handle,
     biddingMechanism: row.bidding_mechanism, minimumBidMinor: row.minimum_bid_minor === null ? null : Number(row.minimum_bid_minor),
     currentBidMinor: row.current_bid_minor === null ? null : Number(row.current_bid_minor), bidCurrency: row.bid_currency,
-    publicAnalyticsUrl: row.public_analytics_url, dataDisclosure: row.data_disclosure, weeklyPosition: null,
+    publicAnalyticsUrl: row.public_analytics_url, dataDisclosure: row.data_disclosure, boardPosition: null,
     media: media.map((item) => ({ id: item.id, kind: item.kind, url: item.public_url, altText: item.alt_text, position: item.position })),
     updates: updates.map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, linkUrl: item.link_url, publishedAt: new Date(item.published_at), imageUrl: item.image_url })),
   };

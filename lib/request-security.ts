@@ -21,7 +21,7 @@ export function networkHash(request: Request, context: string): string {
   return eventHash(`${context}:network`, `${requestIp(request)}\n${userAgent}`);
 }
 
-function truncatedNetwork(request: Request): string {
+export function truncatedNetwork(request: Request): string {
   const ip = requestIp(request).toLowerCase();
   if (isIP(ip) === 4) {
     const parts = ip.split(".");
@@ -29,6 +29,15 @@ function truncatedNetwork(request: Request): string {
   }
   if (isIP(ip) === 6) return `${ip.split(":").slice(0, 3).join(":")}::/48`;
   return "unknown";
+}
+
+/**
+ * Abuse bucket for votes. `networkHash` mixes in the full user-agent, which the caller
+ * writes itself, so editing one character of it minted a fresh rate-limit bucket. This
+ * keys on the address block alone, which a sender cannot rewrite in a header.
+ */
+export function networkBlockHash(request: Request, context: string): string {
+  return eventHash(`${context}:network-block`, truncatedNetwork(request));
 }
 
 function userAgentCategory(request: Request): string {

@@ -48,7 +48,9 @@ Administrators assign one primary category. Owners cannot silently change the ap
 
 ## Discovery and ranking
 
-The public discovery views remain Launching today, Trending this week, Verified, and Newest. Organic order uses launch dates, genuine unique upvotes, and eligible BidIndex outbound clicks. Payments, promotions, sponsorships, and founder-reported values never improve organic position.
+The public discovery views remain Launching today, Trending, Verified, and Newest. Every view lists the whole matching set across numbered pages, with the total stated under the pager, so a tab name is never read as a hidden time filter. Listed metrics and ranking signals are both all-time: Launching today and Trending order by all-time upvotes, then all-time eligible BidIndex outbound clicks, then the newer launch. A seven-day window ranked the board until now, but it said little while most products were days old and it reshuffled the order every night. Weekly figures stay in the card data, unranked and unshown. Payments, promotions, sponsorships, and founder-reported values never improve organic position.
+
+An upvote is a per-product row keyed on the anonymous `bidindex_visitor` cookie. That cookie is under the voter's control, so identity alone cannot carry the count: clearing it, or sending no cookie at all, mints a fresh voter. The vote route therefore also caps upvotes per address block — at most three active upvotes on one product from one `/24`, and a stricter hourly bucket for cookie-less callers, whose per-visitor allowance can never bind. A first-time visitor and a founder upvoting someone else's product both still count on the first click, with no reload. Product owners remain unable to upvote their own product. Until sign-in exists, an upvote means one anonymous browser, and the wording around the number should not claim more.
 
 Metric leaderboards include only eligible measured, processor-connected, authenticated partner, or accepted public sources and always show the source label. Currencies remain separate. No data is preferable to a synthetic or misleading zero.
 

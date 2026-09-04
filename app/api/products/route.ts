@@ -106,7 +106,16 @@ export async function POST(request: Request) {
     await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const code = error instanceof Error ? error.message : "";
     if (code === "RATE_LIMITED") return NextResponse.json({ error: "Too many submissions. Try again later." }, { status: 429 });
-    console.error("product submission failed", code || "unknown error");
+    // The founder only ever sees the generic message below, so the log has to carry
+    // everything the database said about the failure. Row values are left out: they
+    // repeat the founder's email back into the log.
+    const failure = error as { code?: string; constraint?: string; table?: string };
+    console.error("product submission failed", JSON.stringify({
+      message: code || "unknown error",
+      code: failure?.code ?? null,
+      constraint: failure?.constraint ?? null,
+      table: failure?.table ?? null,
+    }));
     return NextResponse.json({ error: "Could not save the submission." }, { status: 500 });
   }
 }

@@ -55,12 +55,18 @@ export function oneClickUnsubscribeUrl(siteUrl: string, token: string): string {
 }
 
 export async function ensureFounderPreference(client: PoolClient, email: string, optIn: boolean): Promise<string> {
+  // The table enforces "unsubscribed implies a recorded preference", so the opt-in
+  // timestamp has to be stamped on every row this touches -- rows backfilled from older
+  // submissions carry no opt-in, and leaving one NULL while stamping the unsubscribe
+  // aborts the whole submission transaction. An existing unsubscribe stays sticky: a
+  // later submission with the box ticked never silently re-subscribes a founder.
   const result = await client.query<{ id: string }>(
-    `INSERT INTO founder_email_preferences (normalized_email,marketing_opt_in_at)
-     VALUES ($1,CASE WHEN $2::boolean THEN now() ELSE NULL END)
+    `INSERT INTO founder_email_preferences (normalized_email,marketing_opt_in_at,marketing_unsubscribed_at)
+     VALUES ($1,now(),CASE WHEN $2::boolean THEN NULL ELSE now() END)
      ON CONFLICT (normalized_email) DO UPDATE SET
-       marketing_opt_in_at=CASE WHEN founder_email_preferences.marketing_unsubscribed_at IS NULL AND $2::boolean
-         THEN COALESCE(founder_email_preferences.marketing_opt_in_at,now()) ELSE founder_email_preferences.marketing_opt_in_at END,
+       marketing_opt_in_at=COALESCE(founder_email_preferences.marketing_opt_in_at,now()),
+       marketing_unsubscribed_at=CASE WHEN founder_email_preferences.marketing_unsubscribed_at IS NULL AND NOT $2::boolean
+         THEN now() ELSE founder_email_preferences.marketing_unsubscribed_at END,
        updated_at=now()
      RETURNING id::text`, [normalizeEmail(email), optIn]);
   return result.rows[0].id;
@@ -98,8 +104,7 @@ export async function updateOwnerMarketingPreference(productId: string, optedIn:
     const pref=rows.rows[0]; if(!pref)throw new Error("PREFERENCE_NOT_FOUND");
     if(pref.suppressed||pref.marketing_unsubscribed_at)return "suppressed";
     if(optedIn){if(pref.marketing_opt_in_at)return "unchanged";await client.query(`UPDATE founder_email_preferences SET marketing_opt_in_at=now(),updated_at=now() WHERE id=$1::uuid`,[pref.id]);return "opted_in";}
-    if(!pref.marketing_opt_in_at)return "unchanged";
-    await client.query(`UPDATE founder_email_preferences SET marketing_unsubscribed_at=now(),updated_at=now() WHERE id=$1::uuid`,[pref.id]);
+    await client.query(`UPDATE founder_email_preferences SET marketing_opt_in_at=COALESCE(marketing_opt_in_at,now()),marketing_unsubscribed_at=now(),updated_at=now() WHERE id=$1::uuid`,[pref.id]);
     await client.query(`INSERT INTO founder_email_suppressions (normalized_email,reason) VALUES ($1,'unsubscribe') ON CONFLICT DO NOTHING`,[pref.normalized_email]);
     return "unsubscribed";
   });

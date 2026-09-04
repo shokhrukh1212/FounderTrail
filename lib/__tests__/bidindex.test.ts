@@ -20,12 +20,12 @@ test("votes are unique, reversible, and cannot seed production totals", () => {
   assert.match(productData, /process\.env\.NODE_ENV === "production" \? `p\.is_demo = false`/);
 });
 
-test("trending orders weekly votes then verified outbound clicks", () => {
+test("trending orders all-time votes then verified outbound clicks", () => {
   const now = new Date("2026-08-27T00:00:00Z");
   const items = [
-    { id: "b", weeklyVotes: 5, weeklyClicks: 9, publishedAt: now },
-    { id: "a", weeklyVotes: 6, weeklyClicks: 0, publishedAt: now },
-    { id: "c", weeklyVotes: 5, weeklyClicks: 10, publishedAt: now },
+    { id: "b", voteCount: 5, totalClicks: 9, publishedAt: now },
+    { id: "a", voteCount: 6, totalClicks: 0, publishedAt: now },
+    { id: "c", voteCount: 5, totalClicks: 10, publishedAt: now },
   ].sort(compareTrending);
   assert.deepEqual(items.map((item) => item.id), ["a", "c", "b"]);
 });
