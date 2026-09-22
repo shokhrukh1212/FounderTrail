@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { adminSessionFromRequest, validAdminSession } from "@/lib/admin-auth";
+
+import { validAdminRequest } from "@/lib/admin-auth";
 import { hashBidIndexOwnerToken, newBidIndexOwnerToken } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
 import { withTransaction } from "@/lib/db";
@@ -7,7 +8,7 @@ import { requestOriginIsSameSite } from "@/lib/request-security";
 
 export async function POST(request: Request, context: RouteContext<"/api/admin/products/[slug]/owner-link">) {
   if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
-  if (!validAdminSession(adminSessionFromRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
+  if (!(await validAdminRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   const { slug } = await context.params;
   const token = newBidIndexOwnerToken();
   const tokenHash = hashBidIndexOwnerToken(token);

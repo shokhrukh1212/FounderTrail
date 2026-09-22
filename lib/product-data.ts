@@ -75,7 +75,7 @@ const CARD_COLUMNS = `
     (SELECT pm.public_url FROM product_media pm
       WHERE pm.product_id = p.id AND pm.kind = 'logo' LIMIT 1),
     (SELECT '/api/products/' || p.slug || '/logo' FROM product_submission_metadata sm
-      WHERE sm.product_id = p.id LIMIT 1)
+      WHERE sm.product_id = p.id AND sm.extracted_logo_url IS NOT NULL LIMIT 1)
   ) AS logo_url,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name))
     FROM categories c WHERE c.id = p.primary_category_id),
@@ -454,7 +454,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     query<{ id: string; type: string; title: string; body: string; link_url: string | null; published_at: Date; image_url: string | null }>(
       `SELECT u.id::text, u.type, u.title, u.body, u.link_url, u.published_at, m.public_url AS image_url
          FROM product_updates u LEFT JOIN product_media m ON m.id = u.image_media_id
-        WHERE u.product_id = $1 ORDER BY u.published_at DESC, u.id DESC`,
+        WHERE u.product_id = $1 AND u.status='published' AND u.published_at IS NOT NULL
+        ORDER BY u.published_at DESC, u.id DESC`,
       [row.id],
     ),
   ]);
@@ -481,13 +482,17 @@ export type ManagedProduct = ProductDetail & {
   approvedAt: Date | null;
   marketingOptedIn: boolean;
   marketingSuppressed: boolean;
+  primaryCategoryId: string | null;
+  pricingModel: "free" | "freemium" | "paid" | "open_source" | "contact" | "unknown";
+  startingPriceMinor: number | null;
+  pricingCurrency: string | null;
 };
 
 export async function getManagedProduct(slug: string): Promise<(ManagedProduct & { ownerTokenHash: string; ownerTokenVersion: number }) | null> {
   const rows = await query<{
-    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean;
+    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean; primary_category_id: string | null; pricing_model: ManagedProduct["pricingModel"] | null; starting_price_minor: string | null; pricing_currency: string | null;
   }>(
-    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,
+    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,p.primary_category_id::text,p.pricing_model,p.starting_price_minor::text,p.pricing_currency,
             (pref.marketing_unsubscribed_at IS NULL AND NOT EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_opted_in,
             (pref.marketing_unsubscribed_at IS NOT NULL OR EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_suppressed
        FROM products p JOIN product_owner_credentials o ON o.product_id = p.id
@@ -498,7 +503,7 @@ export async function getManagedProduct(slug: string): Promise<(ManagedProduct &
   const auth = rows[0];
   if (!auth) return null;
   const publicDetail = await getProductDetailIncludingUnpublished(slug);
-  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, marketingOptedIn:auth.marketing_opted_in,marketingSuppressed:auth.marketing_suppressed,ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
+  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, marketingOptedIn:auth.marketing_opted_in,marketingSuppressed:auth.marketing_suppressed,primaryCategoryId:auth.primary_category_id,pricingModel:auth.pricing_model??"unknown",startingPriceMinor:auth.starting_price_minor===null?null:Number(auth.starting_price_minor),pricingCurrency:auth.pricing_currency,ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
 }
 
 async function getProductDetailIncludingUnpublished(slug: string): Promise<ProductDetail | null> {
@@ -521,7 +526,7 @@ async function getProductDetailIncludingUnpublished(slug: string): Promise<Produ
   const [categories, media, updates, metrics, votes] = await Promise.all([
     query<{ slug: string; name: string }>(`SELECT c.slug, c.name FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id = $1 ORDER BY pc.position`, [row.id]),
     query<{ id: string; kind: string; public_url: string; alt_text: string | null; position: number }>(`SELECT id::text, kind, public_url, alt_text, position FROM product_media WHERE product_id = $1 ORDER BY kind, position`, [row.id]),
-    query<{ id: string; type: string; title: string; body: string; link_url: string | null; published_at: Date; image_url: string | null }>(`SELECT u.id::text, u.type, u.title, u.body, u.link_url, u.published_at, m.public_url AS image_url FROM product_updates u LEFT JOIN product_media m ON m.id = u.image_media_id WHERE u.product_id = $1 ORDER BY u.published_at DESC`, [row.id]),
+    query<{ id: string; type: string; title: string; body: string; link_url: string | null; published_at: Date; image_url: string | null }>(`SELECT u.id::text, u.type, u.title, u.body, u.link_url, u.published_at, m.public_url AS image_url FROM product_updates u LEFT JOIN product_media m ON m.id = u.image_media_id WHERE u.product_id = $1 AND u.status='published' AND u.published_at IS NOT NULL ORDER BY u.published_at DESC`, [row.id]),
     query<{ metric_type: MetricType; source: MetricSource; currency: string; value: string; source_url: string | null; updated_at: Date; last_event_at: Date | null; measurement_period: "all_time"|"today"|"last_30_days" }>(`SELECT metric_type,source,currency,(CASE WHEN metric_type='highest_bid' THEN max(value) WHEN metric_type='current_bid' THEN (array_agg(value ORDER BY updated_at DESC))[1] ELSE sum(value) END)::text AS value,max(source_url) AS source_url,max(updated_at) AS updated_at,max(last_event_at) AS last_event_at,(array_agg(measurement_period ORDER BY updated_at DESC))[1] AS measurement_period FROM (SELECT metric_type,CASE WHEN source='verified_by_bidindex' THEN 'measured_by_bidindex' WHEN source='verified_live' AND metric_type='visitors' THEN 'measured_by_bidindex' WHEN source='verified_live' THEN 'partner_connected' ELSE source END AS source,currency,value,source_url,updated_at,last_event_at,measurement_period FROM product_metric_aggregates WHERE product_id=$1 AND source_status='active') normalized GROUP BY metric_type,source,currency`, [row.id]),
     query<{ count: number }>(`SELECT count(*)::int AS count FROM product_votes WHERE product_id = $1 AND active`, [row.id]),
   ]);

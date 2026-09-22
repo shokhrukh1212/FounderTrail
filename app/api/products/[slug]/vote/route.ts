@@ -1,114 +1,105 @@
 import { NextResponse } from "next/server";
-import { BIDINDEX_VISITOR_COOKIE, bidIndexVisitorCookieOptions, ensureBidIndexVisitor } from "@/lib/bidindex-visitor";
+
+import { currentUserFromHeaders } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { consumeRateLimit } from "@/lib/rate-limit";
-import { networkBlockHash, requestOriginIsSameSite } from "@/lib/request-security";
-import { isObviousBot } from "@/lib/click";
-import { ownerTokenFromRequest } from "@/lib/bidindex-owner";
-import { ownerCredentialMatches } from "@/lib/owner-auth";
-
-export const dynamic = "force-dynamic";
+import { eventHash, requestOriginIsSameSite } from "@/lib/request-security";
 
 /**
- * At most this many active upvotes on one product may come from one address block. Vote
- * stuffing always concentrates that way: the identity is a cookie the sender controls, so
- * clearing it mints a fresh voter, but the address block stays put. Small NAT sharing (a
- * couple of flatmates, one office) still gets through.
+ * Canonical permanent product-upvote action. Historical anonymous rows remain
+ * immutable; an authenticated member can only set or unset their own row.
  */
-const VOTES_PER_PRODUCT_PER_NETWORK = 3;
-
 export async function PUT(request: Request, context: RouteContext<"/api/products/[slug]/vote">) {
-  if (!requestOriginIsSameSite(request)) {
-    return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
-  }
-  if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
-    return NextResponse.json({ error: "Expected JSON." }, { status: 415 });
-  }
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  }
-  const active = typeof body === "object" && body !== null
-    ? (body as Record<string, unknown>).active
-    : undefined;
-  if (typeof active !== "boolean") {
-    return NextResponse.json({ error: "active must be a boolean." }, { status: 400 });
-  }
+  if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
+  const user = await currentUserFromHeaders(request.headers);
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const { slug } = await context.params;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    return NextResponse.json({ error: "Product not found." }, { status: 404 });
-  }
-  const visitor = ensureBidIndexVisitor(request);
-  const abuseHash = networkBlockHash(request, "vote");
+  const body = await request.json().catch(() => null) as { active?: unknown } | null;
+  if (typeof body?.active !== "boolean") return NextResponse.json({ error: "Choose whether the upvote is active." }, { status: 400 });
+
   try {
-    const outcome = await withTransaction(async (client) => {
-      if (isObviousBot(request)) {
-        await client.query(`INSERT INTO product_vote_events(visitor_hash,network_hash,outcome) VALUES($1,$2,'bot')`,[visitor.hash,abuseHash]);
-        return { blocked: true as const };
-      }
-      const visitorAllowed = await consumeRateLimit(client, {
-        action: "vote:visitor", keyHash: visitor.hash, limit: 12, windowSeconds: 600,
+    const result = await withTransaction(async (client) => {
+      const allowed = await consumeRateLimit(client, {
+        action: "product-upvote",
+        keyHash: eventHash("product-upvote:user", user.id),
+        limit: 30,
+        windowSeconds: 600,
       });
-      const networkAllowed = await consumeRateLimit(client, {
-        action: "vote:network", keyHash: abuseHash, limit: 10, windowSeconds: 3600,
-      });
-      // A caller that sends no cookie is handed a new identity here, so `vote:visitor`
-      // opens a fresh allowance on every request and can never bind. A first-time voter
-      // still votes on the spot with no reload; a cookie-less script gets this bucket.
-      const newVisitorAllowed = !visitor.isNew || await consumeRateLimit(client, {
-        action: "vote:new-visitor", keyHash: abuseHash, limit: 3, windowSeconds: 3600,
-      });
-      if (!visitorAllowed || !networkAllowed || !newVisitorAllowed) {await client.query(`INSERT INTO product_vote_events(visitor_hash,network_hash,outcome) VALUES($1,$2,'rate_limited')`,[visitor.hash,abuseHash]);return { rateLimited: true as const };}
-      const product = await client.query<{ id: string; is_demo: boolean; token_hash:string;token_version:number;approved_at:Date|null }>(
-        `SELECT p.id::text,p.is_demo,o.token_hash,o.token_version,p.approved_at FROM products p JOIN product_owner_credentials o ON o.product_id=p.id WHERE p.slug = $1 AND p.status = 'published' AND ($2::boolean OR NOT p.is_demo)`,
-        [slug,process.env.NODE_ENV!=="production"],
+      if (!allowed) throw new Error("RATE_LIMITED");
+
+      const products = await client.query<{ id: string; is_demo: boolean }>(
+        `SELECT id::text,is_demo FROM products WHERE slug=$1 AND status='published' FOR UPDATE`,
+        [slug],
       );
-      if (!product.rows[0]) {await client.query(`INSERT INTO product_vote_events(visitor_hash,network_hash,outcome) VALUES($1,$2,'not_found')`,[visitor.hash,abuseHash]);return { notFound: true as const };}
-      const selected=product.rows[0];
-      if(ownerCredentialMatches({productId:selected.id,tokenHash:selected.token_hash,tokenVersion:selected.token_version,approvedAt:selected.approved_at},ownerTokenFromRequest(request,selected.id))){await client.query(`INSERT INTO product_vote_events(product_id,visitor_hash,network_hash,outcome) VALUES($1::uuid,$2,$3,'owner')`,[selected.id,visitor.hash,abuseHash]);return{blocked:true as const}}
-      if (active) {
-        const fromNetwork = await client.query<{ count: number }>(
-          `SELECT count(*)::int AS count FROM product_votes
-            WHERE product_id = $1::uuid AND active AND network_hash = $2 AND voter_hash <> $3`,
-          [selected.id, abuseHash, visitor.hash],
-        );
-        if ((fromNetwork.rows[0]?.count ?? 0) >= VOTES_PER_PRODUCT_PER_NETWORK) {
-          await client.query(`INSERT INTO product_vote_events(product_id,visitor_hash,network_hash,outcome) VALUES($1::uuid,$2,$3,'rate_limited')`,[selected.id,visitor.hash,abuseHash]);
-          return { stuffed: true as const };
+      const product = products.rows[0];
+      if (!product) return null;
+      const owner = await client.query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2`, [product.id, user.id]);
+      if (owner.rowCount) throw new Error("OWNER_VOTE");
+
+      const previous = await client.query<{ first_upvoted_at: Date; active: boolean }>(
+        `SELECT first_upvoted_at,active FROM product_votes WHERE product_id=$1::uuid AND user_id=$2 FOR UPDATE`,
+        [product.id, user.id],
+      );
+      if (body.active) {
+        if (previous.rows[0]) {
+          await client.query(`UPDATE product_votes SET active=true,updated_at=now() WHERE product_id=$1::uuid AND user_id=$2`, [product.id, user.id]);
+        } else {
+          await client.query(
+            `INSERT INTO product_votes(product_id,voter_hash,network_hash,active,is_demo,first_upvoted_at,updated_at,user_id)
+             VALUES($1::uuid,encode(digest('foundertrail-product-vote-v1:'||$2,'sha256'),'hex'),
+               encode(digest('foundertrail-product-vote-network-v1:'||$2,'sha256'),'hex'),true,false,now(),now(),$2)`,
+            [product.id, user.id],
+          );
         }
+      } else if (previous.rows[0]) {
+        await client.query(`UPDATE product_votes SET active=false,updated_at=now() WHERE product_id=$1::uuid AND user_id=$2`, [product.id, user.id]);
       }
+
+      const vote = await client.query<{ first_upvoted_at: Date; active: boolean }>(
+        `SELECT first_upvoted_at,active FROM product_votes WHERE product_id=$1::uuid AND user_id=$2`,
+        [product.id, user.id],
+      );
+      const liveLaunch = await client.query<{ id: string; starts_at: Date; ends_at: Date }>(
+        `SELECT pl.id::text,lw.starts_at,lw.ends_at FROM product_launches pl
+          JOIN launch_weeks lw ON lw.id=pl.launch_week_id
+         WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active')
+           AND lw.state IN ('scheduled','active') AND lw.starts_at<=now() AND now()<lw.ends_at
+         ORDER BY lw.starts_at DESC LIMIT 1 FOR UPDATE OF pl,lw`,
+        [product.id],
+      );
+      const launch = liveLaunch.rows[0];
+      const first = vote.rows[0]?.first_upvoted_at ? new Date(vote.rows[0].first_upvoted_at) : null;
+      const launchEligible = Boolean(launch && first && first >= new Date(launch.starts_at) && first < new Date(launch.ends_at));
+      if (launch && launchEligible) {
+        await client.query(
+          `INSERT INTO launch_votes(launch_id,user_id,active,created_at,updated_at)
+           VALUES($1::uuid,$2,$3,$4,now())
+           ON CONFLICT(launch_id,user_id) DO UPDATE SET active=EXCLUDED.active,updated_at=now()`,
+          [launch.id, user.id, body.active, first],
+        );
+      }
+
+      const totals = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM product_votes WHERE product_id=$1::uuid AND active AND ($2::boolean OR NOT is_demo)`,
+        [product.id, product.is_demo],
+      );
+      const weekly = launch ? await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM launch_votes WHERE launch_id=$1::uuid AND active`,
+        [launch.id],
+      ) : null;
       await client.query(
-        `INSERT INTO product_votes
-           (product_id, voter_hash, network_hash, active, is_demo, first_upvoted_at, updated_at)
-         VALUES ($1::uuid,$2,$3,$4,false,now(),now())
-         ON CONFLICT (product_id, voter_hash) DO UPDATE
-           SET active = EXCLUDED.active, network_hash = EXCLUDED.network_hash, updated_at = now()`,
-        [product.rows[0].id, visitor.hash, abuseHash, active],
+        `INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details)
+         VALUES($1,'user',$2,$3::uuid,jsonb_build_object('active',$4,'launchEligible',$5))`,
+        [user.id, body.active ? "product_upvote_set" : "product_upvote_unset", product.id, body.active, launchEligible],
       );
-      const count = await client.query<{ count: number }>(
-        `SELECT count(*)::int AS count FROM product_votes WHERE product_id = $1 AND active`,
-        [product.rows[0].id],
-      );
-      await client.query(`INSERT INTO product_vote_events(product_id,visitor_hash,network_hash,outcome) VALUES($1::uuid,$2,$3,$4)`,[product.rows[0].id,visitor.hash,abuseHash,active?"counted":"removed"]);
-      return { active, count: count.rows[0]?.count ?? 0 };
+      return { active: Boolean(vote.rows[0]?.active), count: totals.rows[0]?.count ?? 0, weeklyCount: weekly?.rows[0]?.count ?? null };
     });
-    if ("rateLimited" in outcome) {
-      return NextResponse.json({ error: "Too many vote attempts." }, { status: 429 });
-    }
-    if ("stuffed" in outcome) {
-      return NextResponse.json({ error: "This network has already upvoted this product." }, { status: 429 });
-    }
-    if ("blocked" in outcome) return NextResponse.json({ error: "This vote is not eligible." }, { status: 403 });
-    if ("notFound" in outcome) {
-      return NextResponse.json({ error: "Product not found." }, { status: 404 });
-    }
-    const response = NextResponse.json(outcome);
-    if (visitor.isNew) response.cookies.set(BIDINDEX_VISITOR_COOKIE, visitor.id, bidIndexVisitorCookieOptions);
-    return response;
+    if (!result) return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    return NextResponse.json(result);
   } catch (error) {
-    console.error("vote update failed", error instanceof Error ? error.message : "unknown error");
-    return NextResponse.json({ error: "Could not update vote." }, { status: 500 });
+    if (error instanceof Error && error.message === "OWNER_VOTE") return NextResponse.json({ error: "Owners cannot upvote their own product." }, { status: 403 });
+    if (error instanceof Error && error.message === "RATE_LIMITED") return NextResponse.json({ error: "Too many vote changes. Try again later." }, { status: 429 });
+    console.error("product upvote failed", error instanceof Error ? error.message : "unknown");
+    return NextResponse.json({ error: "Could not update the upvote." }, { status: 500 });
   }
 }

@@ -8,15 +8,25 @@ import { publicHttpUrl, validateProductSubmission } from "../product-validation"
 const coreMigration = readFileSync(new URL("../../migrations/001_bidindex_core.up.sql", import.meta.url), "utf8");
 const partnerMigration = readFileSync(new URL("../../migrations/002_partner_network.up.sql", import.meta.url), "utf8");
 const voteRoute = readFileSync(new URL("../../app/api/products/[slug]/vote/route.ts", import.meta.url), "utf8");
+const launchVoteRoute = readFileSync(new URL("../../app/api/launches/[launchId]/vote/route.ts", import.meta.url), "utf8");
+const founderTrailMigration = readFileSync(new URL("../../migrations/011_foundertrail_core.up.sql", import.meta.url), "utf8");
+const permanentVoteMigration = readFileSync(new URL("../../migrations/013_permanent_upvotes_and_classification.up.sql", import.meta.url), "utf8");
 const clickRoute = readFileSync(new URL("../product-click.ts", import.meta.url), "utf8");
 const partnerEvents = readFileSync(new URL("../partner-events.ts", import.meta.url), "utf8");
 const productData = readFileSync(new URL("../product-data.ts", import.meta.url), "utf8");
 
-test("votes are unique, reversible, and cannot seed production totals", () => {
+test("legacy support is preserved while authenticated product upvotes are unique and reversible", () => {
   assert.match(coreMigration, /PRIMARY KEY \(product_id, voter_hash\)/);
-  assert.match(voteRoute, /ON CONFLICT \(product_id, voter_hash\)/);
-  assert.match(voteRoute, /active = EXCLUDED\.active/);
-  assert.match(voteRoute, /VALUES \(\$1::uuid,\$2,\$3,\$4,false/);
+  assert.match(voteRoute, /currentUserFromHeaders/);
+  assert.match(voteRoute, /body\.active/);
+  assert.match(voteRoute, /first_upvoted_at/);
+  assert.match(voteRoute, /user_id=\$2/);
+  assert.match(permanentVoteMigration, /product_votes_authenticated_user_idx/);
+  assert.match(permanentVoteMigration, /anonymous/i);
+  assert.match(founderTrailMigration, /PRIMARY KEY\(launch_id, user_id\)/);
+  assert.match(voteRoute, /ON CONFLICT\(launch_id,user_id\)/);
+  assert.match(voteRoute, /Owners cannot upvote their own product/i);
+  assert.match(launchVoteRoute, /status: 410/);
   assert.match(productData, /process\.env\.NODE_ENV === "production" \? `p\.is_demo = false`/);
 });
 
@@ -64,9 +74,9 @@ test("money events require integer minor units and idempotent identifiers", () =
 
 test("product submission validates required public fields", () => {
   const form = new FormData();
-  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "Transparent bids", contactEmail: "maker@example.com", launchDate: "2026-08-27", ownershipConsent: "on" }).forEach(([key,value]) => form.set(key,value));
+  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "A useful startup", contactEmail: "maker@example.com", categoryId: "1", pricingModel: "unknown", ownershipConsent: "on" }).forEach(([key,value]) => form.set(key,value));
   assert.equal(validateProductSubmission(form).ok, true);
-  assert.equal(form.has("categories"), false);
+  assert.equal(form.has("categoryId"), true);
   form.delete("contactEmail");
   assert.equal(validateProductSubmission(form).ok, false);
   form.set("contactEmail","maker@example.com");

@@ -3,22 +3,24 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import localFont from "next/font/local";
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { VemetricScript } from "@vemetric/react";
 import { MetaPixelRouteTracker } from "@/components/MetaPixelRouteTracker";
 import { BidIndexVisitorTracker } from "@/components/BidIndexVisitorTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
+import { currentUserFromHeaders } from "@/lib/auth";
 import "./globals.css";
 
 const publicSiteUrl = new URL(config.siteUrl);
 const socialTitle = brandCopy.metaTitle;
 const socialDescription = brandCopy.metaDescription;
 const socialImage = {
-  url: "/og.jpg",
+  url: "/opengraph-image",
   width: 1200,
   height: 630,
-  type: "image/jpeg",
+  type: "image/png",
   alt: `${config.siteName} — ${brandCopy.line}`,
 };
 
@@ -68,11 +70,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
   const vemetricToken = process.env.NEXT_PUBLIC_VEMETRIC_TOKEN;
+  const user = await currentUserFromHeaders(await headers()).catch(() => null);
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--accent": config.accentColor } as CSSProperties}
     >
@@ -116,7 +120,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             twq('config','${config.xPixel.id}');`}
           </Script>
         ) : null}
-        <SiteHeader siteName={config.siteName} />
+        <SiteHeader siteName={config.siteName} user={user ? { name: user.name, role: user.role } : null} />
         <Suspense fallback={null}><BidIndexVisitorTracker /></Suspense>
         {children}
         <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{brandCopy.line}</span></div></footer>

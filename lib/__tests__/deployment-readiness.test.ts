@@ -13,9 +13,9 @@ const ownerRecoveryRoute=readFileSync(new URL("../../app/api/admin/products/[slu
 const integrationManager=readFileSync(new URL("../../components/IntegrationManager.tsx",import.meta.url),"utf8");
 const migration=readFileSync(new URL("../../migrations/004_submission_simplification.up.sql",import.meta.url),"utf8");
 
-function minimalForm(){const form=new FormData();for(const [key,value] of Object.entries({websiteUrl:"https://manual.example",name:"Manual",tagline:"A manually entered product",contactEmail:"private@example.com",launchDate:"2026-08-27",ownershipConsent:"on"}))form.set(key,value);return form;}
+function minimalForm(){const form=new FormData();for(const [key,value] of Object.entries({websiteUrl:"https://manual.example",name:"Manual",tagline:"A manually entered product",contactEmail:"private@example.com",categoryId:"1",pricingModel:"unknown",ownershipConsent:"on"}))form.set(key,value);return form;}
 
-test("manual submission works without extraction, founder, or category fields",()=>{
+test("manual submission works without extraction or founder fields",()=>{
   const result=validateProductSubmission(minimalForm());assert.equal(result.ok,true);
   if(result.ok){assert.equal(result.value.metadataToken,null);assert.equal(result.value.founderName,null);assert.equal(result.value.founderSocialHandle,null);}
 });
@@ -24,7 +24,10 @@ test("contact email is private and pending products stay out of public DTOs",()=
   const publicSection=productData.slice(0,productData.indexOf("export type ManagedProduct"));
   assert.doesNotMatch(publicSection,/contact_email|contactEmail/);
   assert.match(productData,/p\.status = 'published'/);
-  assert.match(submissionRoute,/VALUES \([\s\S]*'pending',now\(\)/);
+  assert.match(submissionRoute,/requestedStatus/);
+  assert.match(submissionRoute,/launch_date, status/);
+  assert.match(submissionRoute,/primary_category_id/);
+  assert.match(submissionRoute,/validated\.value\.categoryId/);
 });
 
 test("production excludes demo data from public discovery and actions",()=>{
@@ -64,7 +67,7 @@ test("published listings safely proxy extracted logos when no stored logo exists
 });
 
 test("admins can replace a lost owner link without recovering the stored hash",()=>{
-  assert.match(ownerRecoveryRoute,/validAdminSession/);
+  assert.match(ownerRecoveryRoute,/validAdminRequest/);
   assert.match(ownerRecoveryRoute,/requestOriginIsSameSite/);
   assert.match(ownerRecoveryRoute,/newBidIndexOwnerToken/);
   assert.match(ownerRecoveryRoute,/token_version=token_version\+1/);
@@ -82,5 +85,5 @@ test("owner integration setup explains verification and copies every integration
   assert.match(integrationManager,/Check installation/);
   assert.match(integrationManager,/\["light", "dark", "compact"\]/);
   assert.match(integrationManager,/api\/partner\/v1\/events/);
-  assert.match(integrationManager,/Domain verification and the badge are enough/);
+  assert.match(integrationManager,/Domain verification and the badge activate this optional site tracker/);
 });

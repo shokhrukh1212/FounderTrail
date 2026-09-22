@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { config } from "@/lib/config";
 import { withTransaction } from "@/lib/db";
 import { authenticateOwner } from "@/lib/owner-auth";
@@ -49,5 +50,5 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
         WHERE id=$1::uuid RETURNING badge_installed_at,product_verified_at`, [rows.id, installed]);
     return updated.rows[0];
   });
-  return NextResponse.json({ installed, outcome, error: installed ? undefined : outcome === "not_found" ? "BidIndex could not find the badge code and project ID at the approved product URL. Deploy the snippet, then try again." : "BidIndex could not safely load the approved product URL. Confirm it is publicly available over HTTPS.", checkedAt: new Date().toISOString(), installedAt: changed?.badge_installed_at?.toISOString() ?? null, productVerifiedAt: changed?.product_verified_at?.toISOString() ?? null }, { status: installed ? 200 : 422 });
+  return NextResponse.json({ installed, outcome, error: installed ? undefined : outcome === "not_found" ? "FounderTrail could not find the badge code and project ID at the approved product URL. Deploy the snippet, then try again." : "FounderTrail could not safely load the approved product URL. Confirm it is publicly available over HTTPS.", checkedAt: new Date().toISOString(), installedAt: changed?.badge_installed_at?.toISOString() ?? null, productVerifiedAt: changed?.product_verified_at?.toISOString() ?? null }, { status: installed ? 200 : 422 });
 }

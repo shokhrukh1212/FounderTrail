@@ -2,7 +2,7 @@ export const SUBMISSION_FIELDS = [
   "websiteUrl",
   "name",
   "tagline",
-  "launchDate",
+  "categoryId",
   "contactEmail",
   "founderSocialHandle",
   "logo",
@@ -30,12 +30,6 @@ export function websiteFieldError(raw: string): string | null {
   } catch {
     return "Enter a public product website, for example https://example.com.";
   }
-}
-
-function validDate(raw: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
-  const parsed = new Date(`${raw}T12:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === raw;
 }
 
 function imageError(file: File, maxBytes: number, label: string): string | null {
@@ -67,7 +61,7 @@ export function validateSubmissionForm(form: FormData): SubmissionFieldErrors {
   if (!name || name.length > 80) errors.name = "Enter a product name using 80 characters or fewer.";
   const tagline = value(form, "tagline");
   if (!tagline || tagline.length > 160) errors.tagline = "Add a one-line description using 160 characters or fewer.";
-  if (!validDate(value(form, "launchDate"))) errors.launchDate = "Choose a valid launch date.";
+  if (!/^\d+$/.test(value(form, "categoryId"))) errors.categoryId = "Choose a category.";
 
   const email = value(form, "contactEmail");
   if (!EMAIL.test(email) || email.length > 320) errors.contactEmail = "Enter a valid private contact email.";

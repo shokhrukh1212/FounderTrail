@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminGrowthSettings } from "@/components/AdminGrowthSettings";
-import { ADMIN_COOKIE,validAdminSession } from "@/lib/admin-auth";
+import { ADMIN_COOKIE,validAdminPageSession } from "@/lib/admin-auth";
 import { query } from "@/lib/db";
 import { listCampaigns } from "@/lib/founder-email-campaigns";
 export const dynamic="force-dynamic";
 type History={id:string;internal_name:string;template_key:string;message_class:string;status:string;recipient_count:number;sent_count:number;failed_count:number;scheduled_at:Date|null;sent_at:Date|null;created_at:Date};
 export default async function FounderEmailsPage(){
-  if(!validAdminSession((await cookies()).get(ADMIN_COOKIE)?.value??null))redirect("/admin");
+  if(!await validAdminPageSession(await headers(),(await cookies()).get(ADMIN_COOKIE)?.value??null))redirect("/admin");
   const [campaigns,notifications,milestones,site]=await Promise.all([
     listCampaigns() as Promise<History[]>,
     query<{id:string;title:string;body:string;created_at:Date}>(`SELECT id::text,title,body,created_at FROM admin_notifications WHERE read_at IS NULL ORDER BY created_at DESC LIMIT 10`),

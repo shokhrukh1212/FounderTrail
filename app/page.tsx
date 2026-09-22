@@ -1,134 +1,121 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { DiscoverySidebar } from "@/components/DiscoverySidebar";
-import { ProductRow } from "@/components/ProductRow";
-import { BIDINDEX_VISITOR_COOKIE } from "@/lib/bidindex-visitor";
+import { headers } from "next/headers";
+import { currentUserFromHeaders } from "@/lib/auth";
 import { brandCopy } from "@/lib/brand";
-import { config } from "@/lib/config";
+import { isDodoConfigured } from "@/lib/config";
 import { query } from "@/lib/db";
-import { pageWindow } from "@/lib/discovery-pagination";
-import { eventHash } from "@/lib/request-security";
-import {
-  DISCOVERY_VIEWS,
-  getActiveVoteSlugs,
-  getDiscoveryPage,
-  getEcosystemSnapshot,
-  getLatestUpdates,
-  type DiscoveryView,
-} from "@/lib/product-data";
+import { getActiveSponsor, getFounderTrailDiscovery, getUpdateFeed, type DiscoverySort, type FounderTrailView } from "@/lib/foundertrail-data";
+import { StartupRow } from "@/components/StartupRow";
+import { SponsorCard } from "@/components/SponsorCard";
+import { ProductLogo } from "@/components/ProductLogo";
+import { LocalTime } from "@/components/LocalTime";
 
 export const dynamic = "force-dynamic";
 
-const tabs: Array<{ view: DiscoveryView; label: string }> = [
-  { view: "today", label: "Launching today" },
-  { view: "trending", label: "Trending" },
-  { view: "verified", label: "Verified" },
-  { view: "newest", label: "Newest" },
+const views: Array<{ id: FounderTrailView; label: string }> = [
+  { id: "this_week", label: "This week" },
+  { id: "discover", label: "All startups" },
+  { id: "updates", label: "Updates" },
 ];
-const emptyCopy: Record<DiscoveryView, string> = {
-  today: "No products have launched today yet.",
-  trending: "Trending products will appear as founders and visitors participate.",
-  verified: "No products have connected verified data yet.",
-  newest: "No approved products yet. Be the first founder to submit.",
-};
 
-export default async function Home({ searchParams }: {
-  searchParams: Promise<{ view?: string; q?: string; page?: string }>;
+type HomeSearchParams = { view?: string; q?: string; category?: string; pricing?: string; sort?: string; page?: string };
+
+function href(input: Record<string, string | number | undefined>, hash = "products") {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") params.set(key, String(value));
+  return `/?${params.toString()}#${hash}`;
+}
+
+function ProductList({ products, page, sort, weekly = false }: {
+  products: Awaited<ReturnType<typeof getFounderTrailDiscovery>>["products"];
+  page: number;
+  sort: DiscoverySort;
+  weekly?: boolean;
 }) {
+  return <div className="organic-list">{products.map((product, index) => <StartupRow
+    key={product.id}
+    product={product}
+    weekly={weekly}
+    position={weekly || sort === "most_upvoted" ? (page - 1) * 24 + index + 1 : undefined}
+  />)}</div>;
+}
+
+export default async function Home({ searchParams }: { searchParams: Promise<HomeSearchParams> }) {
   const params = await searchParams;
-  const view = DISCOVERY_VIEWS.includes(params.view as DiscoveryView) ? params.view as DiscoveryView : "trending";
-  const search = (params.q ?? "").trim().slice(0, 80);
-  const requestedPage = Number.parseInt(params.page ?? "1", 10);
-  const [listing, snapshot, updates,foundingBanner] = await Promise.all([
-    getDiscoveryPage({ view, query: search, page: Number.isFinite(requestedPage) ? requestedPage : 1 }),
-    getEcosystemSnapshot(),
-    getLatestUpdates(3),
-    query<{founding_banner_enabled:boolean;founding_banner_ends_at:Date|null}>(`SELECT founding_banner_enabled,founding_banner_ends_at FROM site_config WHERE singleton=true`),
+  const view = views.some((item) => item.id === params.view) ? params.view as FounderTrailView : "this_week";
+  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const sort: DiscoverySort = params.sort === "newest" ? "newest" : "most_upvoted";
+  const user = await currentUserFromHeaders(await headers()).catch(() => null);
+  const [categories, sponsor] = await Promise.all([
+    query<{ slug: string; name: string; count: number }>(`SELECT c.slug,c.name,count(p.id)::int AS count
+      FROM categories c LEFT JOIN products p ON p.primary_category_id=c.id AND p.status='published'
+      WHERE c.slug=ANY($1::text[]) GROUP BY c.id,c.slug,c.name ORDER BY c.name`, [[
+        "ai-tools", "productivity", "developer-tools", "marketing-seo", "sales-crm", "design-creative",
+        "writing-content", "analytics-data", "finance-accounting", "ecommerce", "education", "health-fitness",
+        "travel", "games", "directories-discovery", "advertising-sponsorship", "other",
+      ]]),
+    getActiveSponsor(),
   ]);
-  const cookieStore = await cookies();
-  const visitorId = cookieStore.get(BIDINDEX_VISITOR_COOKIE)?.value ?? cookieStore.get("yourhour_visitor")?.value ?? null;
-  const voted = await getActiveVoteSlugs(visitorId ? eventHash("bidindex:visitor", visitorId) : null);
-  const { products, total, page, pageCount, offset } = listing;
-  const demoVisible = products.some((product) => product.isDemo);
-  const pageHref = (target: number) => {
-    const linkParams = new URLSearchParams({ view });
-    if (search) linkParams.set("q", search);
-    if (target > 1) linkParams.set("page", String(target));
-    return `/?${linkParams.toString()}#products`;
-  };
+  const discovery = view === "updates" ? null : await getFounderTrailDiscovery({
+    view,
+    search: params.q,
+    category: params.category,
+    pricing: params.pricing,
+    sort,
+    page,
+    userId: user?.id,
+  });
+  const community = view === "this_week" ? await getFounderTrailDiscovery({ view: "discover", sort, page: 1, userId: user?.id }) : null;
+  const feed = view === "updates" ? await getUpdateFeed(page, user?.id ?? null) : null;
+  const week = discovery?.week;
+  const products = discovery?.products ?? [];
+  const sectionTitle = view === "this_week" ? "Startups launching this week" : view === "discover" ? "All startups" : "Founder updates";
+  const result = view === "this_week" ? community : discovery;
+  const pageTotal = discovery?.pageCount ?? feed?.pageCount ?? 1;
 
-  return (
-    <main>
-      <section className="intro-section app-shell">
-        <div>
-          <h1>{brandCopy.homepageHeadline}</h1>
-          <p>{brandCopy.homepageDescription}</p>
-        </div>
-        <div className="intro-actions">
-          <Link className="button button-primary" href="#products">Explore products</Link>
-          <Link className="button button-secondary" href="/submit">Submit your product — free</Link>
-        </div>
-      </section>
-
-      {foundingBanner[0]?.founding_banner_enabled&&(!foundingBanner[0].founding_banner_ends_at||new Date(foundingBanner[0].founding_banner_ends_at)>new Date())?<aside className="founding-banner app-shell"><div><strong>Founding products are live</strong><p>Discover the first products building the bidding-product ecosystem.</p></div><Link className="button button-secondary" href="/founding">Explore all founding products</Link></aside>:null}
-
-      <div className="app-shell discovery-layout">
-        <section id="products" className="discovery-main" aria-labelledby="discovery-heading">
-          <div className="discovery-toolbar">
-            <div>
-              <h2 id="discovery-heading">Discover products</h2>
-              {search ? <p>Results for “{search}”</p> : null}
-            </div>
-            <nav className="filter-tabs" aria-label="Discovery filters">
-              {tabs.map((tab) => (
-                <Link
-                  key={tab.view}
-                  className={view === tab.view ? "is-active" : ""}
-                  href={`/?view=${tab.view}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
-                >{tab.label}</Link>
-              ))}
-            </nav>
-          </div>
-          {demoVisible ? <p className="demo-notice"><strong>Demo data</strong> — these local development products and numbers are synthetic.</p> : null}
-          <div className="product-list">
-            {products.length ? products.map((product, index) => (
-              <ProductRow key={product.id} product={product} position={offset + index + 1} voted={voted.has(product.slug)} />
-            )) : (
-              <div className="empty-state">
-                <h3>No products found</h3>
-                <p>{search ? "Try a broader search or another filter." : emptyCopy[view]}</p>
-                <Link href="/submit">Submit the first product</Link>
-              </div>
-            )}
-          </div>
-          {total ? (
-            <footer className="discovery-footer">
-              {pageCount > 1 ? (
-                <nav className="pagination" aria-label="Discovery pages">
-                  {page > 1
-                    ? <Link className="pagination-step" href={pageHref(page - 1)} rel="prev">Previous</Link>
-                    : <span className="pagination-step is-disabled" aria-hidden="true">Previous</span>}
-                  {pageWindow(page, pageCount).map((item, index) => item === null
-                    ? <span key={`gap-${index}`} className="pagination-gap" aria-hidden="true">…</span>
-                    : item === page
-                      ? <span key={item} className="is-current" aria-current="page">{item}</span>
-                      : <Link key={item} href={pageHref(item)} aria-label={`Page ${item}`}>{item}</Link>)}
-                  {page < pageCount
-                    ? <Link className="pagination-step" href={pageHref(page + 1)} rel="next">Next</Link>
-                    : <span className="pagination-step is-disabled" aria-hidden="true">Next</span>}
-                </nav>
-              ) : null}
-              <p className="discovery-count">
-                Showing <strong>{offset + 1}–{offset + products.length}</strong> of <strong>{total}</strong>{" "}
-                {total === 1 ? "product" : "products"}
-                {pageCount > 1 ? <> · Page {page} of {pageCount}</> : null}
-              </p>
-            </footer>
-          ) : null}
-        </section>
-        <DiscoverySidebar snapshot={snapshot} updates={updates} />
+  return <main>
+    <section className="intro-section app-shell">
+      <div><h1>{brandCopy.homepageHeadline}</h1><p>{brandCopy.homepageDescription}</p></div>
+      <div className="intro-actions">
+        <Link className="button button-primary" href="/submit">Submit your startup — free</Link>
+        <Link className="button button-secondary" href="/?view=discover#products">Explore startups</Link>
       </div>
-      {config.featurePromotions ? <p className="sr-only">Promotions are enabled, but no verified promotion is active.</p> : null}
-    </main>
-  );
+    </section>
+
+    <section id="products" className="app-shell foundertrail-section">
+      <header className="foundertrail-toolbar">
+        <div><h2>{sectionTitle}</h2>{week ? <p>{week.startsAt.toLocaleDateString("en", { timeZone: "UTC", month: "short", day: "numeric" })}–{week.endsAt.toLocaleDateString("en", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })} · UTC</p> : null}</div>
+        <nav className="filter-tabs" aria-label="Discovery views">{views.map((item) => <Link key={item.id} className={view === item.id ? "is-active" : ""} href={href({ view: item.id })}>{item.label}</Link>)}</nav>
+      </header>
+
+      {view === "discover" ? <form className="discovery-filters" action="/" method="get">
+        <input type="hidden" name="view" value="discover" />
+        <label><span className="sr-only">Search</span><input type="search" name="q" defaultValue={params.q} placeholder="Search names, descriptions and use cases" /></label>
+        <label><span className="sr-only">Category</span><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option key={category.slug} value={category.slug}>{category.name} ({category.count})</option>)}</select></label>
+        <label><span className="sr-only">Pricing</span><select name="pricing" defaultValue={params.pricing ?? ""}><option value="">All pricing</option><option value="free">Free</option><option value="freemium">Freemium</option><option value="paid">Paid</option><option value="open_source">Open source</option><option value="contact">Contact sales</option><option value="unknown">Pricing not listed</option></select></label>
+        <label><span className="sr-only">Sort</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label>
+        <button className="button button-secondary">Apply</button>
+      </form> : null}
+
+      {view === "updates" ? <div className="update-feed">{feed?.updates.length ? feed.updates.map((update) => <article key={update.id}>
+        <ProductLogo productName={update.productName} imageUrl={update.logoUrl} productUrl={null} className="product-list-logo" />
+        <div><p><span className="status-pill">{update.type}</span> <LocalTime value={update.publishedAt.toISOString()} dateOnly /></p><h3><Link href={`/product/${update.productSlug}#updates`}>{update.title}</Link></h3><strong>{update.productName}</strong><p>{update.body}</p>{update.linkUrl ? <a href={update.linkUrl} rel="nofollow noopener noreferrer" target="_blank">Read more ↗</a> : null}</div>
+      </article>) : <div className="empty-state compact-empty"><h3>No published updates yet</h3><p>{brandCopy.updatesIntroduction}</p></div>}</div> : null}
+
+      {view === "this_week" ? <>
+        <div className={`weekly-layout${products.length ? "" : " is-empty"}`}>
+          <div>{products.length ? <ProductList products={products} page={discovery?.page ?? 1} sort={sort} weekly /> : <div className="weekly-empty"><div><h3>No launches this week yet.</h3><p>Discover the community below, or schedule your startup&apos;s launch.</p></div><div className="button-row"><Link className="button button-secondary" href="/my-products">Schedule your launch</Link><Link className="button button-secondary" href="#community">Browse startups</Link></div></div>}</div>
+          {sponsor ? <aside className="sponsor-slot"><SponsorCard sponsor={sponsor} view={view} /></aside> : isDodoConfigured() ? <aside className="sponsor-slot"><div className="advertise-empty"><span>Sponsored placement</span><p>One clearly labelled startup for seven days.</p><Link href="/my-products">View sponsorship →</Link></div></aside> : null}
+        </div>
+        <section id="community" className="community-directory" aria-labelledby="community-heading">
+          <header><div><p className="eyebrow">Community directory</p><h2 id="community-heading">{sort === "newest" ? "Recently added startups" : "Community favourites"}</h2><p>{sort === "newest" ? "The latest approved startups." : "Explore startups ranked by community upvotes."}</p></div><div className="community-controls"><form action="/" method="get"><input type="hidden" name="view" value="this_week" /><label><span className="sr-only">Sort community</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label><button className="button button-secondary">Apply</button></form><Link className="text-link" href="/?view=discover&sort=most_upvoted#products">Browse and filter all →</Link></div></header>
+          {community?.products.length ? <ProductList products={community.products} page={1} sort={sort} /> : <div className="empty-state compact-empty"><h3>No startups found</h3></div>}
+        </section>
+      </> : null}
+
+      {view === "discover" ? <>{result?.products.length ? <ProductList products={result.products} page={result.page} sort={sort} /> : <div className="empty-state compact-empty"><h3>No startups found</h3><p>Try broader filters.</p></div>}</> : null}
+
+      {pageTotal > 1 && view !== "this_week" ? <nav className="pagination" aria-label="Pages">{page > 1 ? <Link href={href({ view, q: params.q, category: params.category, pricing: params.pricing, sort, page: page - 1 })}>Previous</Link> : null}<span>Page {page} of {pageTotal}</span>{page < pageTotal ? <Link href={href({ view, q: params.q, category: params.category, pricing: params.pricing, sort, page: page + 1 })}>Next</Link> : null}</nav> : null}
+    </section>
+  </main>;
 }

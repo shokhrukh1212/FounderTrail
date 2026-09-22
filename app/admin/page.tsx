@@ -1,18 +1,24 @@
 import { cookies } from "next/headers";
-import { AdminLogin } from "@/components/AdminLogin";
 import { AdminProductTable } from "@/components/AdminProductTable";
 import { EvidenceModeration, ModerationList, OwnerLinkRecovery } from "@/components/ModerationList";
 import { ADMIN_COOKIE, validAdminSession } from "@/lib/admin-auth";
 import { listAdminProducts } from "@/lib/admin-products";
 import { query } from "@/lib/db";
+import { headers } from "next/headers";
+import { currentUserFromHeaders } from "@/lib/auth";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { FOUNDERTRAIL_CATEGORY_SLUGS } from "@/lib/categories";
 export const dynamic="force-dynamic";
 type PendingRow={id:string;slug:string;name:string;tagline:string;website_url:string;submitted_url:string;founder_name:string|null;contact_email:string;submitted_at:Date;submission_consent_at:Date|null;duplicate_count:number;metadata:{status:string;name:string|null;tagline:string|null;logoUrl:string|null;imageUrl:string|null}|null;media:Array<{id:string;kind:string;url:string}>};
 type RecoveryRow={slug:string;name:string;status:string;contact_email:string;rotated_at:Date|null};
 export default async function AdminPage(){
-  const session=(await cookies()).get(ADMIN_COOKIE)?.value??null;if(!validAdminSession(session))return <main className="app-shell inner-page"><AdminLogin/></main>;
+  const session=(await cookies()).get(ADMIN_COOKIE)?.value??null;const account=await currentUserFromHeaders(await headers()).catch(()=>null);
+  if(!account&&!validAdminSession(session))redirect(`/sign-in?returnTo=${encodeURIComponent("/admin")}`);
+  if(account?.role!=="admin"&&!validAdminSession(session))return <main className="app-shell inner-page narrow-page"><section className="access-denied-card"><p className="eyebrow">Administrator access</p><h1>Access denied</h1><p>Your Google account is signed in, but it has not been granted the administrator role.</p><Link className="button button-secondary" href="/">Back to FounderTrail</Link></section></main>;
   const [rows,categories,evidence,recovery,products]=await Promise.all([
     query<PendingRow>(`SELECT p.id::text,p.slug,p.name,p.tagline,p.website_url,p.submitted_url,p.founder_name,p.contact_email,p.submitted_at,p.submission_consent_at,(SELECT count(*)::int FROM products duplicate WHERE duplicate.normalized_domain=p.normalized_domain AND duplicate.status='published') AS duplicate_count,(SELECT jsonb_build_object('status',m.fetch_status,'name',m.extracted_name,'tagline',m.extracted_tagline,'logoUrl',m.extracted_logo_url,'imageUrl',m.extracted_image_url) FROM product_submission_metadata m WHERE m.product_id=p.id) AS metadata,COALESCE((SELECT jsonb_agg(jsonb_build_object('id',pm.id,'kind',pm.kind,'url',pm.public_url) ORDER BY pm.kind,pm.position) FROM product_media pm WHERE pm.product_id=p.id),'[]'::jsonb) AS media FROM products p WHERE p.status='pending' ORDER BY p.submitted_at`),
-    query<{id:string;name:string}>(`SELECT id::text,name FROM categories WHERE slug IN ('pay-to-rank-directory','ad-auction-billboard','marketplace-sponsorship','game-experiment','other') ORDER BY CASE slug WHEN 'other' THEN 5 ELSE 1 END,name`),
+    query<{id:string;name:string}>(`SELECT id::text,name FROM categories WHERE slug=ANY($1::text[]) ORDER BY name`,[FOUNDERTRAIL_CATEGORY_SLUGS]),
     query<{id:string;product_name:string;metric_type:string;evidence_url:string;note:string|null;status:string;reviewer_note:string|null;submitted_at:Date;reviewed_at:Date|null}>(`SELECT e.id::text,p.name AS product_name,e.metric_type,e.evidence_url,e.note,e.status,e.reviewer_note,e.submitted_at,e.reviewed_at FROM product_public_evidence e JOIN products p ON p.id=e.product_id WHERE e.status IN ('pending','accepted','stale') ORDER BY CASE e.status WHEN 'pending' THEN 1 WHEN 'accepted' THEN 2 ELSE 3 END,e.submitted_at`),
     query<RecoveryRow>(`SELECT p.slug,p.name,p.status,p.contact_email,o.rotated_at FROM products p JOIN product_owner_credentials o ON o.product_id=p.id WHERE p.status IN ('pending','published') ORDER BY p.submitted_at DESC`),
     listAdminProducts(),

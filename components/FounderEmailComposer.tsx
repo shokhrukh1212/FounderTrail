@@ -34,9 +34,9 @@ export function FounderEmailComposer({ campaignId, initial, templates, products 
   }, [draft, mode]);
 
   useEffect(() => {
-    const timer = setTimeout(() => fetch("/api/admin/founder-emails/audience", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audience: draft.audience, messageClass: draft.messageClass, productSpecific: draft.productSpecific }) }).then(async response => response.ok ? await response.json() as AudienceReview : null).then(setReviewData).catch(() => setReviewData(null)), 250);
+    const timer = setTimeout(() => fetch("/api/admin/founder-emails/audience", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audience: draft.audience, messageClass: draft.messageClass, productSpecific: draft.productSpecific, templateKey: draft.templateKey }) }).then(async response => response.ok ? await response.json() as AudienceReview : null).then(setReviewData).catch(() => setReviewData(null)), 250);
     return () => clearTimeout(timer);
-  }, [draft.audience, draft.messageClass, draft.productSpecific]);
+  }, [draft.audience, draft.messageClass, draft.productSpecific, draft.templateKey]);
 
   const selectedTemplate = useMemo(() => templates.find(item => item.key === draft.templateKey), [draft.templateKey, templates]);
   function editorProps(key: EditableKey) {

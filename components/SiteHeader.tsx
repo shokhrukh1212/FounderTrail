@@ -1,35 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Logo } from "./Logo";
+import { authClient } from "@/lib/auth-client";
 
-function SearchForm({ variant, onSubmitted }: { variant: "desktop" | "mobile"; onSubmitted?: () => void }) {
+export function SiteHeader({ siteName, user }: { siteName: string; user: { name: string; role: "member" | "admin" } | null }) {
   const router = useRouter();
-  const current = useSearchParams().get("q") ?? "";
-  return (
-    <form
-      key={current}
-      role="search"
-      action="/"
-      className={variant === "desktop" ? "header-search" : undefined}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const value = (new FormData(event.currentTarget).get("q") ?? "").toString().trim();
-        router.push(value ? `/?q=${encodeURIComponent(value)}` : "/");
-        onSubmitted?.();
-      }}
-    >
-      {variant === "desktop" ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" strokeLinecap="round" /></svg>
-      ) : null}
-      <input type="search" name="q" defaultValue={current} placeholder="Search products" aria-label="Search products" maxLength={80} />
-    </form>
-  );
-}
-
-export function SiteHeader({ siteName }: { siteName: string }) {
   const [open, setOpen] = useState(false);
   return (
     <header className="discovery-header">
@@ -38,15 +16,11 @@ export function SiteHeader({ siteName }: { siteName: string }) {
           <Logo className="brand-logo" />
           <span>{siteName}</span>
         </Link>
-        {/* useSearchParams needs a boundary so it never opts a page out of prerendering. */}
-        <Suspense fallback={<div className="header-search" aria-hidden="true" />}>
-          <SearchForm variant="desktop" />
-        </Suspense>
         <nav className="header-nav" aria-label="Main navigation">
-          <a href="https://yourhour.lol" target="_blank" rel="noopener noreferrer">Bid live on YourHour ↗</a>
-          <Link href="/leaderboards">Leaderboards</Link>
-          <Link href="/about">About</Link>
-          <Link href="/submit" className="primary-nav-action">Submit product</Link>
+          <Link href="/?view=discover#products">Discover</Link>
+          <Link href="/?view=updates#products">Updates</Link>
+          <Link href="/submit" className="primary-nav-action">Submit startup</Link>
+          {user ? <details className="account-menu"><summary>{user.name || "Account"}</summary><div><Link href="/my-products">My products</Link><Link href="/following">Following</Link><Link href="/settings">Settings</Link>{user.role === "admin" ? <Link href="/admin">Admin</Link> : null}<button type="button" onClick={() => void authClient.signOut({ fetchOptions: { onSuccess: () => router.replace("/") } })}>Sign out</button></div></details> : <Link href="/sign-in">Sign in</Link>}
         </nav>
         <button className="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
           <span /><span /><span />
@@ -54,13 +28,10 @@ export function SiteHeader({ siteName }: { siteName: string }) {
       </div>
       {open ? (
         <div className="mobile-navigation">
-          <Suspense fallback={null}>
-            <SearchForm variant="mobile" onSubmitted={() => setOpen(false)} />
-          </Suspense>
-          <a href="https://yourhour.lol" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>Bid live on YourHour ↗</a>
-          <Link href="/leaderboards" onClick={() => setOpen(false)}>Leaderboards</Link>
-          <Link href="/about" onClick={() => setOpen(false)}>About</Link>
-          <Link href="/submit" className="primary-nav-action" onClick={() => setOpen(false)}>Submit product</Link>
+          <Link href="/?view=discover#products" onClick={() => setOpen(false)}>Discover</Link>
+          <Link href="/?view=updates#products" onClick={() => setOpen(false)}>Updates</Link>
+          <Link href="/submit" className="primary-nav-action" onClick={() => setOpen(false)}>Submit startup</Link>
+          {user ? <><Link href="/my-products" onClick={() => setOpen(false)}>My products</Link><Link href="/following" onClick={() => setOpen(false)}>Following</Link><Link href="/settings" onClick={() => setOpen(false)}>Settings</Link>{user.role === "admin" ? <Link href="/admin" onClick={() => setOpen(false)}>Admin</Link> : null}<button type="button" className="mobile-signout" onClick={() => void authClient.signOut({ fetchOptions: { onSuccess: () => router.replace("/") } })}>Sign out</button></> : <Link href="/sign-in" onClick={() => setOpen(false)}>Sign in</Link>}
         </div>
       ) : null}
     </header>

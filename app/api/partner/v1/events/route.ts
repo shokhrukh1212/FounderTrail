@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { acceptPartnerEvent, parsePartnerEvent } from "@/lib/partner-events";
 
 function error(code: string, message: string, status: number) {

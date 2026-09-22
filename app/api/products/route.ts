@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
-import { newBidIndexOwnerToken, hashBidIndexOwnerToken, ownerCookieName, ownerCookieOptions } from "@/lib/bidindex-owner";
+import { createHash, randomBytes } from "node:crypto";
+import { currentUserFromHeaders } from "@/lib/auth";
+import { newBidIndexOwnerToken, hashBidIndexOwnerToken } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
-import { withTransaction } from "@/lib/db";
+import { query, withTransaction } from "@/lib/db";
 import { ensureFounderPreference } from "@/lib/email-preferences";
 import { validateProductSubmission } from "@/lib/product-validation";
 import { consumeRateLimit } from "@/lib/rate-limit";
@@ -10,6 +12,7 @@ import { networkHash, requestOriginIsSameSite } from "@/lib/request-security";
 import { firstFreeSlug, slugify } from "@/lib/slug";
 import { removeStoredImage, validateAndStoreImage, type StoredImage } from "@/lib/storage";
 import { fetchPinnedPublic, fetchSubmissionMetadata, verifyMetadata } from "@/lib/submission-metadata";
+import { FOUNDERTRAIL_CATEGORY_SLUGS } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +28,8 @@ function files(form: FormData, name: string): File[] {
 
 export async function POST(request: Request) {
   if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
+  const user = await currentUserFromHeaders(request.headers);
+  if (!user) return NextResponse.json({ error: "Sign in is required to submit a startup." }, { status: 401 });
   if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("multipart/form-data")) {
     return NextResponse.json({ error: "Expected a multipart form." }, { status: 415 });
   }
@@ -32,6 +37,13 @@ export async function POST(request: Request) {
   try { form = await request.formData(); } catch { return NextResponse.json({ error: "Invalid form data." }, { status: 400 }); }
   const validated = validateProductSubmission(form);
   if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
+  const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "pending";
+  const sameDomain = await query<{ slug: string; name: string; status: string; created_by_user_id: string | null }>(`SELECT slug,name,status,created_by_user_id FROM products WHERE normalized_domain=$1 AND status IN ('draft','pending','published') ORDER BY CASE status WHEN 'published' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,created_at LIMIT 1`, [validated.value.normalizedDomain]);
+  const duplicate = sameDomain[0];
+  if (duplicate && form.get("distinctProduct") !== "on") {
+    const isPublic = duplicate.status === "published";
+    return NextResponse.json({ error: isPublic ? "A product from this domain is already listed. Claim it, or confirm this is a distinct product on the same domain." : duplicate.created_by_user_id === user.id ? "You already have a draft or submission for this domain. Continue it from My products." : "A submission for this domain is already under review.", existingProduct: isPublic ? { slug: duplicate.slug, name: duplicate.name } : null }, { status: 409 });
+  }
   const logoFiles = files(form, "logo");
   const screenshotFiles = files(form, "screenshots");
   if (logoFiles.length > 1) return NextResponse.json({ error: "Choose one logo only.", field: "logo" }, { status: 400 });
@@ -53,27 +65,36 @@ export async function POST(request: Request) {
   }
   const ownerToken = newBidIndexOwnerToken();
   const ownerHash = hashBidIndexOwnerToken(ownerToken);
+  const claimChallenge = randomBytes(24).toString("hex");
+  const claimChallengeHash = createHash("sha256").update(claimChallenge).digest("hex");
   try {
     const created = await withTransaction(async (client) => {
       const allowed = await consumeRateLimit(client, { action: "submission", keyHash: networkHash(request, "submission"), limit: 5, windowSeconds: 3600 });
       if (!allowed) throw new Error("RATE_LIMITED");
       const slug = await uniqueSlug(client, validated.value.name);
+      const category = await client.query(`SELECT 1 FROM categories WHERE id=$1 AND slug=ANY($2::text[])`, [validated.value.categoryId, FOUNDERTRAIL_CATEGORY_SLUGS]);
+      if (!category.rowCount) throw new Error("INVALID_CATEGORY");
       const metadata = submittedMetadata;
       const emailPreferenceId = await ensureFounderPreference(client, validated.value.contactEmail, form.get("marketingOptIn") === "on");
       const product = await client.query<{ id: string }>(
         `INSERT INTO products
            (slug, website_url, submitted_url, normalized_domain, name, tagline, founder_name,
             contact_email, founder_social_handle, launch_at, launch_date, status,
-            submission_consent_at, submission_consent_version, email_preference_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',now(),$12,$13::uuid)
+            submission_consent_at, submission_consent_version, email_preference_id,created_by_user_id,
+            use_case,intended_audience,pricing_model,starting_price_minor,pricing_currency,primary_category_id,
+            category_provenance,pricing_provenance,pricing_checked_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14::uuid,$15,$16,$17,$18,$19,$20,$21,'founder','founder',now())
          RETURNING id::text`,
         [slug, validated.value.websiteUrl, validated.value.websiteUrl, validated.value.normalizedDomain,
          validated.value.name, validated.value.tagline, validated.value.founderName,
          validated.value.contactEmail, validated.value.founderSocialHandle, validated.value.launchAt,
-         validated.value.launchDate, validated.value.consentVersion, emailPreferenceId],
+         validated.value.launchDate, requestedStatus, validated.value.consentVersion, emailPreferenceId,user.id,
+         validated.value.useCase,validated.value.intendedAudience,validated.value.pricingModel,
+         validated.value.startingPriceMinor,validated.value.pricingCurrency,validated.value.categoryId],
       );
       const productId = product.rows[0].id;
       await client.query(`INSERT INTO product_owner_credentials (product_id, token_hash) VALUES ($1::uuid,$2)`, [productId, ownerHash]);
+      await client.query(`INSERT INTO product_claims(product_id,requester_id,evidence_method,challenge_token_hash,challenge_expires_at,evidence) VALUES($1::uuid,$2,'domain_file',$3,now()+interval '7 days',jsonb_build_object('source','new_submission'))`,[productId,user.id,claimChallengeHash]);
       await client.query(
         `INSERT INTO product_submission_metadata
            (product_id, original_url, final_url, fetch_status, extracted_name, extracted_tagline,
@@ -94,18 +115,19 @@ export async function POST(request: Request) {
       }
       return { id: productId, slug };
     });
-    const localManagementUrl = `${config.siteUrl}/manage/${created.slug}#token=${ownerToken}`;
+    const localManagementUrl = `${config.siteUrl}/manage/${created.slug}`;
     const response = NextResponse.json({
-      product: { slug: created.slug, status: "pending" },
+      product: { slug: created.slug, status: requestedStatus },
       managementUrl: localManagementUrl,
-      message: "Submission received for moderation.",
+      ownershipVerification: { method: "domain_file", path: "/.well-known/foundertrail-claim.txt", value: claimChallenge },
+      message: requestedStatus === "draft" ? "Draft saved." : "Submission received for moderation.",
     }, { status: 201, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } });
-    response.cookies.set(ownerCookieName(created.id), ownerToken, ownerCookieOptions);
     return response;
   } catch (error) {
     await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const code = error instanceof Error ? error.message : "";
     if (code === "RATE_LIMITED") return NextResponse.json({ error: "Too many submissions. Try again later." }, { status: 429 });
+    if (code === "INVALID_CATEGORY") return NextResponse.json({ error: "Choose a valid category.", field: "categoryId" }, { status: 400 });
     // The founder only ever sees the generic message below, so the log has to carry
     // everything the database said about the failure. Row values are left out: they
     // repeat the founder's email back into the log.

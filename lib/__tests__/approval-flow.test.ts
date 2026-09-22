@@ -17,7 +17,7 @@ const ownerAccess = readFileSync(new URL("../../components/OwnerAccess.tsx", imp
 test("X launch intent contains encoded copy and canonical attributed product URL", () => {
   const intent = new URL(xLaunchIntent({ siteUrl: "https://bidindex.dev", slug: "one & two", productName: "Bid & Win", description: "A useful launch." }));
   assert.equal(intent.origin + intent.pathname, "https://x.com/intent/tweet");
-  assert.match(intent.searchParams.get("text") ?? "", /^My product, Bid & Win, is one of the first 21 products on BidIndex 🚀/);
+  assert.match(intent.searchParams.get("text") ?? "", /^I’m building Bid & Win and sharing its progress on FounderTrail\./);
   const shared = new URL(intent.searchParams.get("url")!);
   assert.equal(shared.pathname, "/product/one%20%26%20two");
   assert.deepEqual(Object.fromEntries(shared.searchParams), {
@@ -38,8 +38,8 @@ test("X launch copy preserves the complete product name", () => {
     "YourHour - Pay less, Get more. #1 product gets featured on the homepage.",
     "Pay $1 more to take #1. Every buyer stays permanently on the leaderboard, ranked by total paid.",
   );
-  assert.match(text, /^My product, YourHour - Pay less, Get more\. #1 product gets featured on the homepage\., is one of the first 21 products on BidIndex 🚀/);
-  assert.match(text, /\n\nDiscover it and support the launch:$/);
+  assert.match(text, /^I’m building YourHour - Pay less, Get more\. #1 product gets featured on the homepage\. and sharing its progress on FounderTrail\./);
+  assert.match(text, /\n\nSee what it does and follow along:$/);
   assert.ok(Array.from(text).length + 24 <= 280);
 });
 
@@ -84,7 +84,7 @@ test("approval email is provider-idempotent, retryable, and stores sanitized sta
   assert.match(emailService, /Manage product/);
   assert.match(emailService, /Shokhrukh Karimov/);
   assert.doesNotMatch(emailService, /Shahzod/);
-  assert.match(retryRoute, /validAdminSession/);
+  assert.match(retryRoute, /validAdminRequest/);
   assert.match(retryRoute, /sendApprovalEmail/);
   assert.match(retryRoute, /allowSkipped: true/);
   assert.match(backlogRoute, /approval_email_sent_at IS NULL/);
@@ -103,7 +103,8 @@ test("pending stays private while approval makes existing public queries eligibl
 
 test("owner status response is private and database backed", () => {
   assert.match(ownerRoute, /authenticateOwner/);
-  assert.match(ownerRoute, /SELECT status,approved_at,name,tagline FROM products/);
+  assert.match(ownerRoute, /SELECT p\.status,p\.approved_at,p\.name,p\.tagline/);
+  assert.match(ownerRoute,/reviewReason:product\.status==="rejected"/);
   assert.match(ownerRoute, /cache-control": "no-store/);
   assert.doesNotMatch(ownerRoute, /contact_email|contactEmail|token_hash|approvalToken/);
 });

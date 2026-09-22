@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { withTransaction } from "@/lib/db";
 import { authenticateOwner } from "@/lib/owner-auth";
 import { containsVerificationMeta, type VerificationMethod } from "@/lib/product-verification";

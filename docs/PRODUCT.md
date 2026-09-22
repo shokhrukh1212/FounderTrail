@@ -1,61 +1,55 @@
-# BidIndex product brief
+# FounderTrail product brief
 
-## Purpose and users
+## Purpose
 
-BidIndex is the discovery platform for pay-to-rank products, ad auctions, attention marketplaces and other bidding experiments. Discover new launches, compare their traction and submit your own product for free.
+FounderTrail helps people find useful startups and follow what their founders build next. It is a discovery and progress platform, not an auction, click marketplace, or paid leaderboard. A startup may be free, paid, pre-revenue, or established; revenue and traffic are supporting context, never proof of quality.
 
-BidIndex brings the growing world of bidding products into one transparent discovery platform. Explore pay-to-rank directories, ad auctions, attention marketplaces and other bidding experiments, follow their launches and compare their traction. Founders can submit products for free, publish updates and connect optional integrations. When traffic, clicks or revenue are displayed, BidIndex clearly identifies where each number came from.
+Existing BidIndex products remain legitimate listings. Their IDs, slugs, media, owner evidence, support totals, redirects, transactions, and audit history are preserved. Historical support and bidding details are labelled as history and never enter a FounderTrail weekly launch score.
 
-The core value is provenance. A product badge and every metric answer different questions and must never be presented as the same claim.
+## Public experience
 
-## Product and metric trust model
+- **This week** contains only approved products whose founders or administrators explicitly scheduled a launch for the shown Monday-to-Monday UTC week.
+- **Discover** supports server-side search, category and pricing filters, sorting, and pagination over all published products.
+- **Updates** shows published founder progress posts.
+- Product pages lead with identity, use case, audience, pricing, media, updates, and discussion. Optional metrics and historical context are secondary.
+- Following, launch voting, and discussion require an account. Browsing remains public.
 
-A **Verified product** has met both requirements:
+If no startup is launching this week, the page says so and displays real Discover results below it. Legacy products are never silently hidden or auto-enrolled into a launch.
 
-1. BidIndex confirmed control of the submitted domain using a meta tag or well-known file.
-2. BidIndex detected the configured BidIndex badge and public project ID on that domain.
+## Founder experience
 
-This verifies the product identity and badge installation only. It does not prove revenue, visitors, purchases, bids, or business performance. Revenue integration is optional.
+A founder can submit a startup for free, claim an existing listing in place, manage approved fields, publish updates, schedule one initial weekly launch, reply to feedback, and see qualified activity. New submissions and ongoing mutations require a server-validated account. Legacy proof can attach an old listing to an account but cannot remain a permanent mutation bypass.
 
-Every displayed metric has its own source:
+Ownership can be established by a signed-in legacy credential exchange, an expiring domain-file challenge, or an audited administrator decision. A destination-domain change requires renewed review. Private contacts, credential hashes, provider identifiers, and evidence never belong in public responses.
 
-- **Measured by BidIndex** — directly measured by BidIndex, including eligible outbound clicks and privacy-conscious badge traffic.
-- **Processor verified** — received through a future official payment-processor connection. This is reserved and is never shown without a real connector.
-- **Partner connected** — sent by the founder's authenticated server. Authentication proves which integration sent it, not that BidIndex independently audited it.
-- **Publicly sourced** — taken from a public page and accepted by a BidIndex administrator.
-- **Founder reported** — entered by a founder without technical verification.
-- **Unavailable** — no usable measurement exists.
+## Launch integrity
 
-## Owner experience
+Each product receives at most one initial launch. Each account can hold one active vote per launch and can undo it while the launch remains active. Owners cannot vote for their own product. Ordering is active votes descending, then approval time, then stable product ID. Results freeze after the week ends.
 
-The founder path remains **Paste URL → review extracted details → submit → receive management link → get approved → connect verified data**.
+Legacy anonymous support is retained separately. The platform does not fabricate user identities or claim exact deduplication across eras.
 
-Initial public fields are website URL, product name, one-line description, and launch date. Founder name and social handle are optional public fields. Contact email is required and private; it supports approval, owner assistance, management-link recovery, and verification coordination. It is excluded from public loaders, APIs, metadata, and page source.
+## Metrics and trust
 
-If an owner loses the one-time link, an administrator first verifies the founder using that private contact email, then generates a replacement link from moderation. Rotation invalidates the old link immediately; only the new token's hash is stored, and the raw replacement is shown once.
+FounderTrail activity distinguishes qualified profile views, outbound clicks, followers, launch votes, comments, and sponsored traffic. An outbound click is not called a customer, verified arrival, or sale. Known bots, obvious repeats, and owner/admin testing are filtered prospectively; counts remain filtered estimates.
 
-Pending owners see a real database-backed Pending review state and can check manually while the page also polls about every 30 seconds. Approval makes the product public before BidIndex attempts email. Once live, the dashboard shows a launch banner with a canonical product link and an X Web Intent; the founder always reviews and publishes the post personally.
+Optional connected metrics use one supported provider first: a founder-supplied, restricted read-only Stripe key. Keys are validated, encrypted at rest, scoped to exact Stripe products or an explicitly confirmed whole account, and removable with their snapshots. Published revenue remains separated by currency and includes source, scope, period, as-of time, and methodology. FounderTrail sponsorship does not use Stripe.
 
-Approval email is transactional and goes only to the private submission contact. It includes responsive HTML, plain text, the product logo when available, the public listing, the same attributed X share intent, and a signed private management link. Email failure never reverses publication, and administrators can safely retry without duplicating a successfully recorded notification.
+The existing domain/badge tracker remains optional and source-labelled. Installing it does not prove ownership, revenue, product quality, or improve launch order.
 
-After approval, the owner dashboard has three focused tabs:
+## Sponsorship
 
-- **Product** — product name, one-line description, optional founder information, read-only approved website, logo, and screenshots.
-- **Updates** — compact founder update publishing and history.
-- **Verification & data** — domain proof, badge installation, traffic status, optional server events, and reviewed public evidence.
+FounderTrail sells one exclusive, clearly labelled sponsored placement at a time: USD 9 base price for 168 consecutive hours, one-time, with no renewal. It appears on This week and Discover only, in the desktop rail or after the third organic result on mobile. It never changes organic order.
 
-Administrators assign one primary category. Owners cannot silently change the approved website because doing so would invalidate the domain relationship.
+The purchaser must manage an approved listing. Creative and destination are reviewed before payment and snapshotted on the booking. Dodo Payments provides hosted checkout and verified payment/refund webhooks. Local transactions plus a PostgreSQL exclusion constraint prevent overlapping holds and bookings. A late or conflicting successful payment cannot displace another sponsor and enters the refund workflow.
 
-## Discovery and ranking
+Lemon Squeezy is not used for sponsorship advertising. Its old webhook and records remain only for historical reconciliation, and the old paid-ranking checkout is retired.
 
-The public discovery views remain Launching today, Trending, Verified, and Newest. Every view lists the whole matching set across numbered pages, with the total stated under the pager, so a tab name is never read as a hidden time filter. Listed metrics and ranking signals are both all-time: Launching today and Trending order by all-time upvotes, then all-time eligible BidIndex outbound clicks, then the newer launch. A seven-day window ranked the board until now, but it said little while most products were days old and it reshuffled the order every night. Weekly figures stay in the card data, unranked and unshown. Payments, promotions, sponsorships, and founder-reported values never improve organic position.
+## Email and privacy
 
-An upvote is a per-product row keyed on the anonymous `bidindex_visitor` cookie. That cookie is under the voter's control, so identity alone cannot carry the count: clearing it, or sending no cookie at all, mints a fresh voter. The vote route therefore also caps upvotes per address block — at most three active upvotes on one product from one `/24`, and a stricter hourly bucket for cookie-less callers, whose per-visitor allowance can never bind. A first-time visitor and a founder upvoting someone else's product both still count on the first click, with no reload. Product owners remain unable to upvote their own product. Until sign-in exists, an upvote means one anonymous browser, and the wording around the number should not claim more.
+Magic-link sign-in and transactional email use Resend when configured. Promotional founder email requires recorded consent and supports suppression and one-click unsubscribe. Follows do not imply marketing consent. The weekly followed-product digest is off by default.
 
-Metric leaderboards include only eligible measured, processor-connected, authenticated partner, or accepted public sources and always show the source label. Currencies remain separate. No data is preferable to a synthetic or misleading zero.
+Account deletion cannot silently erase public products, ownership responsibilities, transactions, or required audit evidence. Owners must transfer or archive owned products first. Provider secrets and private evidence are minimized and excluded from public pages and logs.
 
-Production public queries exclude pending, rejected, archived, and demo records. Demo data remains an explicit development/test seed only.
+## Operations boundary
 
-## Intentionally excluded
-
-Forums, direct messages, followers, collections, reviews, awards, newsletters, complex recommendations, advanced charts, mobile apps, browser extensions, large-scale scraping, social authentication, paid organic ranking, and rushed payment-provider OAuth are outside this MVP. Existing Lemon Squeezy payment infrastructure is preserved for future clearly labelled promotions behind `FEATURE_PROMOTIONS=false`.
+The code ships with sponsorship disabled. Production activation requires a tested database backup/restore, isolated migration rehearsal and reconciliation, authentication/email checks, Dodo test-mode payment/refund checks, Stripe restricted-key checks, and responsive/accessibility review. See `docs/foundertrail/` for the exact runbook and verification gates.

@@ -5,5 +5,14 @@
       "path": "/api/cron/tick",
       "schedule": "17 0 * * *"
     }
+  ],
+  "routes": [
+    {
+      "src": "^/api/cron/tick$",
+      "methods": ["POST"],
+      "mitigate": {
+        "action": "deny"
+      }
+    }
   ]
 }

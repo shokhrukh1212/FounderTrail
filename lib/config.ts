@@ -1,4 +1,4 @@
-import { brandCopy } from "./brand";
+import { brand, brandCopy } from "./brand";
 
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -8,13 +8,12 @@ function int(name: string, fallback: number): number {
 }
 
 export const config = {
-  siteUrl: (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, ""),
-  siteName: process.env.SITE_NAME ?? "BidIndex",
+  siteUrl: (process.env.SITE_URL?.trim() || "http://localhost:3000").replace(/\/+$/, ""),
+  siteName: process.env.SITE_NAME ?? brand.displayName,
   siteDescription:
     process.env.SITE_DESCRIPTION ??
     brandCopy.metaDescription,
   accentColor: process.env.SITE_ACCENT_COLOR ?? "#FF6154",
-  featurePromotions: process.env.FEATURE_PROMOTIONS === "true",
   eventHashSalt: process.env.EVENT_HASH_SALT ?? process.env.IP_HASH_SALT ?? "dev-event-salt-change-me",
   adminAccessSecret: process.env.ADMIN_ACCESS_SECRET ?? "",
   adminAuditActor: process.env.ADMIN_AUDIT_ACTOR ?? "Shokhrukh Karimov",
@@ -25,6 +24,27 @@ export const config = {
     webhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? "",
     from: process.env.EMAIL_FROM ?? "",
     replyTo: process.env.EMAIL_REPLY_TO ?? "",
+  },
+  auth: {
+    secret: process.env.AUTH_SECRET ?? "",
+    googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  },
+  metricEncryptionKey: process.env.METRIC_ENCRYPTION_KEY ?? "",
+  sponsorshipsEnabled: process.env.SPONSORSHIPS_ENABLED === "true",
+  sponsorship: {
+    priceMinor: 900,
+    currency: "USD" as const,
+    durationHours: 168,
+    holdMinutes: 15,
+    minimumLeadMinutes: 20,
+  },
+  dodoPayments: {
+    apiKey: process.env.DODO_PAYMENTS_API_KEY ?? "",
+    webhookKey: process.env.DODO_PAYMENTS_WEBHOOK_KEY ?? "",
+    environment: process.env.DODO_PAYMENTS_ENVIRONMENT === "live_mode" ? "live_mode" as const : "test_mode" as const,
+    businessId: process.env.DODO_PAYMENTS_BUSINESS_ID ?? "",
+    sponsorProductId: process.env.DODO_SPONSOR_PRODUCT_ID ?? "",
   },
   upload: {
     driver: process.env.UPLOAD_STORAGE_DRIVER ?? "local",
@@ -79,6 +99,15 @@ export const config = {
     purchaseEventId: process.env.X_PIXEL_PURCHASE_EVENT_ID ?? "",
   },
 } as const;
+
+export function isAuthConfigured(): boolean {
+  return config.auth.secret.length >= 32 && Boolean(config.auth.googleClientId && config.auth.googleClientSecret);
+}
+
+export function isDodoConfigured(): boolean {
+  const dodo = config.dodoPayments;
+  return config.sponsorshipsEnabled && Boolean(dodo.apiKey && dodo.webhookKey && dodo.businessId && dodo.sponsorProductId);
+}
 
 export function isLemonSqueezyConfigured(): boolean {
   const { apiKey, storeId, variantId } = config.lemonSqueezy;

@@ -31,7 +31,7 @@ function fieldDescription(field: SubmissionField, errors: SubmissionFieldErrors,
   return [errors[field] ? `submission-${field}-error` : null, helperId].filter(Boolean).join(" ") || undefined;
 }
 
-export function SubmissionForm() {
+export function SubmissionForm({ categories }: { categories: Array<{ id: string; name: string }> }) {
   const formRef = useRef<HTMLFormElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const screenshotsInputRef = useRef<HTMLInputElement>(null);
@@ -49,8 +49,8 @@ export function SubmissionForm() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<SubmissionFieldErrors>({});
   const [fetchMessage, setFetchMessage] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [created, setCreated] = useState<{ slug: string; managementUrl: string } | null>(null);
+  const [created, setCreated] = useState<{ slug: string; status: "draft"|"pending"; managementUrl: string; claimPath?: string; claimValue?: string } | null>(null);
+  const [existingProduct, setExistingProduct] = useState<{slug:string;name:string}|null>(null);
   const logoPreview = useMemo(() => logo ? URL.createObjectURL(logo) : suggestedLogo, [logo, suggestedLogo]);
   const screenshotPreviews = useMemo(() => screenshots.map((file) => ({ file, url: URL.createObjectURL(file) })), [screenshots]);
 
@@ -80,8 +80,8 @@ export function SubmissionForm() {
     });
   }
 
-  function submissionData(form: HTMLFormElement): FormData {
-    const data = new FormData(form);
+  function submissionData(form: HTMLFormElement, submitter: HTMLElement | null): FormData {
+    const data = new FormData(form, submitter);
     data.delete("logo");
     if (logo) data.append("logo", logo, logo.name);
     data.delete("screenshots");
@@ -162,10 +162,11 @@ export function SubmissionForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = submissionData(event.currentTarget);
+    const data = submissionData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter);
     const validation = validateSubmissionForm(data);
     setFieldErrors(validation);
     setError("");
+    setExistingProduct(null);
     const firstInvalid = Object.keys(validation).find(isSubmissionField);
     if (firstInvalid) {
       focusField(firstInvalid);
@@ -174,7 +175,7 @@ export function SubmissionForm() {
     setBusy(true);
     try {
       const response = await fetch("/api/products", { method: "POST", body: data });
-      const result = await response.json() as { error?: string; field?: unknown; product?: { slug: string }; managementUrl?: string };
+      const result = await response.json() as { error?: string; field?: unknown; product?: { slug: string;status:"draft"|"pending" }; managementUrl?: string; ownershipVerification?: {path:string;value:string};existingProduct?:{slug:string;name:string}|null };
       if (!response.ok || !result.product || !result.managementUrl) {
         const message = result.error || "Submission failed.";
         if (isSubmissionField(result.field)) {
@@ -183,9 +184,10 @@ export function SubmissionForm() {
           focusField(field);
           return;
         }
+        if(result.existingProduct)setExistingProduct(result.existingProduct);
         throw new Error(message);
       }
-      setCreated({ slug: result.product.slug, managementUrl: result.managementUrl });
+      setCreated({ slug: result.product.slug, status:result.product.status, managementUrl: result.managementUrl, claimPath: result.ownershipVerification?.path, claimValue: result.ownershipVerification?.value });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Submission failed. Please try again.");
     } finally {
@@ -193,30 +195,19 @@ export function SubmissionForm() {
     }
   }
 
-  async function copyManagementLink() {
-    if (!created) return;
-    await navigator.clipboard.writeText(created.managementUrl);
-    setCopied(true);
-  }
-
   if (created) return <section className="submission-success" aria-live="polite">
     <span className="verified-mark">✓</span>
-    <h2>Your product is submitted.</h2>
-    <p>We’ll review the listing before it appears publicly. Save your private management link—you’ll use it to edit the product, publish updates and connect verified data.</p>
-    <div className="private-link-box">
-      <strong>Save this private management link</strong>
-      <p>It is shown once. Anyone with this link can manage your listing, so store it safely.</p>
-      <code>{created.managementUrl}</code>
-      <button className="button button-primary" type="button" onClick={copyManagementLink}>{copied ? "Copied" : "Copy management link"}</button>
-    </div>
-    <Link className="button button-secondary" href="/">Back to discovery</Link>
+    <h2>{created.status==="draft"?"Your draft is saved.":"Your product is submitted."}</h2>
+    <p>{created.status==="draft"?"Verify the domain, finish any details, then submit it for review from My products.":"We’ll review the listing before it appears publicly."} The draft stays attached to your signed-in account.</p>
+    {created.claimPath&&created.claimValue?<div className="private-link-box"><strong>Verify the product domain</strong><p>Publish a plain-text file at <code>{created.claimPath}</code> containing this exact value, then verify it from My products.</p><code>{created.claimValue}</code></div>:null}
+    <Link className="button button-primary" href={`/claim/${created.slug}`}>Verify ownership</Link><Link className="button button-secondary" href="/my-products">My products</Link>
   </section>;
 
   return <>
     <header className="page-heading">
-      <p className="eyebrow">Free product launch</p>
-      <h1>Submit your bidding product.</h1>
-      <p>Paste your website. We’ll prepare the basics for you—you can review everything before submitting.</p>
+      <p className="eyebrow">Free startup profile</p>
+      <h1>Submit your startup.</h1>
+      <p>Give your startup a home for its launch and everything you build next.</p>
     </header>
     <form ref={formRef} className="submission-form submission-form-compact" onSubmit={submit} onInput={handleFormInput} encType="multipart/form-data" noValidate aria-busy={busy || fetching}>
       <fieldset>
@@ -251,20 +242,19 @@ export function SubmissionForm() {
               <div className="form-grid">
                 <div className="form-field">
                   <label htmlFor="submission-name">Product name</label>
-                  <input id="submission-name" name="name" required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. YourHour" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldDescription("name", fieldErrors)} />
+                  <input id="submission-name" name="name" required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Atlas" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldDescription("name", fieldErrors)} />
                   <FieldError field="name" errors={fieldErrors} />
                 </div>
-                <div className="form-field">
-                  <label htmlFor="submission-launchDate">Launch date</label>
-                  <input id="submission-launchDate" name="launchDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} aria-invalid={Boolean(fieldErrors.launchDate)} aria-describedby={fieldDescription("launchDate", fieldErrors)} />
-                  <FieldError field="launchDate" errors={fieldErrors} />
-                </div>
+                <div className="form-field"><label htmlFor="submission-categoryId">Category</label><select id="submission-categoryId" name="categoryId" required defaultValue="" aria-invalid={Boolean(fieldErrors.categoryId)} aria-describedby={fieldDescription("categoryId", fieldErrors)}><option value="" disabled>Choose a category</option>{categories.map((category)=><option key={category.id} value={category.id}>{category.name}</option>)}</select><FieldError field="categoryId" errors={fieldErrors} /></div>
               </div>
               <div className="form-field">
                 <label htmlFor="submission-tagline">One-line description <small>{tagline.length}/160</small></label>
-                <input id="submission-tagline" name="tagline" required maxLength={160} value={tagline} onChange={(event) => setTagline(event.target.value)} placeholder="e.g. Pay $1 more to take the top spot." aria-invalid={Boolean(fieldErrors.tagline)} aria-describedby={fieldDescription("tagline", fieldErrors)} />
+                <input id="submission-tagline" name="tagline" required maxLength={160} value={tagline} onChange={(event) => setTagline(event.target.value)} placeholder="e.g. Turn support questions into clear, searchable answers." aria-invalid={Boolean(fieldErrors.tagline)} aria-describedby={fieldDescription("tagline", fieldErrors)} />
                 <FieldError field="tagline" errors={fieldErrors} />
               </div>
+              <div className="form-field"><label htmlFor="submission-useCase">What does it help people do?</label><textarea id="submission-useCase" name="useCase" maxLength={500} rows={3} placeholder="Describe the task or problem in plain language." /></div>
+              <div className="form-field"><label htmlFor="submission-intendedAudience">Who is it for?</label><input id="submission-intendedAudience" name="intendedAudience" maxLength={500} placeholder="e.g. Independent SaaS founders" /></div>
+              <div className="form-grid"><div className="form-field"><label htmlFor="submission-pricingModel">Pricing</label><select id="submission-pricingModel" name="pricingModel" defaultValue="unknown" required><option value="unknown">See website</option><option value="free">Free</option><option value="freemium">Freemium</option><option value="paid">Paid</option><option value="open_source">Open source</option><option value="contact">Contact sales</option></select></div><div className="form-field"><label htmlFor="submission-startingPrice">Known starting price <small>Optional</small></label><div className="price-entry"><select name="pricingCurrency" defaultValue="USD" aria-label="Currency"><option>USD</option><option>EUR</option><option>GBP</option></select><input id="submission-startingPrice" name="startingPrice" type="number" min="0" step="0.01" placeholder="9.00" /></div></div></div>
             </div>
           </div>
           <div className="listing-preview" aria-label="Listing preview">
@@ -293,7 +283,7 @@ export function SubmissionForm() {
             </div>
           </div>
           <p className="form-hint">Optional founder details are displayed on your product page if provided.</p>
-          <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" defaultChecked /> <span>Send me BidIndex growth, leaderboard and milestone updates. You can unsubscribe at any time.</span></label>
+          <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" /> <span>Send me optional FounderTrail product and audience updates. You can unsubscribe at any time.</span></label>
         </fieldset>
 
         <fieldset>
@@ -309,8 +299,10 @@ export function SubmissionForm() {
           <label className="consent-row" htmlFor="submission-ownershipConsent"><input id="submission-ownershipConsent" name="ownershipConsent" type="checkbox" required aria-invalid={Boolean(fieldErrors.ownershipConsent)} aria-describedby={fieldDescription("ownershipConsent", fieldErrors)} /> <span>I built this product or am authorized to submit it, and the information above is accurate. See the <Link href="/about#submission-guidelines">submission guidelines</Link>.</span></label>
           <FieldError field="ownershipConsent" errors={fieldErrors} />
         </div>
+        <label className="consent-row" htmlFor="submission-distinctProduct"><input id="submission-distinctProduct" name="distinctProduct" type="checkbox" /> <span>This is a distinct product on a shared domain. Leave unchecked so FounderTrail can route an existing listing to its claim flow.</span></label>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
-        <button className="button button-primary submit-final-button" disabled={busy} type="submit">{busy ? "Submitting…" : "Submit for review"}</button>
+        {existingProduct?<p><Link className="button button-secondary" href={`/product/${existingProduct.slug}#claim`}>Claim {existingProduct.name}</Link></p>:null}
+        <div className="button-row submit-final-button"><button name="submissionStatus" value="draft" className="button button-secondary" disabled={busy} type="submit">Save draft</button><button name="submissionStatus" value="pending" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : "Submit for review"}</button></div>
       </> : null}
     </form>
   </>;

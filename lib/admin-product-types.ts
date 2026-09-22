@@ -3,10 +3,16 @@ export type AdminProductSummary = {
   slug: string;
   name: string;
   websiteUrl: string;
+  normalizedDomain: string;
+  category: string | null;
   founderName: string | null;
   contactEmail: string;
   founderSocialHandle: string | null;
   status: string;
+  ownershipStatus: "unclaimed" | "pending" | "disputed" | "claimed";
+  launchStatus: string;
+  launchWeekStart: string | null;
+  recentActivityAt: string;
   verificationStatus: "verified" | "domain_verified" | "not_verified";
   upvotes: number;
   productViews: number;

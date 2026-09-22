@@ -108,7 +108,7 @@ export function IntegrationManager({ slug, initial, siteUrl, websiteUrl }: { slu
 
   if (!integration) return <section className="manager-card integration-setup">
     <p className="step-label">Verification & data</p><h2>Verify your product</h2>
-    <p>Start with domain ownership and the BidIndex badge. Revenue integration is optional and is not required for a Verified product.</p>
+    <p>Start with domain ownership and the FounderTrail badge. Revenue integration is optional and is not required for a Verified product.</p>
     <button className="button button-primary" disabled={busy === "create"} onClick={createIntegration}>{busy === "create" ? "Starting…" : "Start verification"}</button>
     {notice ? <p className={`manager-notice is-${notice.tone}`}>{notice.text}</p> : null}
   </section>;
@@ -136,7 +136,7 @@ export function IntegrationManager({ slug, initial, siteUrl, websiteUrl }: { slu
 
   return <div className="integration-manager">
     <section className={`product-verification-summary ${integration.productVerifiedAt ? "is-verified" : ""}`}>
-      <div><span className="verified-mark" aria-hidden="true">✓</span><div><strong>{integration.productVerifiedAt ? "Verified product" : "Product not verified yet"}</strong><p>Verified product means BidIndex confirmed the product&apos;s domain and badge installation. Individual metrics have their own source labels.</p></div></div>
+      <div><span className="verified-mark" aria-hidden="true">✓</span><div><strong>{integration.productVerifiedAt ? "Optional site tracker active" : "Optional site tracker not fully connected"}</strong><p>This tracker status records the domain and badge installation. Account ownership and each published metric are verified and labelled separately.</p></div></div>
     </section>
     <div className="verification-status-grid">
       <Status label="Domain ownership" value={domainActive ? "Active" : integration.domainStatus === "failed" ? "Failed" : "Not started"} tone={domainActive ? "active" : integration.domainStatus === "failed" ? "failed" : "neutral"} detail={`Last check: ${localTime(integration.domainLastCheckedAt)}`} />
@@ -165,13 +165,13 @@ export function IntegrationManager({ slug, initial, siteUrl, websiteUrl }: { slu
     </section>
 
     <section className="manager-card integration-instructions">
-      <p className="step-label">2 · Install the BidIndex badge</p><h2>Choose a badge style</h2>
+      <p className="step-label">2 · Install the optional FounderTrail badge</p><h2>Choose a badge style</h2>
       <p>Place the badge anywhere appropriate on your product site. The public project ID is safe for browser code; server secrets are never included.</p>
       <div className="integration-value"><strong>Public project ID</strong><CopyBlock value={integration.publicId} label="public project ID" copyKey="project-id" {...copyProps} /></div>
       <div className="segmented-control" role="group" aria-label="Badge style">
         {(["light", "dark", "compact"] as const).map((style) => <button type="button" key={style} className={badgeStyle === style ? "is-active" : ""} onClick={() => setBadgeStyle(style)}>{style}</button>)}
       </div>
-      <div className={`badge-preview badge-${badgeStyle}`}><span>{badgeStyle === "compact" ? "Live on BidIndex" : integration.productVerifiedAt ? "Live on BidIndex · Verified product" : "Live on BidIndex"}</span></div>
+      <div className={`badge-preview badge-${badgeStyle}`}><span>{badgeStyle === "compact" ? "Live on FounderTrail" : integration.productVerifiedAt ? "Live on FounderTrail · Verified product" : "Live on FounderTrail"}</span></div>
       <CopyBlock value={snippet} label="badge code" copyKey="badge-snippet" {...copyProps} />
       <details className="installation-help"><summary>Installation help</summary><p>HTML: paste the snippet before <code>&lt;/body&gt;</code>. Next.js or React: render it with the framework&apos;s script component after interactive hydration. Website builders: use a custom HTML/embed block. Deploy before checking.</p><p>The script measures pageviews, approximate daily unique visitors, and badge impressions. It does not read page content, forms, host cookies, local storage, query strings, or fragments.</p></details>
       <div className="integration-action-row"><button className="button button-secondary" disabled={busy === "badge"} onClick={checkBadge}>{busy === "badge" ? "Checking…" : "Check installation"}</button><span>Installed: {localTime(integration.badgeInstalledAt)}</span></div>
@@ -179,7 +179,7 @@ export function IntegrationManager({ slug, initial, siteUrl, websiteUrl }: { slu
 
     <section className="manager-card integration-instructions">
       <p className="step-label">Optional</p><h2>Connect revenue and product events</h2>
-      <p>Domain verification and the badge are enough to verify your product. Connect your server only if you want to display live revenue, purchases, bids, refunds, or other private product events.</p>
+      <p>Domain verification and the badge activate this optional site tracker. They do not verify revenue and are separate from the account ownership claim. Connect your server only if you want to display source-labelled product events.</p>
       <dl className="product-facts compact-facts"><div><dt>Connection</dt><dd>{integration.hasSecret ? "Secret created" : "Not connected"}</dd></div><div><dt>Last accepted event</dt><dd>{localTime(integration.lastEventAt)}</dd></div></dl>
       {secret ? <div className="secret-once"><strong>Copy this server secret now</strong><p>It is shown once and cannot be recovered. Store it only in your server&apos;s encrypted environment settings.</p><CopyBlock value={secret} label="server secret" copyKey="server-secret" {...copyProps} /></div> : null}
       <div className="integration-action-row"><button className="button button-secondary" disabled={busy === "secret"} onClick={() => manageSecret(integration.hasSecret ? "rotate" : "create_secret")}>{busy === "secret" ? "Working…" : integration.hasSecret ? "Rotate server secret" : "Create server secret"}</button></div>

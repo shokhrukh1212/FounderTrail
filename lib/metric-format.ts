@@ -3,7 +3,7 @@ import type { MetricSource, ProductMetric } from "./product-data";
 export type MetricDisplaySource = MetricSource | "unavailable";
 
 export const METRIC_SOURCE_LABELS: Record<MetricDisplaySource, string> = {
-  measured_by_bidindex: "Measured by BidIndex",
+  measured_by_bidindex: "Measured by FounderTrail",
   processor_verified: "Processor verified",
   partner_connected: "Partner connected",
   publicly_sourced: "Publicly sourced",
@@ -12,10 +12,10 @@ export const METRIC_SOURCE_LABELS: Record<MetricDisplaySource, string> = {
 };
 
 export const METRIC_SOURCE_EXPLANATIONS: Record<MetricDisplaySource, string> = {
-  measured_by_bidindex: "Directly measured by BidIndex, such as eligible outbound clicks or privacy-conscious badge traffic.",
+  measured_by_bidindex: "Directly measured by FounderTrail, such as eligible outbound clicks or privacy-conscious badge traffic.",
   processor_verified: "Received from a supported payment processor through an official verified connection.",
   partner_connected: "Sent by the product's authenticated server. The sender is authenticated, but the value is supplied by the partner.",
-  publicly_sourced: "Taken from a public page reviewed by a BidIndex administrator.",
+  publicly_sourced: "Taken from a public page reviewed by a FounderTrail administrator.",
   founder_reported: "Entered by the founder without technical verification.",
   unavailable: "No usable measurement is currently connected.",
 };
@@ -66,13 +66,13 @@ export function metricDefinition(type: ProductMetric["type"]): string {
   const definitions: Record<ProductMetric["type"], string> = {
     visitors: "Approximate daily unique visitors measured using a rotating daily hash. Ad blockers, browser restrictions, and bots can affect this estimate.",
     revenue: "Net revenue events in the displayed currency. Different currencies are never combined.",
-    outbound_clicks: "Eligible unique visits sent from BidIndex to the product's approved website.",
+    outbound_clicks: "Eligible unique visits sent from FounderTrail to the product's approved website.",
     bids: "Authenticated bid events received for this product.",
     purchases: "Authenticated completed purchase events received for this product.",
     refunds: "Authenticated refund events received for this product.",
     current_bid: "The latest authenticated bid amount received in this currency.",
     highest_bid: "The highest authenticated bid amount received in this currency.",
-    partner_product_clicks: "Product-click events supplied by the partner; these are separate from BidIndex outbound clicks.",
+    partner_product_clicks: "Product-click events supplied by the partner; these are separate from FounderTrail outbound clicks.",
   };
   return definitions[type];
 }

@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { adminSessionFromRequest, validAdminSession } from "@/lib/admin-auth";
+
+import { validAdminRequest } from "@/lib/admin-auth";
 import { sendApprovalEmail, type ApprovalEmailResult } from "@/lib/approval-email";
 import { config } from "@/lib/config";
 import { withTransaction } from "@/lib/db";
 import { requestOriginIsSameSite } from "@/lib/request-security";
 import { canonicalProductUrl } from "@/lib/product-share";
+import { FOUNDERTRAIL_CATEGORY_SLUGS } from "@/lib/categories";
 
 function text(value: unknown, max: number) {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null;
@@ -14,7 +16,7 @@ type PublishedResult = { id: string; slug: string; name: string; approvedAt: Dat
 
 export async function PUT(request: Request, context: RouteContext<"/api/admin/products/[slug]/status">) {
   if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
-  if (!validAdminSession(adminSessionFromRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
+  if (!(await validAdminRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   const { slug } = await context.params;
   const body = await request.json().catch(() => null) as {
     status?: unknown; name?: unknown; tagline?: unknown; categoryId?: unknown;
@@ -25,7 +27,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
   const tagline = text(body.tagline, 160);
   const reason = text(body.reason, 1000);
   if (!name || !tagline) return NextResponse.json({ error: "Name and one-line description are required." }, { status: 400 });
-  if (body.status === "rejected" && !reason) return NextResponse.json({ error: "Add an internal rejection reason." }, { status: 400 });
+  if (body.status === "rejected" && !reason) return NextResponse.json({ error: "Add a clear reason for the founder." }, { status: 400 });
 
   try {
     const changed = await withTransaction(async (client): Promise<PublishedResult | { rejected: true } | null> => {
@@ -42,8 +44,8 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
       let categoryId: string | null = null;
       if (body.status === "published") {
         const category = await client.query<{ id: string }>(
-          `SELECT id::text FROM categories WHERE id=$1::bigint AND slug IN ('pay-to-rank-directory','ad-auction-billboard','marketplace-sponsorship','game-experiment','other')`,
-          [String(body.categoryId ?? "")],
+          `SELECT id::text FROM categories WHERE id=$1::bigint AND slug=ANY($2::text[])`,
+          [String(body.categoryId ?? ""),FOUNDERTRAIL_CATEGORY_SLUGS],
         );
         categoryId = category.rows[0]?.id ?? null;
         if (!categoryId) throw new Error("INVALID_CATEGORY");
@@ -57,6 +59,8 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
       const updated = await client.query<{ slug: string; name: string; approved_at: Date | null }>(
         `UPDATE products
             SET status=$2,name=$3,tagline=$4,primary_category_id=$5::bigint,
+                category_provenance=CASE WHEN $5::bigint IS NULL THEN category_provenance ELSE 'admin' END,
+                category_review_required=CASE WHEN $5::bigint IS NULL THEN category_review_required ELSE false END,
                 domain_override_approved=$6,
                 approved_at=CASE WHEN $2='published' THEN COALESCE(approved_at,now()) ELSE approved_at END,
                 published_at=CASE WHEN $2='published' THEN COALESCE(published_at,now()) ELSE published_at END,

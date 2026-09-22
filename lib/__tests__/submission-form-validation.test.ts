@@ -14,7 +14,7 @@ function validForm(): FormData {
   form.set("websiteUrl", "https://product.example");
   form.set("name", "Example product");
   form.set("tagline", "A concise description of the product.");
-  form.set("launchDate", "2026-08-28");
+  form.set("categoryId", "1");
   form.set("contactEmail", "founder@example.com");
   form.set("ownershipConsent", "on");
   return form;
@@ -29,7 +29,7 @@ test("required submission errors are attached to their exact fields", () => {
   assert.match(errors.websiteUrl ?? "", /website/i);
   assert.match(errors.name ?? "", /product name/i);
   assert.match(errors.tagline ?? "", /one-line description/i);
-  assert.match(errors.launchDate ?? "", /launch date/i);
+  assert.match(errors.categoryId ?? "", /category/i);
   assert.match(errors.contactEmail ?? "", /contact email/i);
   assert.match(errors.ownershipConsent ?? "", /authorized/i);
 });

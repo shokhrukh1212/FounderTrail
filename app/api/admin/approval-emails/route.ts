@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { adminSessionFromRequest, validAdminSession } from "@/lib/admin-auth";
+
+import { validAdminRequest } from "@/lib/admin-auth";
 import { sendApprovalEmail } from "@/lib/approval-email";
 import { query } from "@/lib/db";
 import { requestOriginIsSameSite } from "@/lib/request-security";
 
 export async function POST(request: Request) {
   if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
-  if (!validAdminSession(adminSessionFromRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
+  if (!(await validAdminRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
 
   const products = await query<{ id: string }>(
     `SELECT id::text

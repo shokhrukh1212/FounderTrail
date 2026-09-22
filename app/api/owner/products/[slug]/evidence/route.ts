@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { query } from "@/lib/db";
 import { authenticateOwner } from "@/lib/owner-auth";
 import { publicHttpUrl } from "@/lib/product-validation";

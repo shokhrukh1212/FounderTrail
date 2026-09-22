@@ -24,8 +24,8 @@ export function productLaunchUrl(siteUrl: string, slug: string): string {
 export function launchPostText(productName: string, description = "", foundingProductCount = 21): string {
   void description; void foundingProductCount;
   const fullName = productName.trim().replace(/\s+/g, " ");
-  const heading = `My product, ${fullName}, is one of the first 21 products on BidIndex 🚀`;
-  const closing = "Discover it and support the launch:";
+  const heading = `I’m building ${fullName} and sharing its progress on FounderTrail.`;
+  const closing = "See what it does and follow along:";
   const withoutDescription = `${heading}\n\n${closing}`;
   const textBudget = X_POST_LIMIT - X_SHORT_URL_LENGTH - 1;
   if (codePointLength(withoutDescription) <= textBudget) return withoutDescription;

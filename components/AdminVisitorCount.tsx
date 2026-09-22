@@ -5,7 +5,7 @@ import type { VisitorStat } from "@/lib/vemetric-stats";
 
 function describe(stat: VisitorStat | null): string {
   if (!stat) return "Open the Vemetric dashboard";
-  if (stat.source !== "vemetric") return "BidIndex's own counter — Vemetric key not configured. Opens the dashboard.";
+  if (stat.source !== "vemetric") return "FounderTrail's own counter — Vemetric key not configured. Opens the dashboard.";
   const synced = stat.syncedAt ? new Date(stat.syncedAt).toLocaleTimeString() : "never";
   return `Daily visitors summed across ${stat.days} day${stat.days === 1 ? "" : "s"} of Vemetric data (synced ${synced}). Opens the dashboard.`;
 }

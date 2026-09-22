@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { acceptPartnerEvent, parsePartnerEvent } from "@/lib/partner-events";
 
 const LEGACY_TYPES: Record<string, "purchase" | "bid" | "revenue"> = {

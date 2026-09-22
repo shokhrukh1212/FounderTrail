@@ -15,16 +15,16 @@ export async function createReachedMilestones(client:PoolClient,total:number):Pr
   let created=0;
   for(const setting of settings.rows){
     const template=CAMPAIGN_TEMPLATES.visitor_milestone;
-    const subject=setting.threshold===100?template.subject:`BidIndex reached ${setting.threshold} visitors 🚀`;
-    const heading=setting.threshold===100?template.heading:`We reached ${setting.threshold} visitors 🚀`;
-    const body=setting.threshold===100?template.body:`Hi {founder_name},\n\nBidIndex has reached ${setting.threshold} visitors.\n\nWhen you share {product_name}, people can discover and support your product. Real upvotes can move it higher in the Most Upvoted leaderboard.\n\nThank you for helping BidIndex grow.\n\n— Shokhrukh Karimov\nBidIndex`;
+    const subject=template.subject;
+    const heading=template.heading;
+    const body=template.body;
     const campaign=await client.query<{id:string}>(
       `INSERT INTO email_campaigns
        (internal_name,template_key,message_class,product_specific,subject,preview_text,heading,body,
         include_product_logo,primary_button_label,primary_button_url,secondary_button_label,
         secondary_button_url,sender_name,reply_to,audience,campaign_context,status,created_by,updated_by)
        VALUES ($1,'visitor_milestone','marketing',false,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        'BidIndex',NULL,$11::jsonb,$12::jsonb,'draft','system:visitor-milestone','system:visitor-milestone')
+        'FounderTrail',NULL,$11::jsonb,$12::jsonb,'draft','system:visitor-milestone','system:visitor-milestone')
        RETURNING id::text`,[
         `Visitor milestone ${setting.threshold}`,subject,template.previewText,heading,
         body,template.includeProductLogo,template.primaryButtonLabel,template.primaryButtonUrl,
@@ -43,7 +43,7 @@ export async function createReachedMilestones(client:PoolClient,total:number):Pr
     await client.query(
       `INSERT INTO admin_notifications(kind,title,body,related_campaign_id)
        VALUES('visitor_milestone',$1,$2,$3::uuid)`,[
-        `BidIndex reached ${setting.threshold} visitors`,
+        `FounderTrail recorded ${setting.threshold} daily visitor entries`,
         `The all-time visitor total reached ${total}. A milestone campaign was saved as a draft${setting.automatic_sending?" and will be queued by the maintenance worker because automatic sending is enabled":""}.`,campaignId,
       ],
     );

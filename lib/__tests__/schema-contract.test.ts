@@ -32,11 +32,11 @@ test("legacy listings use their declared square product icons", () => {
   assert.match(schema, /screenwar\.lol\/coin\.png/);
 });
 
-test("one domain has one listing and one pending bid", () => {
+test("one domain has one listing and one pending historical bid", () => {
   assert.match(schema, /campaigns_normalized_domain_idx/);
   assert.match(schema, /checkout_intents_one_pending_domain_idx/);
-  assert.match(checkout, /ownerHashesMatch/);
-  assert.match(checkout, /amountDueCents/);
+  assert.match(checkout, /LEGACY_CHECKOUT_RETIRED/);
+  assert.match(checkout, /status:\s*410/);
 });
 
 test("rerunning the migration keeps current bid checkout rows valid", () => {
@@ -50,10 +50,9 @@ test("rerunning the migration keeps current bid checkout rows valid", () => {
   );
 });
 
-test("the same owner can resume an unchanged pending checkout", () => {
-  assert.match(checkout, /ownerHashesMatch\(pendingIntent\.owner_token_hash, ownerHash\)/);
-  assert.match(checkout, /pendingIntent\.target_bid_cents === input\.targetBidCents/);
-  assert.match(checkout, /checkoutUrl: pendingIntent\.ls_checkout_url/);
+test("new paid-ranking checkouts stay retired without deleting payment history", () => {
+  assert.match(checkout, /Paid ranking is no longer available/);
+  assert.match(checkout, /historical orders/);
 });
 
 test("payment completion is idempotent and determines rank", () => {

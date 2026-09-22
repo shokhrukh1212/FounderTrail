@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { isObviousBot } from "@/lib/click";
 import { withTransaction } from "@/lib/db";
 import { allowedOrigin, validEventId, validPublicHostname } from "@/lib/integration-validation";

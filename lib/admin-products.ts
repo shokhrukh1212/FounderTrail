@@ -3,26 +3,37 @@ import { query } from "./db";
 import type { AdminProductDetail, AdminProductSummary } from "./admin-product-types";
 
 type SummaryRow = {
-  id: string; slug: string; name: string; website_url: string; founder_name: string | null;
+  id: string; slug: string; name: string; website_url: string; normalized_domain:string; category_name:string|null; founder_name: string | null;
   contact_email: string; founder_social_handle: string | null; status: string; product_verified_at: Date | null;
   domain_verified_at: Date | null; upvotes: number; product_views: number; referred_visitors: number;
   submitted_at: Date; approved_at: Date | null; approval_email_status: string; approval_email_sent_at: Date | null;
   logo_url: string | null;
+  ownership_status:"unclaimed"|"pending"|"disputed"|"claimed";launch_status:string;launch_week_start:Date|null;recent_activity_at:Date;
 };
 
 export async function listAdminProducts(): Promise<AdminProductSummary[]> {
-  const rows = await query<SummaryRow>(`SELECT p.id::text,p.slug,p.name,p.website_url,p.founder_name,p.contact_email,
+  const rows = await query<SummaryRow>(`SELECT p.id::text,p.slug,p.name,p.website_url,p.normalized_domain,c.name AS category_name,p.founder_name,p.contact_email,
       p.founder_social_handle,p.status,i.product_verified_at,i.domain_verified_at,
+      CASE WHEN EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) THEN 'claimed'
+        WHEN EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='disputed') THEN 'disputed'
+        WHEN EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='pending') THEN 'pending'
+        ELSE 'unclaimed' END AS ownership_status,
+      COALESCE((SELECT pl.state FROM product_launches pl WHERE pl.product_id=p.id),'unscheduled') AS launch_status,
+      (SELECT lw.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id WHERE pl.product_id=p.id) AS launch_week_start,
+      GREATEST(p.updated_at,
+        COALESCE((SELECT max(pu.updated_at) FROM product_updates pu WHERE pu.product_id=p.id),p.updated_at),
+        COALESCE((SELECT max(pc.created_at) FROM product_comments pc WHERE pc.product_id=p.id),p.updated_at),
+        COALESCE((SELECT max(pf.created_at) FROM product_follows pf WHERE pf.product_id=p.id),p.updated_at)) AS recent_activity_at,
       (SELECT count(*)::int FROM product_votes v WHERE v.product_id=p.id AND v.active AND NOT v.is_demo) AS upvotes,
       (SELECT count(*)::int FROM product_listing_view_events e WHERE e.product_id=p.id AND e.outcome='counted') AS product_views,
       (SELECT count(*)::int FROM founder_referral_events e WHERE e.source_product_id=p.id AND e.outcome='counted') AS referred_visitors,
       p.submitted_at,p.approved_at,p.approval_email_status,p.approval_email_sent_at,
       (SELECT public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' ORDER BY m.position LIMIT 1) AS logo_url
-    FROM products p LEFT JOIN product_integrations i ON i.product_id=p.id
+    FROM products p LEFT JOIN categories c ON c.id=p.primary_category_id LEFT JOIN product_integrations i ON i.product_id=p.id
     WHERE NOT p.is_demo ORDER BY p.submitted_at DESC,p.id`);
   return rows.map(row => ({
-    id:row.id,slug:row.slug,name:row.name,websiteUrl:row.website_url,founderName:row.founder_name,
-    contactEmail:row.contact_email,founderSocialHandle:row.founder_social_handle,status:row.status,
+    id:row.id,slug:row.slug,name:row.name,websiteUrl:row.website_url,normalizedDomain:row.normalized_domain,category:row.category_name,founderName:row.founder_name,
+    contactEmail:row.contact_email,founderSocialHandle:row.founder_social_handle,status:row.status,ownershipStatus:row.ownership_status,launchStatus:row.launch_status,launchWeekStart:row.launch_week_start?new Date(row.launch_week_start).toISOString():null,recentActivityAt:new Date(row.recent_activity_at).toISOString(),
     verificationStatus:row.product_verified_at?"verified":row.domain_verified_at?"domain_verified":"not_verified",
     upvotes:Number(row.upvotes),productViews:Number(row.product_views),referredVisitors:Number(row.referred_visitors),
     submittedAt:new Date(row.submitted_at).toISOString(),approvedAt:row.approved_at?new Date(row.approved_at).toISOString():null,

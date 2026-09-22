@@ -39,7 +39,7 @@ test("product verification requires domain and badge, never revenue", () => {
 });
 
 test("metric source labels communicate who measured or supplied each value", () => {
-  assert.match(metricFormat, /measured_by_bidindex: "Measured by BidIndex"/);
+  assert.match(metricFormat, /measured_by_bidindex: "Measured by FounderTrail"/);
   assert.match(metricFormat, /processor_verified: "Processor verified"/);
   assert.match(metricFormat, /partner_connected: "Partner connected"/);
   assert.match(metricFormat, /publicly_sourced: "Publicly sourced"/);

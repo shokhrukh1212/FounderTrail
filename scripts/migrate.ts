@@ -5,10 +5,6 @@ import { getPool } from "../lib/db";
 
 async function main() {
   const pool = getPool();
-  const legacySql = readFileSync(join(process.cwd(), "lib", "schema.sql"), "utf8");
-  await pool.query(legacySql);
-  console.log("legacy schema applied");
-
   const client = await pool.connect();
   try {
     await client.query(`SELECT pg_advisory_lock($1)`, [8_140_25_02]);

@@ -1,4 +1,6 @@
-# BidIndex handoff
+# Historical BidIndex handoff
+
+> Superseded for current implementation and release status by [`docs/foundertrail/PASS.md`](docs/foundertrail/PASS.md). This file is retained as historical operational evidence; its old “next task” and deployment statements are not current instructions.
 
 ## Current phase
 

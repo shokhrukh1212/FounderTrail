@@ -3,7 +3,7 @@ import test from "node:test";
 import { evaluateAudience, type AudienceCandidate } from "../founder-email-audience";
 
 function candidate(overrides:Partial<AudienceCandidate>={}):AudienceCandidate{
-  return {product_id:"product-1",preference_id:"preference-1",normalized_email:"ada@example.com",preference_token_version:1,marketing_opt_in_at:new Date("2026-08-01"),marketing_unsubscribed_at:null,suppression_reasons:[],slug:"atlas",name:"Atlas",founder_name:"Ada",status:"published",submitted_at:new Date("2026-08-01"),approved_at:new Date("2026-08-02"),token_version:1,logo_url:null,verified:false,domain_verified:false,badge_active:false,share_intent:false,product_views:12,product_upvotes:3,referred_visitors:2,product_rank:4,...overrides};
+  return {product_id:"product-1",preference_id:"preference-1",normalized_email:"ada@example.com",preference_token_version:1,marketing_opt_in_at:new Date("2026-08-01"),marketing_unsubscribed_at:null,suppression_reasons:[],slug:"atlas",name:"Atlas",founder_name:"Ada",status:"published",submitted_at:new Date("2026-08-01"),approved_at:new Date("2026-08-02"),token_version:1,logo_url:null,verified:false,domain_verified:false,badge_active:false,claimed:false,share_intent:false,product_views:12,product_upvotes:3,referred_visitors:2,product_rank:4,...overrides};
 }
 
 test("one-founder and selected-founder audiences preserve final recipient details",()=>{
@@ -48,4 +48,10 @@ test("product-owner updates ignore marketing unsubscribe but retain delivery sup
   assert.equal(review.eligibleCount,1);
   assert.equal(review.recipients[0]?.product.id,"owner-update");
   assert.match(review.exclusions[0]!.reasons.join(" "),/Suppressed: bounce/);
+});
+
+test("claim invitations exclude listings that already have a verified owner",()=>{
+  const review=evaluateAudience([candidate({claimed:true})],"transactional","claim_invitation");
+  assert.equal(review.eligibleCount,0);
+  assert.match(review.exclusions[0]!.reasons.join(" "),/already has a verified owner/);
 });

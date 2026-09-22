@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
  * What the claim panel's spinner waits on: the product name and pitch pulled from the
  * buyer's own page, before any money is involved.
  *
- * Advisory only. /api/checkout runs the same validation again under the board lock,
- * because two buyers racing on the same name must not both get through.
+ * Legacy advisory preview retained for old clients. The paid-ranking checkout is
+ * retired, so this endpoint cannot lead to a new order.
  */
 export async function POST(request: Request) {
   let body: unknown;

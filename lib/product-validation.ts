@@ -11,10 +11,16 @@ export type ProductSubmission = {
   founderName: string | null;
   contactEmail: string;
   founderSocialHandle: string | null;
+  categoryId: number;
   launchDate: string;
   launchAt: Date;
   consentVersion: string;
   metadataToken: string | null;
+  useCase: string | null;
+  intendedAudience: string | null;
+  pricingModel: "free" | "freemium" | "paid" | "open_source" | "contact" | "unknown";
+  startingPriceMinor: number | null;
+  pricingCurrency: string | null;
 };
 
 export type ValidationResult = { ok: true; value: ProductSubmission } | { ok: false; error: string; field?: string };
@@ -74,19 +80,27 @@ export function validateProductSubmission(form: FormData): ValidationResult {
     values[field] = value;
   }
   if (!EMAIL.test(values.contactEmail)) return { ok: false, error: "Enter a valid contact email.", field: "contactEmail" };
-  const launchDate = text(form, "launchDate", 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(launchDate)) return { ok: false, error: "Choose a valid launch date.", field: "launchDate" };
+  const categoryRaw = text(form, "categoryId", 20);
+  const categoryId = /^\d+$/.test(categoryRaw) ? Number(categoryRaw) : 0;
+  if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return { ok: false, error: "Choose a category.", field: "categoryId" };
+  const launchDate = new Date().toISOString().slice(0, 10);
   const launchAt = new Date(`${launchDate}T12:00:00.000Z`);
-  if (Number.isNaN(launchAt.getTime())) return { ok: false, error: "Choose a valid launch date.", field: "launchDate" };
   if (form.get("ownershipConsent") !== "on") return { ok: false, error: "Confirm that you are authorized to submit this product.", field: "ownershipConsent" };
   const founderName = text(form, "founderName", 120);
   const social = text(form, "founderSocialHandle", 120).replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "");
   if (social && !/^[A-Za-z0-9_]{1,15}$/.test(social)) return { ok: false, error: "Enter an X handle such as @founder.", field: "founderSocialHandle" };
+  const pricingModel = text(form,"pricingModel",20);
+  if (!["free","freemium","paid","open_source","contact","unknown"].includes(pricingModel)) return {ok:false,error:"Choose a pricing model.",field:"pricingModel"};
+  const startingPriceRaw=text(form,"startingPrice",20);const startingPrice=startingPriceRaw?Number(startingPriceRaw):null;
+  if(startingPrice!==null&&(!Number.isFinite(startingPrice)||startingPrice<0||startingPrice>1_000_000))return{ok:false,error:"Enter a valid starting price.",field:"startingPrice"};
+  const pricingCurrency=pricingModel==="paid"?(text(form,"pricingCurrency",3).toUpperCase()||"USD"):null;
   return { ok: true, value: {
     websiteUrl: website.url, normalizedDomain: website.domain,
     name: values.name, tagline: values.tagline,
     founderName: founderName || null, contactEmail: values.contactEmail.toLowerCase(),
-    founderSocialHandle: social ? `@${social}` : null, launchDate, launchAt,
+    founderSocialHandle: social ? `@${social}` : null, categoryId, launchDate, launchAt,
     consentVersion: "2026-08-27", metadataToken: text(form, "metadataToken", 8192) || null,
+    useCase:text(form,"useCase",500)||null,intendedAudience:text(form,"intendedAudience",500)||null,
+    pricingModel:pricingModel as ProductSubmission["pricingModel"],startingPriceMinor:startingPrice===null?null:Math.round(startingPrice*100),pricingCurrency,
   } };
 }

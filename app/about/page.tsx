@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { brandCopy } from "@/lib/brand";
+import { brand, brandCopy } from "@/lib/brand";
 
 export const metadata: Metadata = { title: "About", description: brandCopy.mediumDescription };
 
 const sources = [
-  ["Measured by BidIndex", "Directly measured by BidIndex, such as eligible outbound clicks and privacy-conscious badge traffic."],
-  ["Processor verified", "Received through a future official payment-provider connection. This label is never used without a real processor connection."],
+  ["Measured by FounderTrail", "Directly measured by FounderTrail, such as eligible profile views and outbound clicks."],
+  ["Stripe connected", "Calculated from a founder-authorized restricted read-only Stripe connection, with the scope and refresh time shown."],
   ["Partner connected", "Sent by the product’s authenticated server. Authentication identifies the partner but does not independently audit its business."],
   ["Publicly sourced", "Taken from a linked public page reviewed by an administrator."],
   ["Founder reported", "Provided by the owner without technical verification."],
@@ -17,7 +17,7 @@ export default function AboutPage() {
   return (
     <main className="app-shell prose-page">
       <header className="page-heading">
-        <p className="eyebrow">About BidIndex</p>
+        <p className="eyebrow">About {brand.displayName}</p>
         <h1>{brandCopy.definition}</h1>
         <p>{brandCopy.mediumDescription}</p>
       </header>
@@ -28,17 +28,19 @@ export default function AboutPage() {
       <section>
         <h2>What each metric label means</h2>
         <dl className="definition-list">{sources.map(([term, definition]) => <div key={term}><dt>{term}</dt><dd>{definition}</dd></div>)}</dl>
-        <p>A Verified product has both confirmed domain ownership and a detected BidIndex badge. That status never verifies revenue automatically; every metric keeps its own source label.</p>
+        <p>Confirmed ownership means a founder proved control of the startup domain or completed a documented manual review. It does not verify revenue; every shared metric keeps its own source, scope, currency, period, and refresh time.</p>
       </section>
       <section>
         <h2>Organic means organic</h2>
-        <p>Payments, legacy bids, founder-reported values, and future promotions do not improve upvote, trending, launch, or verified-data rankings. Any future paid placement will be clearly labelled <strong>Promoted</strong>.</p>
+        <p>Launch votes rank only the current weekly cohort. Sponsorship payments, legacy support, founder-reported values, and connected metrics never improve organic launch order. Paid placements are separate and clearly labelled <strong>Sponsored</strong>.</p>
       </section>
       <section id="submission-guidelines">
         <h2>Submission guidelines</h2>
-        <p>BidIndex accepts bidding-related products: pay-to-rank directories, ad auctions and digital billboards, sponsorship marketplaces, bidding games, and closely related experiments. Do not submit malware, scams, impersonations, or unrelated products. BidIndex may edit metadata for clarity, approval is not guaranteed, and submission is currently free. Paid promotion never changes organic rankings.</p>
+        <p>FounderTrail accepts useful software and technology startups across categories. Submit a real, publicly reachable product with an accurate identity, clear purpose, working website, and a founder or authorized representative who can verify the domain. We reject malware, scams, impersonation, misleading claims, prohibited or illegal products, thin affiliate pages, and duplicate listings. We may edit metadata for clarity, approval is not guaranteed, and submission is free. Paid sponsorship never bypasses review or changes organic rankings.</p>
       </section>
-      <section className="about-cta"><h2>Building something that belongs here?</h2><Link className="button button-primary" href="/submit">Submit your product — free</Link></section>
+      <section><h2>How launch weeks work</h2><p>Approved startups may schedule one initial FounderTrail launch. Weeks run Monday 00:00 UTC through the following Monday. Joining the current week does not promise seven full days. Signed-in members can cast one active vote per launch and undo it before the week ends; final results are frozen using votes, approval time, then product ID as a stable tie-break.</p></section>
+      <section><h2>Privacy and promotion</h2><p>Following a startup is not marketing consent. Founder updates appear on-site and in an optional weekly digest. A seven-day sponsor placement is a separate, clearly labelled purchase processed by Dodo Payments, does not renew automatically, and reports qualified displays and outbound clicks without promising traffic or customers.</p></section>
+      <section className="about-cta"><h2>Building something that belongs here?</h2><Link className="button button-primary" href="/submit">Submit your startup — free</Link></section>
     </main>
   );
 }

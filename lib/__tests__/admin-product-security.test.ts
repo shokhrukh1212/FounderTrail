@@ -16,7 +16,7 @@ test("admin product page exposes private founder fields behind admin authenticat
   assert.match(table,/Private email/);
   assert.match(table,/Founder X/);
   assert.match(adminProducts,/contact_email/);
-  assert.match(detailRoute,/validAdminSession/);
+  assert.match(detailRoute,/validAdminRequest/);
   assert.match(detailRoute,/cache-control":"no-store/);
 });
 
