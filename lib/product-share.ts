@@ -11,7 +11,7 @@ function codePointLength(value: string): number {
  * link that goes into a post carries this version, and the page's og:image does too.
  * Bump it whenever the product share image changes. Canonical URLs stay unversioned.
  */
-export const SHARE_CARD_VERSION = "1";
+export const SHARE_CARD_VERSION = "2";
 
 /** The product URL to put in a post: the canonical page plus the share-card version. */
 export function sharedProductUrl(siteUrl: string, slug: string): string {

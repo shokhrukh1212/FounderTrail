@@ -21,7 +21,7 @@ test("X launch intent contains encoded copy and canonical attributed product URL
   const shared = new URL(intent.searchParams.get("url")!);
   assert.equal(shared.pathname, "/product/one%20%26%20two");
   assert.deepEqual(Object.fromEntries(shared.searchParams), {
-    v: "1", ref: "one & two", utm_source: "x", utm_medium: "social", utm_campaign: "founder_launch", utm_content: "one & two",
+    v: "2", ref: "one & two", utm_source: "x", utm_medium: "social", utm_campaign: "founder_launch", utm_content: "one & two",
   });
 });
 

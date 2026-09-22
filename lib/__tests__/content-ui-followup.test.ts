@@ -147,7 +147,7 @@ test("product-page sharing drafts exactly one sentence and one canonical link", 
   assert.equal(parsed.origin + parsed.pathname, "https://x.com/intent/tweet");
   assert.equal(parsed.searchParams.get("text"), "Discover AgentHill on FounderTrail.");
   // The shared link carries the share-card version so X fetches the current card.
-  assert.equal(parsed.searchParams.get("url"), "https://foundertrail.example/product/agent%20hill?v=1");
+  assert.equal(parsed.searchParams.get("url"), "https://foundertrail.example/product/agent%20hill?v=2");
   // The link appears once: in the url parameter, never also inside the text.
   assert.doesNotMatch(parsed.searchParams.get("text") ?? "", /http/);
   assert.equal(canonicalProductUrl("https://foundertrail.example/", "a-b"), "https://foundertrail.example/product/a-b");
@@ -296,4 +296,14 @@ test("every link that goes into a post, and the share image, carry the share-car
   const draftRoute=readFileSync(new URL("../../app/api/owner/products/[slug]/launch-kit/draft/route.ts",import.meta.url),"utf8");
   assert.match(panel,/founderTrailUrl: sharedProductUrl\(config\.siteUrl, slug\)/);
   assert.match(draftRoute,/founderTrailUrl: sharedProductUrl\(config\.siteUrl, row\.slug\)/);
+});
+
+test("the product share image is served like a static file so X's crawler never times out",()=>{
+  const route=readFileSync(new URL("../../app/product/[slug]/opengraph-image.tsx",import.meta.url),"utf8");
+  // Cached at the CDN, sent with a length, and built from a two-column lookup instead of the
+  // full ranked product query.
+  assert.match(route,/s-maxage=3600, stale-while-revalidate=86400/);
+  assert.match(route,/"content-length": String\(png\.byteLength\)/);
+  assert.match(route,/SELECT name, short_name, tagline FROM products/);
+  assert.doesNotMatch(route,/getProductDetail/);
 });
