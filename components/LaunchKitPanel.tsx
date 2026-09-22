@@ -17,10 +17,9 @@ export async function LaunchKitPanel({ slug, productId, entitlementStatus }: {
 }) {
   const rows = await query<{
     name: string; short_name: string | null; tagline: string; use_case: string | null; intended_audience: string | null;
-    website_url: string; launch_state: string | null; has_listing_logo: boolean;
+    website_url: string; launch_state: string | null;
   }>(
     `SELECT p.name,p.short_name,p.tagline,p.use_case,p.intended_audience,p.website_url,
-      EXISTS(SELECT 1 FROM product_submission_metadata sm WHERE sm.product_id=p.id AND sm.extracted_logo_url IS NOT NULL) AS has_listing_logo,
       (SELECT CASE WHEN lw.starts_at>now() THEN 'upcoming' WHEN now()<lw.ends_at THEN 'live' ELSE 'listed' END
        FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
        WHERE pl.product_id=p.id AND pl.state IN ('scheduled','active','completed') ORDER BY lw.starts_at DESC LIMIT 1) AS launch_state
@@ -39,16 +38,23 @@ export async function LaunchKitPanel({ slug, productId, entitlementStatus }: {
   ]);
   const hasUploadedLogo = media.some((item) => item.kind === "logo");
   const sources: LaunchImageSource[] = [
-    // Listings that never uploaded a logo still have the one read from their website.
-    ...(!hasUploadedLogo && product.has_listing_logo ? [{ source: LISTING_LOGO_SOURCE, url: `/api/owner/products/${encodeURIComponent(slug)}/launch-kit/media/listing-logo`, label: "Logo from your website", kind: "logo" as const }] : []),
-    ...media.map((item) => ({ source: `media:${item.id}`, url: `/api/owner/products/${encodeURIComponent(slug)}/launch-kit/media/${item.id}`, label: item.kind === "logo" ? "Approved listing logo" : `Approved screenshot ${item.position + 1}`, kind: item.kind })),
+    // Listings that never uploaded a logo still get the one read from their website, or
+    // Google's copy of its favicon when the site links none we can use.
+    ...(!hasUploadedLogo ? [{ source: LISTING_LOGO_SOURCE, url: `/api/owner/products/${encodeURIComponent(slug)}/launch-kit/media/listing-logo`, label: "Logo from your website", kind: "logo" as const }] : []),
+    ...media.map((item) => ({ source: `media:${item.id}`, url: `/api/owner/products/${encodeURIComponent(slug)}/launch-kit/media/${item.id}`, label: item.kind === "logo" ? "Listing logo" : `Approved screenshot ${item.position + 1}`, kind: item.kind })),
     ...assets.map((item, index) => ({ source: `asset:${item.id}`, url: `/api/owner/products/${encodeURIComponent(slug)}/launch-kit/assets/${item.id}`, label: `Private ${item.kind} ${index + 1}`, kind: item.kind })),
   ];
   const firstLogo = sources.find((item) => item.kind === "logo")?.source ?? "";
   const firstScreenshot = sources.find((item) => item.kind === "screenshot")?.source ?? "";
   const base = defaultLaunchKitDraft(facts, firstLogo, firstScreenshot);
   const stored = draftRows[0];
-  const draft = stored ? normalizeLaunchKitDraft({ image: stored.image_draft, social: stored.social_draft }, facts, base) : base;
+  const saved = stored ? normalizeLaunchKitDraft({ image: stored.image_draft, social: stored.social_draft }, facts, base) : base;
+  // A saved draft can point at an image that has since gone: the website logo gives way to
+  // an uploaded one, a new upload deletes the old, a screenshot is removed. Follow what the
+  // listing has now instead of leaving a hole in the graphic.
+  const available = new Set(sources.map((item) => item.source));
+  const current = (source: string, fallback: string) => source && !available.has(source) ? fallback : source;
+  const draft = { ...saved, image: { ...saved.image, logoSource: current(saved.image.logoSource, firstLogo), screenshotSource: current(saved.image.screenshotSource, firstScreenshot) } };
   const active = entitlementStatus === "active";
   const upgradeHref = entitlementStatus ? null : `/manage/${slug}/pro`;
   return <section className="launch-kit-tab" aria-labelledby="launch-kit-heading">

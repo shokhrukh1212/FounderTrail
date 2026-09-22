@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { authenticateProOwner } from "@/lib/pro-access";
 import { query } from "@/lib/db";
 import { readStoredImage } from "@/lib/storage";
-import { fetchPinnedPublic, PUBLIC_LOGO_MAX_BYTES, validatePublicLogo } from "@/lib/submission-metadata";
+import { fetchPinnedPublic, fetchPublicLogo, googleFaviconUrl } from "@/lib/submission-metadata";
 
 export const runtime = "nodejs";
 
@@ -29,17 +29,17 @@ async function listingImageBytes(storageKey: string, publicUrl: string): Promise
 }
 
 /**
- * The logo read from the startup's own website, for the many listings that never uploaded
- * one. It is validated exactly as the public logo proxy validates it (passive SVG only)
- * and rasterised here, so the canvas always receives a crisp same-origin PNG.
+ * The logo read from the startup's own website, for listings that never uploaded one: the
+ * icon found at submission (an .ico is reduced to its largest embedded PNG), then Google's
+ * favicon service. It is validated exactly as the public logo proxy validates it (passive
+ * SVG only) and rasterised here, so the canvas always receives a same-origin PNG.
  */
 async function listingLogoPng(productId: string): Promise<Buffer | null> {
-  const rows = await query<{ logo_url: string | null }>(`SELECT extracted_logo_url AS logo_url FROM product_submission_metadata WHERE product_id=$1::uuid`, [productId]).catch(() => []);
-  const source = rows[0]?.logo_url;
-  if (!source) return null;
+  const rows = await query<{ logo_url: string | null; website_url: string }>(`SELECT sm.extracted_logo_url AS logo_url,p.website_url FROM products p LEFT JOIN product_submission_metadata sm ON sm.product_id=p.id WHERE p.id=$1::uuid`, [productId]).catch(() => []);
+  if (!rows[0]) return null;
+  const logo = await fetchPublicLogo([rows[0].logo_url, googleFaviconUrl(rows[0].website_url)]);
+  if (!logo) return null;
   try {
-    const fetched = await fetchPinnedPublic(source, "image/png,image/jpeg,image/webp,image/svg+xml", PUBLIC_LOGO_MAX_BYTES, 2);
-    const logo = validatePublicLogo(fetched.bytes, fetched.contentType);
     return await sharp(logo.bytes, { density: 384, limitInputPixels: 24_000_000 })
       .resize(512, 512, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, withoutEnlargement: logo.contentType !== "image/svg+xml" })
       .png().toBuffer();

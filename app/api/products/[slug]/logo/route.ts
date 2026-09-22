@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchPinnedPublic, fetchSubmissionMetadata, PUBLIC_LOGO_MAX_BYTES, validatePublicLogo } from "@/lib/submission-metadata";
+import { fetchPublicLogo, fetchSubmissionMetadata } from "@/lib/submission-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -19,25 +19,16 @@ export async function GET(_request: Request, context: RouteContext<"/api/product
   let source = product?.logo_url ?? null;
   if (!source && product) source = (await fetchSubmissionMetadata(product.website_url)).logoUrl;
   if (!source) return new NextResponse(null, { status: 404, headers: { "cache-control": "no-store" } });
-  try {
-    const fetched = await fetchPinnedPublic(
-      source,
-      "image/png,image/jpeg,image/webp,image/svg+xml",
-      PUBLIC_LOGO_MAX_BYTES,
-      2,
-    );
-    const logo = validatePublicLogo(fetched.bytes, fetched.contentType);
-    return new NextResponse(new Uint8Array(logo.bytes), {
-      status: 200,
-      headers: {
-        "content-type": logo.contentType,
-        "cache-control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
-        "content-security-policy": "default-src 'none'; sandbox",
-        "cross-origin-resource-policy": "same-origin",
-        "x-content-type-options": "nosniff",
-      },
-    });
-  } catch {
-    return new NextResponse(null, { status: 404, headers: { "cache-control": "no-store" } });
-  }
+  const logo = await fetchPublicLogo([source]);
+  if (!logo) return new NextResponse(null, { status: 404, headers: { "cache-control": "no-store" } });
+  return new NextResponse(new Uint8Array(logo.bytes), {
+    status: 200,
+    headers: {
+      "content-type": logo.contentType,
+      "cache-control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
+      "content-security-policy": "default-src 'none'; sandbox",
+      "cross-origin-resource-policy": "same-origin",
+      "x-content-type-options": "nosniff",
+    },
+  });
 }

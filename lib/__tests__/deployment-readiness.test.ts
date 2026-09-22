@@ -57,8 +57,9 @@ test("approved duplicate domains use a deliberate partial-index escape hatch",()
 test("published listings safely proxy extracted logos when no stored logo exists",()=>{
   assert.match(productData,/\/api\/products\/.*\/logo/);
   assert.match(publicLogoRoute,/p\.status = 'published'/);
-  assert.match(publicLogoRoute,/fetchPinnedPublic/);
-  assert.match(publicLogoRoute,/validatePublicLogo/);
+  assert.match(publicLogoRoute,/fetchPublicLogo\(\[source\]\)/);
+  const metadataSource=readFileSync(new URL("../submission-metadata.ts",import.meta.url),"utf8");
+  assert.match(metadataSource,/export async function fetchPublicLogo[\s\S]*fetchPinnedPublic\(candidate, PUBLIC_LOGO_ACCEPT[\s\S]*validatePublicLogo\(fetched\.bytes, fetched\.contentType\)/);
   assert.match(publicLogoRoute,/content-security-policy/);
   assert.match(publicLogoRoute,/fetchSubmissionMetadata\(product\.website_url\)/);
   assert.match(submissionRoute,/verifyMetadata[\s\S]*\?\? await fetchSubmissionMetadata/);
