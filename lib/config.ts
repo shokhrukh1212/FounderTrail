@@ -11,6 +11,8 @@ export const config = {
   siteUrl: (process.env.SITE_URL?.trim() || "http://localhost:3000").replace(/\/+$/, ""),
   // An empty SITE_NAME (as in a blank .env line) must fall back too, not print "".
   siteName: process.env.SITE_NAME?.trim() || brand.displayName,
+  /** Public contact address shown on the privacy policy and terms. */
+  supportEmail: process.env.SUPPORT_EMAIL?.trim() ?? "",
   siteDescription:
     process.env.SITE_DESCRIPTION ??
     brandCopy.metaDescription,

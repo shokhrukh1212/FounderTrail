@@ -1,0 +1,13 @@
+# Never upload secrets or private data with a CLI deploy. The CLI's built-in defaults
+# skip .env.local and .env.*.local, but not other env files, and not the local backups
+# (full database exports with private contact emails).
+.env*
+backups/
+artifacts/
+.data/
+
+# Local working files that are not part of the app.
+FounderTrail_*.md
+*:Zone.Identifier
+redesign_*.png
+tsconfig.tsbuildinfo

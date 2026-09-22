@@ -830,3 +830,18 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 .product-side-note strong{font-size:15px}
 .product-side-note p{font-size:13px;line-height:1.6}
 .product-side-note small{margin:-4px 0 16px;font-size:12px;line-height:1.55}
+
+/* Legal pages share the prose layout; lists and links match its body copy. */
+.legal-page .legal-updated{margin-top:10px;color:var(--muted);font-size:13px}
+.prose-page section>ul{display:grid;gap:8px;margin:14px 0 0;padding-left:20px;color:var(--muted);font-size:15px;line-height:1.7}
+.prose-page section>ul strong{color:var(--text);font-weight:650}
+.prose-page section a{color:#c83930;text-decoration:underline;text-underline-offset:3px}
+.prose-page section code{padding:1px 6px;border-radius:5px;background:var(--surface);color:var(--text);font-size:13px}
+.prose-page section>p+p{margin-top:12px}
+
+/* Footer: brand on the left, legal links on the right. */
+.footer-brand{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px}
+.footer-brand span:first-child{color:var(--text);font-weight:750}
+.footer-links{display:flex;flex-wrap:wrap;gap:18px}
+.footer-links a{color:var(--muted);text-decoration:none}
+.footer-links a:hover,.footer-links a:focus-visible{color:var(--text);text-decoration:underline;text-underline-offset:3px}

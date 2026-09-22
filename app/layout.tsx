@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import Script from "next/script";
 import localFont from "next/font/local";
 import { Suspense } from "react";
@@ -122,7 +123,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <SiteHeader siteName={config.siteName} user={user ? { name: user.name, role: user.role } : null} />
         <Suspense fallback={null}><BidIndexVisitorTracker /></Suspense>
         {children}
-        <footer className="site-footer"><div className="app-shell"><span>{config.siteName}</span><span>{brandCopy.line}</span></div></footer>
+        <footer className="site-footer"><div className="app-shell"><div className="footer-brand"><span>{config.siteName}</span><span>{brandCopy.line}</span></div><nav className="footer-links" aria-label="Legal"><Link href="/privacy">Privacy policy</Link><Link href="/terms">Terms of service</Link></nav></div></footer>
       </body>
     </html>
   );

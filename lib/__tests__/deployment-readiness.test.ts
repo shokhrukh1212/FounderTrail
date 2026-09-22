@@ -87,3 +87,23 @@ test("owner integration setup explains verification and copies every integration
   assert.match(integrationManager,/api\/partner\/v1\/events/);
   assert.match(integrationManager,/Domain verification and the badge activate this optional site tracker/);
 });
+
+test("legal pages are linked from every page and share the prose styling",()=>{
+  const layout=readFileSync(new URL("../../app/layout.tsx",import.meta.url),"utf8");
+  assert.match(layout,/<Link href="\/privacy">Privacy policy<\/Link>/);
+  assert.match(layout,/<Link href="\/terms">Terms of service<\/Link>/);
+  for(const page of ["privacy","terms"]){
+    const source=readFileSync(new URL(`../../app/${page}/page.tsx`,import.meta.url),"utf8");
+    assert.match(source,/className="app-shell prose-page legal-page"/);
+    assert.match(source,/<LegalContact topic=/);
+  }
+  const privacy=readFileSync(new URL("../../app/privacy/page.tsx",import.meta.url),"utf8");
+  assert.match(privacy,/Google API Services User Data Policy/);
+  assert.match(readFileSync(new URL("../../app/privacy-policy/page.tsx",import.meta.url),"utf8"),/permanentRedirect\("\/privacy"\)/);
+  assert.match(readFileSync(new URL("../../app/terms-of-service/page.tsx",import.meta.url),"utf8"),/permanentRedirect\("\/terms"\)/);
+});
+
+test("CLI deploys never upload env files or database backups",()=>{
+  const ignored=readFileSync(new URL("../../.vercelignore",import.meta.url),"utf8").split("\n").map(line=>line.trim());
+  for(const entry of [".env*","backups/"])assert.ok(ignored.includes(entry),`${entry} must be in .vercelignore`);
+});
