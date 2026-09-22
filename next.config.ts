@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/live", destination: "/", permanent: true }];
   },
+  // Files in public/ are served from the CDN, not bundled into functions, and the trace
+  // can't see a process.cwd() read. Ship the logo the product share image embeds.
+  outputFileTracingIncludes: {
+    "/product/\\[slug\\]/opengraph-image": ["./public/brand/logo-256.png"],
+  },
   experimental: {
     // The CLI checker can return empty captured output under Node 22.22,
     // which makes `next build` fail before compilation starts.

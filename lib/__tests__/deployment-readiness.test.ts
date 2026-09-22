@@ -107,3 +107,10 @@ test("CLI deploys never upload env files or database backups",()=>{
   const ignored=readFileSync(new URL("../../.vercelignore",import.meta.url),"utf8").split("\n").map(line=>line.trim());
   for(const entry of [".env*","backups/"])assert.ok(ignored.includes(entry),`${entry} must be in .vercelignore`);
 });
+
+test("the product share image ships the logo it reads from public/",()=>{
+  const route=readFileSync(new URL("../../app/product/[slug]/opengraph-image.tsx",import.meta.url),"utf8");
+  const nextConfig=readFileSync(new URL("../../next.config.ts",import.meta.url),"utf8");
+  assert.match(route,/public\/brand\/logo-256\.png/);
+  assert.match(nextConfig,/"\/product\/\\\\\[slug\\\\\]\/opengraph-image": \["\.\/public\/brand\/logo-256\.png"\]/);
+});
