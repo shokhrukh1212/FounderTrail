@@ -867,3 +867,9 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 .launch-logo-fix>small,.launch-logo-fix>.form-error{grid-column:1;margin:0;color:#9a3412;font-size:11px}
 @media(max-width:560px){.launch-logo-fix{grid-template-columns:1fr}.launch-logo-fix>label{grid-row:auto;justify-self:start}}
 .launch-logo-fix+.form-hint,.launch-logo-fix+.launch-image-warning{margin-top:10px}
+/* A long form reports its save result beside its Save button, where the founder is looking. */
+.form-save-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px}
+.form-save-row>.form-error,.form-save-row>.form-save-status{flex:1 1 260px;margin:0}
+.form-save-status{color:var(--muted);font-size:13px}
+.form-save-status.is-saved{color:var(--success);font-weight:650}
+.name-suggestion{margin:-6px 0 4px;padding:8px 11px;border-radius:8px;background:#fff7ed;color:#9a3412!important}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LaunchStudio, type LaunchImageSource } from "@/components/LaunchStudio";
 import { config } from "@/lib/config";
-import { displayProductName } from "@/lib/display-text";
+import { displayProductName, suggestedShortName } from "@/lib/display-text";
 import { query } from "@/lib/db";
 import { LISTING_LOGO_SOURCE, defaultLaunchKitDraft, normalizeLaunchKitDraft, type LaunchFacts } from "@/lib/launch-kit";
 
@@ -30,7 +30,8 @@ export async function LaunchKitPanel({ slug, productId, entitlementStatus }: {
   // A new draft starts from the short brand name: long legacy names ("Brand — tagline")
   // cannot fit the layout, and an owner without Pro cannot shorten them. Saved drafts keep
   // whatever name the founder saved.
-  const facts: LaunchFacts = { name: displayProductName(product.name, product.short_name), tagline: product.tagline, useCase: product.use_case, audience: product.intended_audience, websiteUrl: product.website_url, founderTrailUrl: `${config.siteUrl}/product/${slug}`, launchState: product.launch_state === "upcoming" || product.launch_state === "live" ? product.launch_state : "listed" };
+  const displayName = displayProductName(product.name, product.short_name);
+  const facts: LaunchFacts = { name: displayName.length > 60 ? suggestedShortName(product.name) ?? displayName : displayName, tagline: product.tagline, useCase: product.use_case, audience: product.intended_audience, websiteUrl: product.website_url, founderTrailUrl: `${config.siteUrl}/product/${slug}`, launchState: product.launch_state === "upcoming" || product.launch_state === "live" ? product.launch_state : "listed" };
   const [draftRows, media, assets] = await Promise.all([
     query<{ version: number; image_draft: Record<string, unknown>; social_draft: Record<string, unknown> }>(`SELECT version,image_draft,social_draft FROM pro_launch_kit_drafts WHERE product_id=$1::uuid`, [productId]),
     query<{ id: string; kind: "logo" | "screenshot"; position: number }>(`SELECT id::text,kind,position FROM product_media WHERE product_id=$1::uuid AND kind IN ('logo','screenshot') ORDER BY kind,position`, [productId]),

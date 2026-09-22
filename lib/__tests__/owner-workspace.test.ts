@@ -69,8 +69,10 @@ test("a missing image leaves that image out instead of blanking the launch graph
   assert.match(studio, /imageRequests/);
   // The approved listing image falls back to its public copy when storage is not readable.
   assert.match(mediaRoute, /fetchPinnedPublic\(publicUrl/);
-  // New drafts start from the short brand name; saved drafts keep what the founder saved.
-  assert.match(launchKitPanel, /name: displayProductName\(product\.name, product\.short_name\)/);
+  // New drafts start from the short brand name, or the brand part of an over-long legacy
+  // name; saved drafts keep what the founder saved.
+  assert.match(launchKitPanel, /const displayName = displayProductName\(product\.name, product\.short_name\)/);
+  assert.match(launchKitPanel, /name: displayName\.length > 60 \? suggestedShortName\(product\.name\) \?\? displayName : displayName/);
 });
 
 test("without Pro the studio is visible, locked, and offers the upgrade in place", () => {
@@ -102,4 +104,18 @@ test("select arrows have room on the right everywhere, and empty-state buttons s
   assert.match(css, /background-position:right 14px center!important/);
   assert.match(css, /\.empty-state a:not\(\.button\) \{ color: var\(--accent\)/);
   assert.doesNotMatch(css, /\.empty-state a \{ color: var\(--accent\)/);
+});
+
+test("a listing name over 60 characters never blocks saving product information",async()=>{
+  const { initialProductName } = await import("../../components/OwnerDashboard");
+  const long = "YourHour - Pay less, Get more. #1 product gets featured on the homepage.";
+  assert.deepEqual(initialProductName({ name: long, shortName: null, displayName: long }), { value: "YourHour", suggested: true });
+  assert.deepEqual(initialProductName({ name: long, shortName: "Your Hour", displayName: "Your Hour" }), { value: "Your Hour", suggested: false });
+  assert.deepEqual(initialProductName({ name: "Keep Him Walking", shortName: null, displayName: "Keep Him Walking" }), { value: "Keep Him Walking", suggested: false });
+  const noSeparator = "A".repeat(72);
+  assert.equal(initialProductName({ name: noSeparator, shortName: null, displayName: noSeparator }).value.length, 60);
+  const dashboard = readFileSync(new URL("../../components/OwnerDashboard.tsx", import.meta.url), "utf8");
+  // The result sits beside Save, and a rejected field is focused.
+  assert.match(dashboard, /<div className="form-save-row">[\s\S]*productResult/);
+  assert.match(dashboard, /form\.elements\.namedItem\(caught\.field\)/);
 });

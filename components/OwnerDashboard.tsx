@@ -11,12 +11,31 @@ import { ProBadge } from "@/components/ProBadge";
 import { CategoryPicker } from "@/components/CategoryPicker";
 import { PricingFields } from "@/components/PricingFields";
 import { OWNER_TABS, ownerTabHref, type OwnerTab } from "@/lib/owner-tabs";
+import { suggestedShortName } from "@/lib/display-text";
+
+/** A failed save, carrying the form field the server rejected when it names one. */
+class SaveError extends Error {
+  constructor(message: string, readonly field?: string) { super(message); }
+}
 
 async function jsonRequest(url: string, init: RequestInit) {
   const response = await fetch(url, init);
-  const result = await response.json() as { error?: string; message?: string };
-  if (!response.ok) throw new Error(result.error || "Could not save changes.");
+  const result = await response.json().catch(() => ({})) as { error?: string; message?: string; field?: string };
+  if (!response.ok) throw new SaveError(result.error || "Could not save changes.", result.field);
   return result;
+}
+
+const PRODUCT_NAME_MAX = 60;
+
+/**
+ * What the Product name field starts with. A saved short name wins. A legacy listing name
+ * longer than the field ("Brand - tagline") would fail validation on every save, so the
+ * field starts from the brand part instead and says so.
+ */
+export function initialProductName(product: { name: string; shortName: string | null; displayName: string }): { value: string; suggested: boolean } {
+  if (product.shortName) return { value: product.shortName, suggested: false };
+  if (product.displayName.length <= PRODUCT_NAME_MAX) return { value: product.displayName, suggested: false };
+  return { value: suggestedShortName(product.name) ?? product.displayName.slice(0, PRODUCT_NAME_MAX).trim(), suggested: true };
 }
 
 type Evidence = { id: string; metricType: string; url: string; note: string | null; status: string };
@@ -39,6 +58,9 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
   const [updates, setUpdates] = useState(workspaceUpdates);
   const [evidenceItems, setEvidenceItems] = useState(evidence);
 
+  const productName = initialProductName(product);
+  const [nameSuggested, setNameSuggested] = useState(productName.suggested);
+  const [productResult, setProductResult] = useState<{ ok: boolean; text: string } | null>(null);
   function start(action: string) { setBusy(action); setNotice(""); setError(""); }
   function failed(caught: unknown, fallback: string) { setError(caught instanceof Error ? caught.message : fallback); }
 
@@ -65,13 +87,20 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
     return () => window.clearInterval(timer);
   }, [checkStatus, currentStatus]);
 
+  // The product form is long, so its result is shown beside its Save button rather than at
+  // the top of the tab, and a rejected field is focused so the problem is on screen.
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); start("product");
+    event.preventDefault(); start("product"); setProductResult(null);
+    const form = event.currentTarget;
     try {
-      const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const body = Object.fromEntries(new FormData(form).entries());
       await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      setNotice("Product information saved.");
-    } catch (caught) { failed(caught, "Could not save product information."); } finally { setBusy(""); }
+      setProductResult({ ok: true, text: "Product information saved." }); setNameSuggested(false);
+    } catch (caught) {
+      setProductResult({ ok: false, text: caught instanceof Error ? caught.message : "Could not save product information." });
+      const field = caught instanceof SaveError && caught.field ? form.elements.namedItem(caught.field) : null;
+      if (field instanceof HTMLElement) field.focus();
+    } finally { setBusy(""); }
   }
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
@@ -183,12 +212,13 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
     {tab === "overview" ? <div className="owner-tab-panel">
       {currentStatus === "published" ? <section className="owner-growth-summary manager-card"><h2>Your product activity</h2><div>{[["Qualified profile views",growth.listingViews],["Qualified outbound clicks",growth.outboundClicks],["Current followers",growth.followers],["Visible discussion posts",growth.comments],["Current launch votes",growth.launchVotes]].map(([label,value])=><span key={String(label)}><strong>{value.toLocaleString()}</strong><small>{label}</small></span>)}</div><p>Views and clicks are all-time qualified FounderTrail events; followers and visible posts are current totals. Launch votes are separate from historical BidIndex support. Pro never changes organic launch order.</p></section> : null}
       <section className="manager-card"><h2>Product information</h2><form className="submission-form compact-form" onSubmit={saveProduct}>
-        <label>Product name <small>Your product&apos;s name only; put its tagline below.</small><input name="shortName" required maxLength={60} defaultValue={product.displayName} placeholder="e.g. Atlas" /></label>
+        <label>Product name <small>Your product&apos;s name only; put its tagline below.</small><input name="shortName" required maxLength={PRODUCT_NAME_MAX} defaultValue={productName.value} placeholder="e.g. Atlas" aria-describedby={nameSuggested ? "product-name-suggestion" : undefined} /></label>
+        {nameSuggested ? <p id="product-name-suggestion" className="field-help name-suggestion">Your listing name is {product.displayName.length} characters, over the {PRODUCT_NAME_MAX}-character limit, so we suggested &ldquo;{productName.value}&rdquo;. Edit it if needed, then save.</p> : null}
         <label>One-line description <small>160 characters maximum</small><input name="tagline" required maxLength={160} defaultValue={product.tagline} placeholder="e.g. Turn support questions into clear, searchable answers." /></label>
         <div className="form-grid"><label>Founder name <small>Optional</small><input name="founderName" maxLength={120} defaultValue={product.founderName ?? ""} placeholder="e.g. Alex Smith" /></label><label>Founder X/social handle <small>Optional</small><input name="founderSocialHandle" maxLength={120} defaultValue={product.founderSocialHandle ?? ""} placeholder="e.g. @alexsmith" /></label></div>
         <CategoryPicker initial={product.categorySlugs} />
         <PricingFields pricing={product.pricing} />
-        <button className="button button-primary" disabled={busy === "product"}>{busy === "product" ? "Saving…" : "Save product"}</button>
+        <div className="form-save-row"><button className="button button-primary" disabled={busy === "product"}>{busy === "product" ? "Saving…" : "Save product"}</button>{productResult ? <p className={productResult.ok ? "form-save-status is-saved" : "form-error"} role={productResult.ok ? "status" : "alert"}>{productResult.text}</p> : null}</div>
       </form></section>
       <section className="manager-card"><h2>Logo and screenshots</h2><div className="owner-media-logo"><ProductLogo productName={product.displayName} productUrl={product.websiteUrl} imageUrl={logo?.url ?? product.logoUrl} className="product-detail-logo" /><form className="compact-upload" onSubmit={(event) => uploadMedia(event, "logo")}><label>Replace logo<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required /></label><small>PNG, JPEG or WebP. Maximum 2 MB.</small><button className="button button-secondary" disabled={busy === "media-logo"}>{busy === "media-logo" ? "Uploading…" : "Replace logo"}</button></form></div>
         <div className="screenshot-manager-heading"><div><strong>Screenshots</strong><small>{screenshots.length} of 4</small></div>{screenshots.length < 4 ? <form className="compact-upload screenshot-upload" onSubmit={(event) => uploadMedia(event, "screenshot")}><label>Add screenshots<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required /></label><button className="button button-secondary" disabled={busy === "media-screenshot"}>{busy === "media-screenshot" ? "Uploading…" : "Add screenshot"}</button></form> : null}</div>
