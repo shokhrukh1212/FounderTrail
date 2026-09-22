@@ -2,6 +2,22 @@ import "server-only";
 import { config } from "./config";
 import { query } from "./db";
 
+let warnedAboutMissingProSchema = false;
+
+async function proEntitlementSelect(): Promise<string> {
+  const rows = await query<{ available: boolean }>(
+    `SELECT to_regclass('public.pro_entitlements') IS NOT NULL AS available`,
+  );
+  if (rows[0]?.available) {
+    return `EXISTS(SELECT 1 FROM pro_entitlements pe WHERE pe.product_id=p.id AND pe.status='active')`;
+  }
+  if (!warnedAboutMissingProSchema) {
+    warnedAboutMissingProSchema = true;
+    console.warn("FounderTrail Pro migration 016 is not applied; rendering discovery without Pro badges.");
+  }
+  return "false";
+}
+
 export type FounderTrailView = "this_week" | "discover" | "updates";
 export type DiscoverySort = "most_upvoted" | "newest";
 
@@ -85,6 +101,7 @@ export async function getFounderTrailDiscovery(input: {
   const order = input.view === "this_week"
     ? `launch_votes DESC,pl.approved_at,p.id`
     : input.sort === "newest" ? `p.created_at DESC,p.id` : `all_time_upvotes DESC,p.created_at,p.id`;
+  const isPro = await proEntitlementSelect();
   const rows = await query<StartupRow>(`SELECT p.id::text,p.slug,p.website_url,p.name,p.tagline,
       COALESCE((SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1),
         (SELECT '/api/products/'||p.slug||'/logo' FROM product_submission_metadata sm WHERE sm.product_id=p.id AND sm.extracted_logo_url IS NOT NULL LIMIT 1)) AS logo_url,
@@ -96,7 +113,7 @@ export async function getFounderTrailDiscovery(input: {
       pl.id::text AS launch_id,
       CASE WHEN pl.id IS NULL THEN 0 ELSE (SELECT count(*)::int FROM launch_votes lv WHERE lv.launch_id=pl.id AND lv.active) END AS launch_votes,
       CASE WHEN $${userParameter}::text IS NULL THEN false ELSE EXISTS(SELECT 1 FROM product_follows f WHERE f.product_id=p.id AND f.user_id=$${userParameter}) END AS followed
-      ,EXISTS(SELECT 1 FROM pro_entitlements pe WHERE pe.product_id=p.id AND pe.status='active') AS is_pro
+      ,${isPro} AS is_pro
     ${base} ORDER BY ${order} LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
   const weekRows = input.view === "this_week" ? await query<{ starts_at: Date; ends_at: Date }>(
     `SELECT starts_at,ends_at FROM launch_weeks WHERE starts_at<=now() AND now()<ends_at AND state IN ('scheduled','active') LIMIT 1`,

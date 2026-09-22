@@ -17,6 +17,17 @@ import {
 } from "./pro-launch-policy";
 
 const PRO_INVENTORY_LOCK = 8_140_25_04;
+let warnedAboutMissingSchema = false;
+
+function missingProSchema(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "42P01";
+}
+
+function warnMissingSchema(): void {
+  if (warnedAboutMissingSchema) return;
+  warnedAboutMissingSchema = true;
+  console.warn("FounderTrail Pro migration 016 is not applied; Pro features are temporarily unavailable.");
+}
 
 export type ProAvailability = {
   completed: number;
@@ -33,14 +44,21 @@ export type ProState = {
 };
 
 export async function getProAvailability(environment: ProEnvironment = config.dodoPayments.environment): Promise<ProAvailability> {
-  const rows = await query<{ completed: number; reserved: number; allocated: number }>(
-    `SELECT
-       count(*) FILTER (WHERE intro_slot IS NOT NULL AND paid_at IS NOT NULL)::int AS completed,
-       count(*) FILTER (WHERE intro_slot IS NOT NULL AND paid_at IS NULL AND status IN ('held','checkout_created','processing'))::int AS reserved,
-       count(*) FILTER (WHERE intro_slot IS NOT NULL)::int AS allocated
-     FROM pro_launch_orders WHERE provider_environment=$1`,
-    [environment],
-  );
+  let rows: Array<{ completed: number; reserved: number; allocated: number }>;
+  try {
+    rows = await query<{ completed: number; reserved: number; allocated: number }>(
+      `SELECT
+         count(*) FILTER (WHERE intro_slot IS NOT NULL AND paid_at IS NOT NULL)::int AS completed,
+         count(*) FILTER (WHERE intro_slot IS NOT NULL AND paid_at IS NULL AND status IN ('held','checkout_created','processing'))::int AS reserved,
+         count(*) FILTER (WHERE intro_slot IS NOT NULL)::int AS allocated
+       FROM pro_launch_orders WHERE provider_environment=$1`,
+      [environment],
+    );
+  } catch (error) {
+    if (!missingProSchema(error)) throw error;
+    warnMissingSchema();
+    return { completed: 0, reserved: 0, available: 0, currentPriceMinor: PRO_STANDARD_PRICE_MINOR, currency: PRO_CURRENCY };
+  }
   const row = rows[0] ?? { completed: 0, reserved: 0, allocated: 0 };
   const available = Math.max(0, PRO_INTRO_LIMIT - Number(row.allocated));
   return {
@@ -53,10 +71,17 @@ export async function getProAvailability(environment: ProEnvironment = config.do
 }
 
 export async function getProState(productId: string): Promise<ProState> {
-  const rows = await query<{ status: ProEntitlementStatus; source: "purchase" | "admin_grant"; activated_at: Date }>(
-    `SELECT status,source,activated_at FROM pro_entitlements WHERE product_id=$1::uuid`,
-    [productId],
-  );
+  let rows: Array<{ status: ProEntitlementStatus; source: "purchase" | "admin_grant"; activated_at: Date }>;
+  try {
+    rows = await query<{ status: ProEntitlementStatus; source: "purchase" | "admin_grant"; activated_at: Date }>(
+      `SELECT status,source,activated_at FROM pro_entitlements WHERE product_id=$1::uuid`,
+      [productId],
+    );
+  } catch (error) {
+    if (!missingProSchema(error)) throw error;
+    warnMissingSchema();
+    return { status: null, source: null, activatedAt: null };
+  }
   const row = rows[0];
   return row
     ? { status: row.status, source: row.source, activatedAt: new Date(row.activated_at) }

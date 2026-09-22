@@ -41,6 +41,8 @@ test("intro allocation has twenty monotonic slots and a server-owned price", () 
   assert.match(proLaunch, /pg_advisory_xact_lock/);
   assert.match(proLaunch, /priorIntro/);
   assert.match(proLaunch, /paid_at IS NOT NULL/);
+  assert.match(proLaunch, /error\.code === "42P01"/);
+  assert.match(proLaunch, /Pro features are temporarily unavailable/);
 });
 
 test("refund and dispute policy is monotonic", () => {

@@ -40,7 +40,9 @@ test("legacy reconciliation is isolated from the new public product", () => {
 
 test("Pro status is display-only and cannot change organic order", () => {
   const discovery = data.slice(data.indexOf("getFounderTrailDiscovery"), data.indexOf("getActiveSponsors"));
-  assert.match(discovery, /pro_entitlements/);
+  assert.match(data, /pro_entitlements/);
+  assert.match(data, /to_regclass\('public\.pro_entitlements'\)/);
+  assert.match(data, /return "false"/);
   assert.match(discovery, /AS is_pro/);
   assert.match(discovery, /ORDER BY/);
   const order = discovery.slice(discovery.lastIndexOf("ORDER BY"));
