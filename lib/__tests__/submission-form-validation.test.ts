@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   logoFileError,
   screenshotFilesError,
+  SUBMISSION_FIELDS,
+  SUBMISSION_STEPS,
   validateSubmissionForm,
+  validateSubmissionStep,
 } from "../submission-form-validation";
 
 const submissionFormSource = readFileSync(new URL("../../components/SubmissionForm.tsx", import.meta.url), "utf8");
@@ -15,6 +18,7 @@ function validForm(): FormData {
   form.set("name", "Example product");
   form.set("tagline", "A concise description of the product.");
   form.set("categoryId", "1");
+  form.set("pricingModel", "unknown");
   form.set("contactEmail", "founder@example.com");
   form.set("ownershipConsent", "on");
   return form;
@@ -55,4 +59,101 @@ test("submission UI renders inline accessible errors and focuses the first inval
   assert.match(submissionFormSource, /className="field-error" role="alert"/);
   assert.match(submissionFormSource, /focusField\(firstInvalid\)/);
   assert.match(submissionFormSource, /isSubmissionField\(result\.field\)/);
+});
+
+test("a pricing model must be chosen, and each step validates only its own fields", () => {
+  const missing = validForm();
+  missing.delete("pricingModel");
+  assert.equal(validateSubmissionForm(missing).pricingModel, "Choose a pricing model.");
+
+  // Step 1 only owns the website, so an empty name must not block leaving it.
+  const website = new FormData();
+  website.set("websiteUrl", "https://product.example");
+  assert.deepEqual(validateSubmissionStep(website, 1), {});
+  assert.deepEqual(validateSubmissionStep(website, 2), {
+    name: "Enter a product name using 80 characters or fewer.",
+    tagline: "Add a one-line description using 160 characters or fewer.",
+    categoryId: "Choose a category.",
+    pricingModel: "Choose a pricing model.",
+  });
+
+  // Every field belongs to exactly one step.
+  const owned = [...SUBMISSION_STEPS[1], ...SUBMISSION_STEPS[2], ...SUBMISSION_STEPS[3]];
+  assert.deepEqual([...owned].sort(), [...SUBMISSION_FIELDS].sort());
+  assert.equal(new Set(owned).size, owned.length);
+});
+
+test("the three-step form keeps every field in the submitted payload", () => {
+  // Inactive steps are hidden, never unmounted: an unmounted input is absent from
+  // FormData, which would silently drop whatever the founder already typed.
+  assert.match(submissionFormSource, /fieldset hidden=\{step !== 1\}/);
+  assert.match(submissionFormSource, /fieldset hidden=\{step !== 2\}/);
+  assert.match(submissionFormSource, /fieldset hidden=\{step !== 3\}/);
+  assert.doesNotMatch(submissionFormSource, /step === 2 \?\s*</);
+  assert.match(readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8"), /\.submission-form fieldset\[hidden\]\{display:none\}/);
+});
+
+test("a fetch never overwrites a field the founder already edited", () => {
+  assert.match(submissionFormSource, /edited\.current\.add\("name"\)/);
+  assert.match(submissionFormSource, /edited\.current\.add\("tagline"\)/);
+  assert.match(submissionFormSource, /if \(!edited\.current\.has\("name"\)\) setName/);
+  assert.match(submissionFormSource, /if \(!edited\.current\.has\("tagline"\)\) setTagline/);
+});
+
+test("a duplicate domain is caught at step 1 and the shared-domain option only appears then", () => {
+  assert.match(submissionFormSource, /if \(result\.duplicate\)/);
+  assert.match(submissionFormSource, /duplicate \? <div className="duplicate-notice"/);
+  // The confusing checkbox must live inside the duplicate branch, not the default form.
+  const notice = submissionFormSource.slice(submissionFormSource.indexOf('duplicate-notice'));
+  const noticeEnd = notice.indexOf("</div> : null}");
+  assert.ok(notice.slice(0, noticeEnd).includes('name="distinctProduct"'), "distinctProduct belongs in the duplicate branch");
+  assert.equal(submissionFormSource.split('name="distinctProduct"').length - 1, 1);
+});
+
+test("screenshots collect accessible alt text that reaches the database", () => {
+  assert.match(submissionFormSource, /data\.append\("screenshotAlt"/);
+  const productsRoute = readFileSync(new URL("../../app/api/products/route.ts", import.meta.url), "utf8");
+  assert.match(productsRoute, /form\.getAll\("screenshotAlt"\)/);
+  assert.match(productsRoute, /position, alt_text/);
+  assert.match(productsRoute, /slice\(0, 240\)/); // the column caps alt_text at 240 characters
+});
+
+test("the duplicate-domain rule has exactly one implementation", () => {
+  const productsRoute = readFileSync(new URL("../../app/api/products/route.ts", import.meta.url), "utf8");
+  const metadataRoute = readFileSync(new URL("../../app/api/products/metadata/route.ts", import.meta.url), "utf8");
+  assert.match(productsRoute, /findDomainDuplicate\(/);
+  assert.match(metadataRoute, /findDomainDuplicate\(/);
+  // Neither route may re-query the rule itself.
+  assert.doesNotMatch(productsRoute, /normalized_domain=\$1 AND status IN/);
+  assert.doesNotMatch(metadataRoute, /normalized_domain=\$1 AND status IN/);
+});
+
+test("only a published duplicate is named", () => {
+  const helper = readFileSync(new URL("../duplicate-domain.ts", import.meta.url), "utf8");
+  assert.match(helper, /kind: "own_draft", slug: null, name: null/);
+  assert.match(helper, /kind: "under_review", slug: null, name: null/);
+  assert.match(helper, /kind: "published", slug: duplicate\.slug, name: duplicate\.name/);
+});
+
+test("the founder's contact email is prefilled but still described as private", () => {
+  assert.match(submissionFormSource, /defaultValue=\{accountEmail\}/);
+  assert.match(submissionFormSource, /defaultValue=\{accountName\}/);
+  assert.match(submissionFormSource, /Never displayed publicly/);
+  // Marketing consent is its own unchecked box, separate from the attestation.
+  const marketing = submissionFormSource.match(/name="marketingOptIn"[^>]*>/)?.[0] ?? "";
+  assert.doesNotMatch(marketing, /checked|required/);
+});
+
+test("a duplicate keeps the founder on step 1 without losing what was fetched", () => {
+  // The shared-domain checkbox lives inside the duplicate notice; dismissing the notice
+  // would unmount it and silently drop distinctProduct from the payload.
+  assert.doesNotMatch(submissionFormSource, /setDuplicate\(null\); setStep\(2\)/);
+  assert.match(submissionFormSource, /onClick=\{\(\) => setStep\(2\)\}>Continue anyway/);
+  // The metadata is applied before the duplicate branch returns, so "Continue anyway"
+  // still has the prefilled name, tagline and signed token.
+  const applyAt = submissionFormSource.indexOf("setMetadataToken(result.token");
+  const duplicateAt = submissionFormSource.indexOf("if (result.duplicate)");
+  assert.ok(applyAt > 0 && duplicateAt > applyAt, "metadata must be applied before the duplicate branch");
+  // Leaving step 1 by hand still validates the website URL.
+  assert.match(submissionFormSource, /setFetched\(true\); goToStep\(2\);/);
 });

@@ -1,4 +1,5 @@
 import "server-only";
+import { config } from "./config";
 import { query } from "./db";
 
 export type ProductCommunityState = {
@@ -13,7 +14,7 @@ export type ProductCommunityState = {
   outboundClicks: number;
   upvoted: boolean;
   isOwner: boolean;
-  ownershipState: "claimed" | "pending" | "unclaimed";
+  ownershipState: "claimed" | "pending" | "disputed" | "unclaimed";
   launch: null | {
     id: string;
     votes: number;
@@ -59,7 +60,7 @@ export async function getProductCommunityState(productId: string, userId: string
     outbound_clicks: number;
     upvoted: boolean;
     is_owner: boolean;
-    ownership_state: "claimed" | "pending" | "unclaimed";
+    ownership_state: "claimed" | "pending" | "disputed" | "unclaimed";
     launch_id: string | null;
     launch_votes: number;
     launch_voted: boolean;
@@ -80,7 +81,10 @@ export async function getProductCommunityState(productId: string, userId: string
             CASE WHEN $2::text IS NULL THEN false ELSE EXISTS(
               SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2
             ) END AS is_owner,
-            CASE WHEN EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) THEN 'claimed'
+            CASE WHEN $2::text IS NOT NULL AND EXISTS(
+                   SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.requester_id=$2 AND pc.state='disputed'
+                 ) THEN 'disputed'
+                 WHEN EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) THEN 'claimed'
                  WHEN EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='pending') THEN 'pending'
                  ELSE 'unclaimed' END AS ownership_state,
             pl.id::text AS launch_id,
@@ -157,6 +161,9 @@ export async function getProductComments(productId: string, userId: string | nul
 }
 
 export async function getPublishedConnectedMetrics(productId: string): Promise<ConnectedMetric[]> {
+  // One gate for the whole public surface: the product page section, its subnav link
+  // and anything else reading published metrics all go through here.
+  if (!config.founderMetricsEnabled) return [];
   const rows = await query<{
     metric_type: "revenue_30d" | "mrr";
     currency: string;

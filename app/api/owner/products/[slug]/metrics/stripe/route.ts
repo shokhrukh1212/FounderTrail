@@ -62,7 +62,7 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
       await client.query(`DELETE FROM metric_connection_scopes WHERE connection_id=$1::uuid`, [id]);
       const scopes = scopeMode === "account_wide" ? ["*"] : requested;
       for (const providerProductId of scopes) await client.query(`INSERT INTO metric_connection_scopes(connection_id,provider,provider_account_id,provider_product_id) VALUES($1::uuid,'stripe',$2,$3)`, [id, inspection.accountId, providerProductId]);
-      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'user','metrics.stripe.connected',$2::uuid,jsonb_build_object('account',$3,'scope',$4,'livemode',$5))`, [user.id, product.id, inspection.accountId, scopeMode, inspection.livemode]);
+      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'user','metrics.stripe.connected',$2::uuid,jsonb_build_object('account',$3::text,'scope',$4::text,'livemode',$5::boolean))`, [user.id, product.id, inspection.accountId, scopeMode, inspection.livemode]);
       return id;
     });
   } catch (error) {

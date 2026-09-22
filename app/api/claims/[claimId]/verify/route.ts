@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import { faultBody, reportServerError } from "@/lib/observability";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import { consumeRateLimit } from "@/lib/rate-limit";
@@ -47,19 +48,19 @@ export async function POST(request: Request, context: RouteContext<"/api/claims/
       const current = locked.rows[0];
       if (!current || current.challenge_expires_at.getTime() <= Date.now() || !sameHash(current.challenge_token_hash, presentedHash)) throw new Error("CLAIM_CHANGED");
       const owner = await client.query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid FOR UPDATE`, [current.product_id]);
-      if (owner.rowCount){await client.query(`UPDATE product_claims SET state='disputed',challenge_token_hash=NULL,challenge_expires_at=NULL,evidence=jsonb_build_object('domain',$1,'path','/.well-known/foundertrail-claim.txt','domain_verified',true,'competing_owner',true),reviewed_at=now(),updated_at=now() WHERE id=$2::uuid`,[claim.normalized_domain,claimId]);await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,claim_id,details) VALUES($1,'user','product.claim.domain_disputed',$2::uuid,$3::uuid,jsonb_build_object('domain',$4))`,[user.id,current.product_id,claimId,claim.normalized_domain]);return "disputed" as const}
+      if (owner.rowCount){await client.query(`UPDATE product_claims SET state='disputed',challenge_token_hash=NULL,challenge_expires_at=NULL,evidence=jsonb_build_object('domain',$1::text,'path','/.well-known/foundertrail-claim.txt','domain_verified',true,'competing_owner',true),reviewed_at=now(),updated_at=now() WHERE id=$2::uuid`,[claim.normalized_domain,claimId]);await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,claim_id,details) VALUES($1,'user','product.claim.domain_disputed',$2::uuid,$3::uuid,jsonb_build_object('domain',$4::text))`,[user.id,current.product_id,claimId,claim.normalized_domain]);return "disputed" as const}
       await client.query(
         `INSERT INTO product_owners(product_id,user_id,ownership_role,verified_at,verification_method)
          VALUES($1::uuid,$2,'owner',now(),'domain_file')`, [current.product_id, user.id],
       );
       await client.query(
         `UPDATE product_claims SET state='claimed',challenge_token_hash=NULL,challenge_expires_at=NULL,
-                evidence=jsonb_build_object('domain',$1,'path','/.well-known/foundertrail-claim.txt'),reviewed_at=now(),updated_at=now()
+                evidence=jsonb_build_object('domain',$1::text,'path','/.well-known/foundertrail-claim.txt'),reviewed_at=now(),updated_at=now()
           WHERE id=$2::uuid`, [claim.normalized_domain, claimId],
       );
       await client.query(
         `INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,claim_id,details)
-         VALUES($1,'user','product.claim.domain_verified',$2::uuid,$3::uuid,jsonb_build_object('domain',$4))`,
+         VALUES($1,'user','product.claim.domain_verified',$2::uuid,$3::uuid,jsonb_build_object('domain',$4::text))`,
         [user.id, current.product_id, claimId, claim.normalized_domain],
       );
       return "claimed" as const;
@@ -69,7 +70,7 @@ export async function POST(request: Request, context: RouteContext<"/api/claims/
     const code = error instanceof Error ? error.message : "";
     if (code === "RATE_LIMITED") return NextResponse.json({ error: "Too many checks. Try again later." }, { status: 429 });
     if (code === "CLAIM_CHANGED") return NextResponse.json({ error: "This claim changed or expired. Start again." }, { status: 409 });
-    console.error("claim verification failed", error instanceof Error ? error.message : "unknown");
-    return NextResponse.json({ error: "Could not complete the claim." }, { status: 500 });
+    const correlationId = reportServerError("claim.verify", error, { claimId });
+    return NextResponse.json(faultBody("Could not complete the claim.", correlationId), { status: 500 });
   }
 }

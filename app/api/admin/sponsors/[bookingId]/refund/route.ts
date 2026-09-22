@@ -19,9 +19,9 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/s
     const booking = found.rows[0];
     if (!booking?.dodo_payment_id || !["paid","conflict"].includes(booking.payment_status)) return null;
     await client.query(`UPDATE sponsor_bookings SET payment_status='refund_pending',booking_status='refund_pending',refund_requested_at=now(),updated_at=now() WHERE id=$1::uuid`, [bookingId]);
-    await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,booking_id,details) VALUES($1,'admin','sponsor.refund.requested',$2::uuid,jsonb_build_object('reason',$3))`, [actor?.id ?? null, bookingId, reason]);
+    await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,booking_id,details) VALUES($1,'admin','sponsor.refund.requested',$2::uuid,jsonb_build_object('reason',$3::text))`, [actor?.id ?? null, bookingId, reason]);
     await client.query(`INSERT INTO notification_jobs(job_type,dedupe_key,payload)
-      VALUES('sponsor_refund',$1,jsonb_build_object('bookingId',$2,'reason',$3))
+      VALUES('sponsor_refund',$1,jsonb_build_object('bookingId',$2::text,'reason',$3::text))
       ON CONFLICT(dedupe_key) DO UPDATE SET state=CASE WHEN notification_jobs.state='sent' THEN 'sent' ELSE 'pending' END,available_at=now(),last_error=NULL`, [`sponsor-refund:${bookingId}`, bookingId, reason]);
     return booking.dodo_payment_id;
   });
@@ -33,7 +33,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/s
     await query(`UPDATE notification_jobs SET state=$2,sent_at=CASE WHEN $2='sent' THEN now() ELSE sent_at END,available_at=CASE WHEN $2='failed' THEN now()+interval '1 hour' ELSE available_at END,last_error=NULL WHERE dedupe_key=$1`, [`sponsor-refund:${bookingId}`, succeeded ? "sent" : "failed"]);
     return NextResponse.json({ status: succeeded ? "refunded" : "refund_pending" });
   } catch (error) {
-    await query(`INSERT INTO notification_jobs(job_type,dedupe_key,payload,state,last_error) VALUES('sponsor_refund',$1,jsonb_build_object('bookingId',$2,'reason',$3),'failed',$4) ON CONFLICT(dedupe_key) DO UPDATE SET state='failed',last_error=excluded.last_error,available_at=now()`, [`sponsor-refund:${bookingId}`, bookingId, reason, error instanceof Error ? error.message.slice(0,500) : "provider error"]);
+    await query(`INSERT INTO notification_jobs(job_type,dedupe_key,payload,state,last_error) VALUES('sponsor_refund',$1,jsonb_build_object('bookingId',$2::text,'reason',$3::text),'failed',$4) ON CONFLICT(dedupe_key) DO UPDATE SET state='failed',last_error=excluded.last_error,available_at=now()`, [`sponsor-refund:${bookingId}`, bookingId, reason, error instanceof Error ? error.message.slice(0,500) : "provider error"]);
     return NextResponse.json({ status: "refund_pending" }, { status: 202 });
   }
 }

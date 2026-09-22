@@ -29,7 +29,7 @@ export function StartupRow({ product, position, weekly = false }: { product: Sta
     </div>
     <div className="startup-actions">
       <VoteButton slug={product.slug} initialCount={product.allTimeUpvotes} initialActive={product.upvoted} />
-      <a href={`/go/${product.slug}?source=directory`} target="_blank" rel="noopener noreferrer" className="text-link">Visit website ↗</a>
+      <a href={`/go/${product.slug}?source=directory`} target="_blank" rel="ugc noopener noreferrer" className="text-link">Visit website ↗</a>
       <FollowButton slug={product.slug} initialActive={product.followed} />
     </div>
   </article>;

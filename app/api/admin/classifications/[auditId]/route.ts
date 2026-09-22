@@ -42,7 +42,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/cl
     }
     await client.query(`UPDATE product_classification_audits SET review_state=$2,applied_at=CASE WHEN $2='applied' THEN now() ELSE NULL END WHERE id=$1::bigint`, [auditId, body.action === "apply" ? "applied" : "rejected"]);
     await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details)
-      VALUES($1,'admin',$2,$3::uuid,jsonb_build_object('classificationAuditId',$4::bigint,'kind',$5,'value',$6))`,
+      VALUES($1,'admin',$2,$3::uuid,jsonb_build_object('classificationAuditId',$4::bigint,'kind',$5::text,'value',$6::text))`,
       [actor?.id ?? null, body.action === "apply" ? "classification_applied" : "classification_dismissed", item.product_id, auditId, item.classification_kind, value || null]);
     return true;
   });

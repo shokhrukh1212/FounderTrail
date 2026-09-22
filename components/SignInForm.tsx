@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
-
-function safeReturnTo(value: string): string {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
+import { safeReturnTo } from "@/lib/return-to";
 
 const authErrors: Record<string, string> = {
   access_denied: "Google sign-in was cancelled or this account is not allowed yet.",

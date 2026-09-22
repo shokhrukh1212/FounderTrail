@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { faultBody, reportServerError } from "@/lib/observability";
 
 import { currentUserFromHeaders } from "@/lib/auth";
 import { ownerCredentialMatches } from "@/lib/owner-auth";
@@ -33,6 +34,7 @@ export async function POST(request: Request, context: RouteContext<"/api/product
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "RATE_LIMITED") return NextResponse.json({ error: "Too many proof attempts. Try again later." }, { status: 429 });
-    return NextResponse.json({ error: "Could not complete the claim." }, { status: 500 });
+    const correlationId = reportServerError("claim.legacy", error, { slug });
+    return NextResponse.json(faultBody("Could not complete the claim.", correlationId), { status: 500 });
   }
 }

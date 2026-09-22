@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { faultBody, reportServerError } from "@/lib/observability";
 
 import { validAdminRequest } from "@/lib/admin-auth";
 import { currentUserFromHeaders } from "@/lib/auth";
@@ -24,12 +25,13 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/cl
         await client.query(`INSERT INTO product_owners(product_id,user_id,ownership_role,verified_at,verification_method,approved_by) VALUES($1::uuid,$2,'owner',now(),'manual_admin',$3)`, [claim.product_id, claim.requester_id, actor?.id ?? null]);
       }
       await client.query(`UPDATE product_claims SET state=$2,reviewed_by=$3,reviewed_at=now(),reviewer_reason=$4,challenge_token_hash=NULL,challenge_expires_at=NULL,updated_at=now() WHERE id=$1::uuid`, [claimId, action === "approve" ? "claimed" : "rejected", actor?.id ?? null, reason]);
-      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,claim_id,details) VALUES($1,'admin',$2,$3::uuid,$4::uuid,jsonb_build_object('reason',$5))`, [actor?.id ?? null, `product.claim.${action}d`, claim.product_id, claimId, reason]);
+      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,claim_id,details) VALUES($1,'admin',$2,$3::uuid,$4::uuid,jsonb_build_object('reason',$5::text))`, [actor?.id ?? null, `product.claim.${action}d`, claim.product_id, claimId, reason]);
       return true;
     });
     return changed ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Claim not found or already reviewed." }, { status: 404 });
   } catch (error) {
     if (error instanceof Error && error.message === "ALREADY_OWNED") return NextResponse.json({ error: "This product already has an owner. Resolve the dispute before changing ownership." }, { status: 409 });
-    return NextResponse.json({ error: "Could not review the claim." }, { status: 500 });
+    const correlationId = reportServerError("claim.review", error, { claimId, action });
+    return NextResponse.json(faultBody("Could not review the claim.", correlationId), { status: 500 });
   }
 }

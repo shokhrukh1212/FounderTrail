@@ -89,7 +89,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/products
       ) : null;
       await client.query(
         `INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details)
-         VALUES($1,'user',$2,$3::uuid,jsonb_build_object('active',$4,'launchEligible',$5))`,
+         VALUES($1,'user',$2,$3::uuid,jsonb_build_object('active',$4::boolean,'launchEligible',$5::boolean))`,
         [user.id, body.active ? "product_upvote_set" : "product_upvote_unset", product.id, body.active, launchEligible],
       );
       return { active: Boolean(vote.rows[0]?.active), count: totals.rows[0]?.count ?? 0, weeklyCount: weekly?.rows[0]?.count ?? null };

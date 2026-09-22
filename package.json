@@ -20,7 +20,15 @@
     "seed:demo": "tsx --env-file=.env.local scripts/seed-demo.ts",
     "test": "node --import tsx --test lib/__tests__/*.test.ts",
     "reset": "tsx --env-file=.env.local scripts/reset-board.ts",
-    "votes:set": "tsx --env-file=.env.local scripts/set-product-upvotes.ts"
+    "votes:set": "tsx --env-file=.env.local scripts/set-product-upvotes.ts",
+    "test:db": "tsx --env-file=.env.local scripts/db-contract-check.ts",
+    "diagnose:claim": "tsx --env-file=.env.local scripts/diagnose-claim.ts",
+    "migrate:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/migrate.ts",
+    "migrate:test:down": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/migrate-down.ts",
+    "foundertrail:baseline:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/foundertrail-baseline.ts baseline",
+    "foundertrail:reconcile:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/foundertrail-baseline.ts reconcile",
+    "dev:test": "USE_TEST_DATABASE=true next dev",
+    "seed:sponsor": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/seed-sponsor-demo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",

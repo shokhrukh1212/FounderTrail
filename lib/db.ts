@@ -13,11 +13,31 @@ declare global {
   var __yourhourPool: Pool | undefined;
 }
 
-function createPool(): Pool {
-  const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set. Run `vercel env pull`.");
+/**
+ * Which database this process talks to.
+ *
+ * `USE_TEST_DATABASE=true` is an explicit, per-command opt-in that points migrations,
+ * baselines and reconciliation at the rehearsal branch without anyone editing
+ * DATABASE_URL and forgetting to put it back. It never defaults on.
+ */
+export function resolveConnectionString(): string {
+  if (process.env.USE_TEST_DATABASE === "true") {
+    const rehearsal = process.env.TEST_DATABASE_URL?.trim();
+    if (!rehearsal) throw new Error("USE_TEST_DATABASE=true but TEST_DATABASE_URL is not set.");
+    return rehearsal;
   }
+  const live = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+  if (!live) throw new Error("DATABASE_URL is not set. Run `vercel env pull`.");
+  return live;
+}
+
+/** Hostname only, for operator confirmation. Never returns credentials. */
+export function databaseHost(): string {
+  try { return new URL(resolveConnectionString()).hostname; } catch { return "unknown"; }
+}
+
+function createPool(): Pool {
+  const connectionString = resolveConnectionString();
   return new Pool({
     // pg currently aliases sslmode=require to verify-full but will adopt weaker libpq
     // semantics in v9. Pin the strong mode now so the upgrade can't silently downgrade TLS.

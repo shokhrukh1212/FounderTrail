@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { findDomainDuplicate } from "@/lib/duplicate-domain";
 import type { PoolClient } from "pg";
 import { createHash, randomBytes } from "node:crypto";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { newBidIndexOwnerToken, hashBidIndexOwnerToken } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
-import { query, withTransaction } from "@/lib/db";
+import { withTransaction } from "@/lib/db";
 import { ensureFounderPreference } from "@/lib/email-preferences";
 import { validateProductSubmission } from "@/lib/product-validation";
 import { consumeRateLimit } from "@/lib/rate-limit";
@@ -38,17 +39,20 @@ export async function POST(request: Request) {
   const validated = validateProductSubmission(form);
   if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
   const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "pending";
-  const sameDomain = await query<{ slug: string; name: string; status: string; created_by_user_id: string | null }>(`SELECT slug,name,status,created_by_user_id FROM products WHERE normalized_domain=$1 AND status IN ('draft','pending','published') ORDER BY CASE status WHEN 'published' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,created_at LIMIT 1`, [validated.value.normalizedDomain]);
-  const duplicate = sameDomain[0];
+  // The same rule runs at step 1 of the form via /api/products/metadata, so the two
+  // must share one implementation or the messages drift apart.
+  const duplicate = await findDomainDuplicate(validated.value.normalizedDomain, user.id);
   if (duplicate && form.get("distinctProduct") !== "on") {
-    const isPublic = duplicate.status === "published";
-    return NextResponse.json({ error: isPublic ? "A product from this domain is already listed. Claim it, or confirm this is a distinct product on the same domain." : duplicate.created_by_user_id === user.id ? "You already have a draft or submission for this domain. Continue it from My products." : "A submission for this domain is already under review.", existingProduct: isPublic ? { slug: duplicate.slug, name: duplicate.name } : null }, { status: 409 });
+    return NextResponse.json({
+      error: duplicate.message,
+      existingProduct: duplicate.kind === "published" ? { slug: duplicate.slug, name: duplicate.name } : null,
+    }, { status: 409 });
   }
   const logoFiles = files(form, "logo");
   const screenshotFiles = files(form, "screenshots");
   if (logoFiles.length > 1) return NextResponse.json({ error: "Choose one logo only.", field: "logo" }, { status: 400 });
   if (screenshotFiles.length > 4) return NextResponse.json({ error: "Choose up to four screenshots.", field: "screenshots" }, { status: 400 });
-  const stored: Array<StoredImage & { kind: "logo" | "screenshot"; position: number }> = [];
+  const stored: Array<StoredImage & { kind: "logo" | "screenshot"; position: number; altText?: string | null }> = [];
   // A missing, expired, or www-normalized client token must not silently lose
   // a site's public logo. Re-fetch with the same SSRF-safe transport; failure
   // still returns editable fallback metadata and never blocks submission.
@@ -57,7 +61,8 @@ export async function POST(request: Request) {
   try {
     if (logoFiles[0]) stored.push({ ...(await validateAndStoreImage(logoFiles[0], "logo")), kind: "logo", position: 0 });
     else if(submittedMetadata?.logoUrl){try{const remote=await fetchPinnedPublic(submittedMetadata.logoUrl,"image/png,image/jpeg,image/webp",2*1024*1024,2);const mime=remote.contentType.split(";",1)[0];if(!["image/png","image/jpeg","image/webp"].includes(mime))throw new Error("UNSUPPORTED_IMAGE_TYPE");const ext=mime==="image/png"?"png":mime==="image/jpeg"?"jpg":"webp";const bytes=new ArrayBuffer(remote.bytes.length);new Uint8Array(bytes).set(remote.bytes);const remoteFile=new File([bytes],`metadata-logo.${ext}`,{type:mime});stored.push({...(await validateAndStoreImage(remoteFile,"logo")),kind:"logo",position:0});}catch{/* A metadata image failure never blocks manual submission. */}}
-    for (const [position, file] of screenshotFiles.entries()) stored.push({ ...(await validateAndStoreImage(file, "screenshot")), kind: "screenshot", position });
+    const screenshotAlts = form.getAll("screenshotAlt").map((entry) => (typeof entry === "string" ? entry.trim().slice(0, 240) : ""));
+    for (const [position, file] of screenshotFiles.entries()) stored.push({ ...(await validateAndStoreImage(file, "screenshot")), kind: "screenshot", position, altText: screenshotAlts[position] || null });
   } catch (error) {
     await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const code = error instanceof Error ? error.message : "UPLOAD_FAILED";
@@ -108,9 +113,9 @@ export async function POST(request: Request) {
       for (const image of stored) {
         await client.query(
           `INSERT INTO product_media
-             (product_id, kind, storage_key, public_url, mime_type, byte_size, width, height, position)
-           VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [productId, image.kind, image.storageKey, image.publicUrl, image.mimeType, image.byteSize, image.width, image.height, image.position],
+             (product_id, kind, storage_key, public_url, mime_type, byte_size, width, height, position, alt_text)
+           VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [productId, image.kind, image.storageKey, image.publicUrl, image.mimeType, image.byteSize, image.width, image.height, image.position, image.altText ?? null],
         );
       }
       return { id: productId, slug };

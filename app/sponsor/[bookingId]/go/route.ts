@@ -12,7 +12,7 @@ export async function GET(request: Request, context: RouteContext<"/sponsor/[boo
   const pageViewId = new URL(request.url).searchParams.get("pageViewId");
   const countable = Boolean(pageViewId && /^[0-9a-f-]{36}$/i.test(pageViewId) && !isObviousBot(request));
   const result = await withTransaction(async (client) => {
-    const rows = await client.query<{ destination_url: string }>(`SELECT destination_url FROM sponsor_bookings WHERE id=$1::uuid AND payment_status='paid' AND start_at<=now() AND now()<end_at AND booking_status IN ('scheduled','active')`, [bookingId]);
+    const rows = await client.query<{ destination_url: string }>(`SELECT destination_url FROM sponsor_bookings WHERE id=$1::uuid AND payment_status IN ('paid','complimentary') AND start_at<=now() AND now()<end_at AND booking_status IN ('scheduled','active')`, [bookingId]);
     const destination = rows.rows[0] ? publicHttpUrl(rows.rows[0].destination_url) : null;
     if (!destination?.ok) return null;
     if (countable) await client.query(`INSERT INTO sponsor_events(booking_id,page_view_id,visitor_hash,event_type,placement)

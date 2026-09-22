@@ -118,7 +118,11 @@ test("Dodo is the fixed sponsorship provider and browser returns cannot activate
   assert.match(sponsorship,/DODO_BUSINESS_MISMATCH/);
   assert.match(sponsorship,/DODO_ENVIRONMENT_MISMATCH/);
   assert.match(sponsorship,/product_cart\?\.length === 1/);
-  assert.match(sponsorship,/total_amount - tax !== config\.sponsorship\.priceMinor/);
+  // Validated against the price and currency this booking actually sold, so a 7-day
+  // payment cannot activate a 30-day placement.
+  assert.match(sponsorship,/total_amount - tax !== booking\.price_minor/);
+  assert.match(sponsorship,/event\.data\.currency !== booking\.currency/);
+  assert.match(sponsorship,/sponsorTier\(booking\.duration_days\)/);
   assert.match(sponsorship,/payment_conflict/);
   assert.match(dodoWebhook,/verifiedDodoWebhook/);
   assert.match(dodoWebhook,/ON CONFLICT\(webhook_id\) DO NOTHING/);

@@ -1,4 +1,5 @@
 import "server-only";
+import { config } from "./config";
 import { query } from "./db";
 
 export type FounderTrailView = "this_week" | "discover" | "updates";
@@ -117,15 +118,61 @@ export async function getUpdateFeed(page = 1, userId: string | null = null, foll
   return { updates: rows.map((row) => ({ id: row.id, productSlug: row.product_slug, productName: row.product_name, logoUrl: row.logo_url, type: row.type, title: row.title, body: row.body, linkUrl: row.link_url, publishedAt: new Date(row.published_at) })), total, page: current, pageCount };
 }
 
-export type ActiveSponsor = { id: string; productId: string; slug: string; name: string; tagline: string; logoUrl: string | null };
+export type ActiveSponsor = { id: string; productId: string; slug: string; name: string; tagline: string; logoUrl: string | null; category: string | null };
 
-export async function getActiveSponsor(): Promise<ActiveSponsor | null> {
-  const rows = await query<{ id: string; product_id: string; slug: string; name: string; tagline: string; logo_url: string | null }>(
+/**
+ * The sponsors currently running. Completely separate from the organic queries in this
+ * module: it never joins into, filters or reorders the product result set, so a paid
+ * placement cannot move an organic rank.
+ *
+ * Rotation is by fewest impressions served today, so with more than one active sponsor
+ * the exposure evens out instead of always favouring the earliest booking. It is computed
+ * on the server, so there is no hydration mismatch.
+ */
+export async function getActiveSponsors(options: { limit?: number; excludeProductId?: string } = {}): Promise<ActiveSponsor[]> {
+  const limit = Math.max(0, Math.min(options.limit ?? 3, 3));
+  if (limit === 0) return [];
+  const rows = await query<{ id: string; product_id: string; slug: string; name: string; tagline: string; logo_url: string | null; category: string | null }>(
     `SELECT b.id::text,b.product_id::text,p.slug,b.creative_name AS name,b.creative_tagline AS tagline,
-      (SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1) AS logo_url
+      (SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1) AS logo_url,
+      (SELECT c.name FROM categories c WHERE c.id=p.primary_category_id) AS category
       FROM sponsor_bookings b JOIN products p ON p.id=b.product_id
-      WHERE b.payment_status='paid' AND b.start_at<=now() AND now()<b.end_at AND b.booking_status IN ('scheduled','active')
-      ORDER BY b.start_at LIMIT 1`,
+      WHERE b.payment_status IN ('paid','complimentary')
+        AND b.start_at<=now() AND now()<b.end_at
+        AND b.booking_status IN ('scheduled','active')
+        AND ($2::uuid IS NULL OR b.product_id<>$2::uuid)
+      ORDER BY (
+        SELECT count(*) FROM sponsor_events e
+         WHERE e.booking_id=b.id AND e.event_type='impression' AND e.created_at>=date_trunc('day',now())
+      ) ASC, b.start_at, b.id
+      LIMIT $1`,
+    [limit, options.excludeProductId ?? null],
   );
-  return rows[0] ? { id: rows[0].id, productId: rows[0].product_id, slug: rows[0].slug, name: rows[0].name, tagline: rows[0].tagline, logoUrl: rows[0].logo_url } : null;
+  return rows.map((row) => ({
+    id: row.id, productId: row.product_id, slug: row.slug,
+    name: row.name, tagline: row.tagline, logoUrl: row.logo_url, category: row.category,
+  }));
+}
+
+export type SponsorDayAvailability = { date: string; used: number; capacity: number };
+
+/**
+ * Per-day capacity as used/total, for the Advertise page and the admin calendar. A day is
+ * "used" by any booking that overlaps it and holds inventory, including unexpired holds
+ * and pending refunds -- an open slot here is availability, never a sale.
+ */
+export async function getSponsorAvailability(from: Date, days: number): Promise<SponsorDayAvailability[]> {
+  const rows = await query<{ day: Date; used: number }>(
+    `WITH span AS (
+       SELECT generate_series(date_trunc('day',$1::timestamptz), date_trunc('day',$1::timestamptz) + make_interval(days => $2::int - 1), interval '1 day') AS day
+     )
+     SELECT span.day,
+            (SELECT count(DISTINCT b.slot_index)::int FROM sponsor_bookings b
+              WHERE b.booking_status IN ('held','scheduled','active','refund_pending')
+                AND tstzrange(b.start_at,b.end_at,'[)') && tstzrange(span.day, span.day + interval '1 day','[)')
+            ) AS used
+       FROM span ORDER BY span.day`,
+    [from, days],
+  );
+  return rows.map((row) => ({ date: row.day.toISOString(), used: row.used, capacity: config.sponsorship.slots }));
 }

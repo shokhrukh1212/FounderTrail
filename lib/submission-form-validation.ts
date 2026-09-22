@@ -3,6 +3,7 @@ export const SUBMISSION_FIELDS = [
   "name",
   "tagline",
   "categoryId",
+  "pricingModel",
   "contactEmail",
   "founderSocialHandle",
   "logo",
@@ -15,6 +16,19 @@ export type SubmissionFieldErrors = Partial<Record<SubmissionField, string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const PRICING_MODELS = new Set(["free", "freemium", "paid", "open_source", "contact", "unknown"]);
+
+/**
+ * Which fields each step of the submission flow owns. Advancing a step validates only
+ * that step, so a founder is never blocked by a field they have not reached yet.
+ */
+export const SUBMISSION_STEPS = {
+  1: ["websiteUrl"],
+  2: ["name", "tagline", "categoryId", "pricingModel", "logo", "screenshots"],
+  3: ["contactEmail", "founderSocialHandle", "ownershipConsent"],
+} as const satisfies Record<1 | 2 | 3, readonly SubmissionField[]>;
+
+export type SubmissionStep = keyof typeof SUBMISSION_STEPS;
 
 function value(form: FormData, name: string): string {
   const entry = form.get(name);
@@ -62,6 +76,7 @@ export function validateSubmissionForm(form: FormData): SubmissionFieldErrors {
   const tagline = value(form, "tagline");
   if (!tagline || tagline.length > 160) errors.tagline = "Add a one-line description using 160 characters or fewer.";
   if (!/^\d+$/.test(value(form, "categoryId"))) errors.categoryId = "Choose a category.";
+  if (!PRICING_MODELS.has(value(form, "pricingModel"))) errors.pricingModel = "Choose a pricing model.";
 
   const email = value(form, "contactEmail");
   if (!EMAIL.test(email) || email.length > 320) errors.contactEmail = "Enter a valid private contact email.";
@@ -85,4 +100,15 @@ export function validateSubmissionForm(form: FormData): SubmissionFieldErrors {
 
 export function isSubmissionField(value: unknown): value is SubmissionField {
   return typeof value === "string" && (SUBMISSION_FIELDS as readonly string[]).includes(value);
+}
+
+/** The subset of validateSubmissionForm that belongs to one step. */
+export function validateSubmissionStep(form: FormData, step: SubmissionStep): SubmissionFieldErrors {
+  const all = validateSubmissionForm(form);
+  const owned = new Set<string>(SUBMISSION_STEPS[step]);
+  const errors: SubmissionFieldErrors = {};
+  for (const [field, message] of Object.entries(all)) {
+    if (owned.has(field)) errors[field as SubmissionField] = message;
+  }
+  return errors;
 }

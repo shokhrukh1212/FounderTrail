@@ -32,19 +32,38 @@ export const config = {
   },
   metricEncryptionKey: process.env.METRIC_ENCRYPTION_KEY ?? "",
   sponsorshipsEnabled: process.env.SPONSORSHIPS_ENABLED === "true",
+  /**
+   * Founder-connected Stripe revenue/MRR. Off until the connector is finished: it still
+   * needs Stripe OAuth/Connect rather than a pasted key, so nothing about revenue is
+   * shown publicly. See the deferred-work section of the launch notes.
+   */
+  founderMetricsEnabled: process.env.FOUNDER_METRICS_ENABLED === "true",
+  /** Manually maintained Ahrefs proof point. Both values must be set or nothing renders. */
+  ahrefs: {
+    domainRating: process.env.AHREFS_DR ?? "",
+    checkedAt: process.env.AHREFS_DR_CHECKED_AT ?? "",
+  },
   sponsorship: {
-    priceMinor: 900,
     currency: "USD" as const,
-    durationHours: 168,
+    /** Three concurrent placements site-wide. The database enforces this, not this number. */
+    slots: 3,
     holdMinutes: 15,
     minimumLeadMinutes: 20,
+    /** One-time purchases, never subscriptions. Prices are in minor units. */
+    tiers: [
+      { days: 7, priceMinor: 2000 },
+      { days: 30, priceMinor: 6000 },
+    ] as const,
   },
   dodoPayments: {
     apiKey: process.env.DODO_PAYMENTS_API_KEY ?? "",
     webhookKey: process.env.DODO_PAYMENTS_WEBHOOK_KEY ?? "",
     environment: process.env.DODO_PAYMENTS_ENVIRONMENT === "live_mode" ? "live_mode" as const : "test_mode" as const,
     businessId: process.env.DODO_PAYMENTS_BUSINESS_ID ?? "",
-    sponsorProductId: process.env.DODO_SPONSOR_PRODUCT_ID ?? "",
+    // One Dodo product per duration. The single-product variable is kept as the 7-day
+    // fallback so an existing deployment does not break on upgrade.
+    sponsorProductId7d: process.env.DODO_SPONSOR_PRODUCT_ID_7D || process.env.DODO_SPONSOR_PRODUCT_ID || "",
+    sponsorProductId30d: process.env.DODO_SPONSOR_PRODUCT_ID_30D ?? "",
   },
   upload: {
     driver: process.env.UPLOAD_STORAGE_DRIVER ?? "local",
@@ -104,12 +123,63 @@ export function isAuthConfigured(): boolean {
   return config.auth.secret.length >= 32 && Boolean(config.auth.googleClientId && config.auth.googleClientSecret);
 }
 
+export type SponsorTier = { days: number; priceMinor: number; productId: string };
+
+/** The purchasable durations, each with the Dodo product that must appear in the cart. */
+export function sponsorTiers(): SponsorTier[] {
+  return config.sponsorship.tiers.map((tier) => ({
+    days: tier.days,
+    priceMinor: tier.priceMinor,
+    productId: tier.days === 30 ? config.dodoPayments.sponsorProductId30d : config.dodoPayments.sponsorProductId7d,
+  }));
+}
+
+export function sponsorTier(days: number): SponsorTier | null {
+  return sponsorTiers().find((tier) => tier.days === days) ?? null;
+}
+
+/**
+ * What the longer placement saves against buying the shorter one repeatedly.
+ *
+ * The comparison is whole purchases -- four 7-day placements, not a pro-rata 30/7 -- so
+ * the quoted saving is one a buyer could actually make. Four weeks is 28 days, so the
+ * 30-day placement is slightly better than the number claims, never worse. Computed
+ * rather than written into copy so the page cannot quote a stale figure.
+ */
+export function sponsorSavings(): { savedMinor: number; percent: number; periods: number } | null {
+  const [short, long] = config.sponsorship.tiers;
+  if (!short || !long) return null;
+  const periods = Math.floor(long.days / short.days);
+  if (periods < 2) return null;
+  const equivalent = short.priceMinor * periods;
+  const savedMinor = equivalent - long.priceMinor;
+  if (savedMinor <= 0) return null;
+  return { savedMinor, percent: Math.round((savedMinor / equivalent) * 100), periods };
+}
+
 export function isDodoConfigured(): boolean {
   const dodo = config.dodoPayments;
-  return config.sponsorshipsEnabled && Boolean(dodo.apiKey && dodo.webhookKey && dodo.businessId && dodo.sponsorProductId);
+  return config.sponsorshipsEnabled
+    && Boolean(dodo.apiKey && dodo.webhookKey && dodo.businessId)
+    && sponsorTiers().every((tier) => Boolean(tier.productId));
 }
 
 export function isLemonSqueezyConfigured(): boolean {
   const { apiKey, storeId, variantId } = config.lemonSqueezy;
   return !!(apiKey && storeId && variantId);
+}
+
+/**
+ * Ahrefs Domain Rating, or null.
+ *
+ * Deliberately strict: a missing, malformed or undated value renders nothing rather than
+ * a stale or invented number. DR is Ahrefs' own backlink metric, not a Google ranking or
+ * an authority score, and the page must say so wherever this appears.
+ */
+export function ahrefsProof(): { rating: number; checkedAt: string } | null {
+  const rating = Number.parseInt(config.ahrefs.domainRating, 10);
+  const checkedAt = config.ahrefs.checkedAt.trim();
+  if (!Number.isInteger(rating) || rating < 0 || rating > 100) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(checkedAt) || Number.isNaN(Date.parse(checkedAt))) return null;
+  return { rating, checkedAt };
 }

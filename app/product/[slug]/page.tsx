@@ -3,7 +3,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { getActiveSponsors } from "@/lib/foundertrail-data";
 import { Discussion } from "@/components/Discussion";
+import { SponsorCard } from "@/components/SponsorSlot";
 import { FollowButton } from "@/components/FollowButton";
 import { LocalTime } from "@/components/LocalTime";
 import { ProductClaim } from "@/components/ProductClaim";
@@ -54,10 +56,12 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   const { slug } = await params;
   const [product, user] = await Promise.all([getProductDetail(slug), currentUserFromHeaders(await headers()).catch(() => null)]);
   if (!product) notFound();
-  const [community, comments, connectedMetrics] = await Promise.all([
+  const [community, comments, connectedMetrics, sponsors] = await Promise.all([
     getProductCommunityState(product.id, user?.id ?? null),
     getProductComments(product.id, user?.id ?? null),
     getPublishedConnectedMetrics(product.id),
+    // One rotating card, never the startup being viewed.
+    getActiveSponsors({ limit: 1, excludeProductId: product.id }),
   ]);
   const screenshots = product.media.filter((item) => item.kind === "screenshot");
   const founderHandle = xHandle(product.founderSocialHandle);
@@ -67,17 +71,21 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
     <section className="product-masthead"><div className="app-shell product-masthead-inner">
       <ProductLogo productName={product.name} productUrl={product.websiteUrl} imageUrl={product.logoUrl} className="product-detail-logo" eager />
       <div className="product-identity"><div className="product-title-line"><h1>{product.name}</h1>{community.ownershipState === "claimed" ? <span className="verified-product-badge" title="Control of this product has been verified.">✓ Ownership confirmed</span> : null}{product.isDemo ? <span className="demo-label">Demo data</span> : null}</div><p>{product.tagline}</p><div className="product-meta">{product.founderName ? <span>By {product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}<span>{pricing}</span>{product.categories[0] ? <span>{product.categories[0].name}</span> : null}</div></div>
-      <div className="product-primary-actions"><a className="button button-primary" href={`/go/${product.slug}?source=product_page`} target="_blank" rel="noopener noreferrer">Visit website ↗</a><VoteButton slug={product.slug} initialCount={community.allTimeUpvotes} initialActive={community.upvoted} /><FollowButton slug={product.slug} initialActive={community.followed} initialCount={community.followerCount} />{community.isOwner ? <Link className="button button-secondary" href={`/manage/${product.slug}`}>Manage</Link> : null}<XShareLink siteUrl={config.siteUrl} slug={product.slug} productName={product.name} description={product.tagline} /></div>
+      <div className="product-primary-actions"><a className="button button-primary" href={`/go/${product.slug}?source=product_page`} target="_blank" rel="ugc noopener noreferrer">Visit website ↗</a><VoteButton slug={product.slug} initialCount={community.allTimeUpvotes} initialActive={community.upvoted} /><FollowButton slug={product.slug} initialActive={community.followed} initialCount={community.followerCount} />{community.isOwner ? <Link className="button button-secondary" href={`/manage/${product.slug}`}>Manage</Link> : null}<XShareLink siteUrl={config.siteUrl} slug={product.slug} productName={product.name} description={product.tagline} /></div>
     </div></section>
 
     <nav className="product-subnav" aria-label="Product sections"><div className="app-shell"><a href="#overview">Overview</a>{product.updates.length ? <a href="#updates">Updates</a> : null}<a href="#discussion">Discussion</a>{connectedMetrics.length ? <a href="#metrics">Metrics</a> : null}{community.ownershipState !== "claimed" ? <a href="#claim">Claim</a> : null}</div></nav>
 
     <div className="app-shell product-detail-layout"><article>
-      <section id="overview" className="detail-section"><p className="eyebrow">Overview</p><h2>What {product.name} helps you do</h2><p className="long-copy">{community.useCase || product.description || product.tagline}</p><dl className="product-facts">{community.intendedAudience ? <div><dt>Made for</dt><dd>{community.intendedAudience}</dd></div> : null}{product.founderName || founderHandle ? <div><dt>Founder</dt><dd>{product.founderName ? <span>{product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}</dd></div> : null}<div><dt>Pricing</dt><dd>{pricing}</dd></div>{product.categories[0] ? <div><dt>Category</dt><dd>{product.categories[0].name}</dd></div> : null}<div><dt>All-time upvotes</dt><dd>{community.allTimeUpvotes.toLocaleString()}</dd></div><div><dt>Outbound clicks</dt><dd>{community.outboundClicks.toLocaleString()} clicks on this startup&apos;s website link</dd></div><div><dt>Listed since</dt><dd><LocalTime value={product.launchAt.toISOString()} dateOnly /></dd></div><div><dt>Official website</dt><dd><a href={`/go/${product.slug}?source=product_page`} target="_blank" rel="noopener noreferrer">{new URL(product.websiteUrl).hostname}</a></dd></div></dl>{product.description && product.description !== community.useCase ? <div className="product-description"><h3>About the product</h3><p className="long-copy">{product.description}</p></div> : null}</section>
+      <section id="overview" className="detail-section"><p className="eyebrow">Overview</p><h2>What {product.name} helps you do</h2><p className="long-copy">{community.useCase || product.description || product.tagline}</p><dl className="product-facts">{community.intendedAudience ? <div><dt>Made for</dt><dd>{community.intendedAudience}</dd></div> : null}{product.founderName || founderHandle ? <div><dt>Founder</dt><dd>{product.founderName ? <span>{product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}</dd></div> : null}<div><dt>Pricing</dt><dd>{pricing}</dd></div>{product.categories[0] ? <div><dt>Category</dt><dd>{product.categories[0].name}</dd></div> : null}<div><dt>All-time upvotes</dt><dd>{community.allTimeUpvotes.toLocaleString()}</dd></div><div><dt>Outbound clicks</dt><dd>{community.outboundClicks.toLocaleString()} clicks on this startup&apos;s website link</dd></div><div><dt>Listed since</dt><dd><LocalTime value={product.launchAt.toISOString()} dateOnly /></dd></div><div><dt>Official website</dt><dd><a href={`/go/${product.slug}?source=product_page`} target="_blank" rel="ugc noopener noreferrer">{new URL(product.websiteUrl).hostname}</a></dd></div></dl>{product.description && product.description !== community.useCase ? <div className="product-description"><h3>About the product</h3><p className="long-copy">{product.description}</p></div> : null}</section>
 
       {screenshots.length ? <section className="media-gallery" aria-label="Product screenshots">{screenshots.map((item) => <figure key={item.id}><Image src={item.url} alt={item.altText || `${product.name} screenshot`} width={960} height={600} unoptimized /></figure>)}</section> : null}
 
       {product.updates.length ? <section id="updates" className="detail-section"><p className="eyebrow">Founder updates</p><h2>What’s new</h2><div className="update-timeline">{product.updates.map((update) => <article key={update.id}><div><span>{update.type}</span><LocalTime value={update.publishedAt.toISOString()} dateOnly /></div><h3>{update.title}</h3><p>{update.body}</p>{update.linkUrl ? <a href={update.linkUrl} rel="nofollow noopener noreferrer" target="_blank">Read more ↗</a> : null}</article>)}</div></section> : null}
+
+      {sponsors[0] ? <section className="detail-section product-sponsor" aria-label="Sponsored">
+        <SponsorCard sponsor={sponsors[0]} placement="product_detail" />
+      </section> : null}
 
       <section id="discussion" className="detail-section"><p className="eyebrow">Discussion</p><h2>Questions and feedback</h2><Discussion slug={product.slug} initialComments={comments} signedIn={Boolean(user)} /></section>
 

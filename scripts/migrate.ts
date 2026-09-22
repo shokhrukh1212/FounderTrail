@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getPool } from "../lib/db";
+import { databaseHost, getPool } from "../lib/db";
 
 async function main() {
+  // Say out loud which database is about to be changed. A migration pointed at the wrong
+  // host is the expensive mistake here, and the host is not a secret.
+  console.log(`migrating ${databaseHost()}${process.env.USE_TEST_DATABASE === "true" ? " (rehearsal branch)" : ""}`);
   const pool = getPool();
   const client = await pool.connect();
   try {

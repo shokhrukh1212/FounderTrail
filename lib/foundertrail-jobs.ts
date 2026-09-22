@@ -13,8 +13,10 @@ function emailFrom() { const raw = config.email.from.trim(); if (!raw) return ""
 
 async function maintainBookingStates() {
   const expired = await query(`UPDATE sponsor_bookings SET booking_status='expired_hold',payment_status='cancelled',updated_at=now() WHERE booking_status='held' AND payment_status IN ('pending','processing') AND hold_expires_at<=now() RETURNING id`);
-  const active = await query(`UPDATE sponsor_bookings SET booking_status='active',updated_at=now() WHERE payment_status='paid' AND booking_status='scheduled' AND start_at<=now() AND now()<end_at RETURNING id`);
-  const completed = await query(`UPDATE sponsor_bookings SET booking_status='completed',updated_at=now() WHERE payment_status='paid' AND booking_status IN ('scheduled','active') AND end_at<=now() RETURNING id`);
+  // An audited complimentary campaign carries no payment, so it has to be activated and
+  // completed on the same schedule as a paid one or it would simply never run.
+  const active = await query(`UPDATE sponsor_bookings SET booking_status='active',updated_at=now() WHERE payment_status IN ('paid','complimentary') AND booking_status='scheduled' AND start_at<=now() AND now()<end_at RETURNING id`);
+  const completed = await query(`UPDATE sponsor_bookings SET booking_status='completed',updated_at=now() WHERE payment_status IN ('paid','complimentary') AND booking_status IN ('scheduled','active') AND end_at<=now() RETURNING id`);
   return { expired: expired.length, active: active.length, completed: completed.length };
 }
 
@@ -118,7 +120,7 @@ async function queueWeeklyDigests() {
   const week = new Date(); week.setUTCHours(0,0,0,0); week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
   const weekKey = week.toISOString().slice(0,10);
   const inserted = await query(`INSERT INTO notification_jobs(job_type,dedupe_key,payload)
-    SELECT 'weekly_digest','weekly-digest:'||u.id||':'||$1,jsonb_build_object('userId',u.id,'week',$1)
+    SELECT 'weekly_digest','weekly-digest:'||u.id||':'||$1,jsonb_build_object('userId',u.id,'week',$1::text)
       FROM app_users u WHERE u.digest_opted_in AND u.digest_unsubscribed_at IS NULL AND u.deleted_at IS NULL
         AND EXISTS(SELECT 1 FROM product_follows f JOIN product_updates pu ON pu.product_id=f.product_id WHERE f.user_id=u.id AND pu.status='published' AND pu.published_at>=now()-interval '7 days')
     ON CONFLICT(dedupe_key) DO NOTHING RETURNING id`, [weekKey]);

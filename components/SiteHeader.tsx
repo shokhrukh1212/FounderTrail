@@ -19,6 +19,7 @@ export function SiteHeader({ siteName, user }: { siteName: string; user: { name:
         <nav className="header-nav" aria-label="Main navigation">
           <Link href="/?view=discover#products">Discover</Link>
           <Link href="/?view=updates#products">Updates</Link>
+          <Link href="/advertise">Advertise</Link>
           <Link href="/submit" className="primary-nav-action">Submit startup</Link>
           {user ? <details className="account-menu"><summary>{user.name || "Account"}</summary><div><Link href="/my-products">My products</Link><Link href="/following">Following</Link><Link href="/settings">Settings</Link>{user.role === "admin" ? <Link href="/admin">Admin</Link> : null}<button type="button" onClick={() => void authClient.signOut({ fetchOptions: { onSuccess: () => router.replace("/") } })}>Sign out</button></div></details> : <Link href="/sign-in">Sign in</Link>}
         </nav>
@@ -30,6 +31,7 @@ export function SiteHeader({ siteName, user }: { siteName: string; user: { name:
         <div className="mobile-navigation">
           <Link href="/?view=discover#products" onClick={() => setOpen(false)}>Discover</Link>
           <Link href="/?view=updates#products" onClick={() => setOpen(false)}>Updates</Link>
+          <Link href="/advertise" onClick={() => setOpen(false)}>Advertise</Link>
           <Link href="/submit" className="primary-nav-action" onClick={() => setOpen(false)}>Submit startup</Link>
           {user ? <><Link href="/my-products" onClick={() => setOpen(false)}>My products</Link><Link href="/following" onClick={() => setOpen(false)}>Following</Link><Link href="/settings" onClick={() => setOpen(false)}>Settings</Link>{user.role === "admin" ? <Link href="/admin" onClick={() => setOpen(false)}>Admin</Link> : null}<button type="button" className="mobile-signout" onClick={() => void authClient.signOut({ fetchOptions: { onSuccess: () => router.replace("/") } })}>Sign out</button></> : <Link href="/sign-in" onClick={() => setOpen(false)}>Sign in</Link>}
         </div>

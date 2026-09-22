@@ -59,7 +59,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
       await client.query(`UPDATE products SET name=$2,tagline=$3,founder_name=$4,founder_social_handle=$5,primary_category_id=$6::bigint,category_review_required=false,category_provenance='founder',pricing_model=$7,starting_price_minor=$8,pricing_currency=$9,pricing_provenance='founder',pricing_checked_at=now(),updated_at=now() WHERE id=$1::uuid`,[owner.productId,name,tagline,founder,social,categoryId,pricingModel,starting===null?null:Math.round(starting*100),starting===null?null:currency]);
       await client.query(`DELETE FROM product_categories WHERE product_id=$1::uuid AND position=0`,[owner.productId]);
       await client.query(`INSERT INTO product_categories(product_id,category_id,position) VALUES($1::uuid,$2::bigint,0) ON CONFLICT(product_id,category_id) DO UPDATE SET position=0`,[owner.productId,categoryId]);
-      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'user','product_classification_updated',$2::uuid,jsonb_build_object('categoryId',$3,'pricingModel',$4))`,[owner.userId,owner.productId,categoryId,pricingModel]);
+      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'user','product_classification_updated',$2::uuid,jsonb_build_object('categoryId',$3::bigint,'pricingModel',$4::text))`,[owner.userId,owner.productId,categoryId,pricingModel]);
     });
   } catch(error) {
     if(error instanceof Error&&error.message==="INVALID_CATEGORY")return NextResponse.json({error:"Choose a supported category."},{status:400});
