@@ -757,8 +757,9 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 .launch-scheduler{display:grid;gap:4px;max-width:520px}
 .launch-scheduler .form-field{display:grid;gap:7px}
 .launch-scheduler label{font-size:13px;font-weight:700}
-.launch-scheduler input[type=date]{width:100%;max-width:260px;min-height:44px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);font:inherit}
+.launch-scheduler select{width:100%;max-width:340px;min-height:44px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);font:inherit}
 .launch-scheduler .field-help{color:var(--muted);font-size:12px;line-height:1.55}
+.launch-scheduler .form-error{margin:10px 0 0}
 
 /* Plan feature lists: the same icon language on the pricing page and the upgrade page. */
 .plan-feature-list{display:grid;gap:12px;margin:14px 0 28px;padding:0;list-style:none;color:#3f4858;font-size:13px;line-height:1.55}
@@ -845,3 +846,24 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 .footer-links{display:flex;flex-wrap:wrap;gap:18px}
 .footer-links a{color:var(--muted);text-decoration:none}
 .footer-links a:hover,.footer-links a:focus-visible{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+
+/* Owner-facing listing status: live and waiting listings are told apart at a glance. */
+.product-status-pill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:4px 9px 4px 8px;border:1px solid transparent;border-radius:999px;font-size:11px;font-weight:750;line-height:1.3;white-space:nowrap}
+.product-status-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.product-status-pill.is-published{border-color:#bfe5cf;background:#eaf7f0;color:var(--success)}
+.product-status-pill.is-pending{border-color:#fcd9a8;background:#fff7ed;color:#9a3412}
+.product-status-pill.is-rejected{border-color:#fecdca;background:#fff1f0;color:#b42318}
+.product-status-pill.is-draft,.product-status-pill.is-archived{border-color:var(--border);background:var(--surface);color:#596273}
+.owner-status-banner.is-review{border-color:#fcd9a8;background:#fffaf3}
+.owner-status-banner.is-rejected{border-color:#fecdca;background:#fff8f7}
+@media(max-width:560px){.account-product-list .startup-name-line{flex-wrap:wrap;row-gap:6px}.account-product-list .startup-name-line h2{flex:1 0 100%}}
+/* A missing or soft logo in the launch studio comes with the fix right next to it. */
+.launch-logo-fix{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 16px;margin:12px 0 0;padding:14px 16px;border:1px solid #fed7aa;border-radius:10px;background:#fff7ed}
+.launch-logo-fix>p:first-child{margin:0;color:#7c2d12;font-size:12px;line-height:1.55}
+.launch-logo-fix>p:first-child strong{display:block;margin-bottom:2px;color:#9a3412;font-size:13px}
+.launch-logo-fix>label{position:relative;grid-row:span 2;cursor:pointer;white-space:nowrap}
+.launch-logo-fix>label:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.launch-logo-fix>label.is-busy{cursor:progress;opacity:.7}
+.launch-logo-fix>small,.launch-logo-fix>.form-error{grid-column:1;margin:0;color:#9a3412;font-size:11px}
+@media(max-width:560px){.launch-logo-fix{grid-template-columns:1fr}.launch-logo-fix>label{grid-row:auto;justify-self:start}}
+.launch-logo-fix+.form-hint,.launch-logo-fix+.launch-image-warning{margin-top:10px}

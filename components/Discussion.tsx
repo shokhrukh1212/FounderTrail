@@ -28,8 +28,8 @@ function CommentCard({ comment, slug, signedIn, onChanged, replies }: {
       body: JSON.stringify({ body: reply, parentId: comment.id }),
     });
     if (response.status === 401) { router.push(`/sign-in?returnTo=${encodeURIComponent(location.pathname + "#discussion")}`); return; }
-    const result = await response.json() as { error?: string };
-    if (response.ok) onChanged(); else setMessage(result.error ?? "Could not reply.");
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (response.ok) { setReply(""); setReplying(false); onChanged(); } else setMessage(result.error ?? "Could not reply.");
     setBusy(false);
   }
 
@@ -40,8 +40,8 @@ function CommentCard({ comment, slug, signedIn, onChanged, replies }: {
       method: "PATCH", headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: comment.id, body: text }),
     });
-    const result = await response.json() as { error?: string };
-    if (response.ok) onChanged(); else setMessage(result.error ?? "Could not save.");
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (response.ok) { setEditing(false); onChanged(); } else setMessage(result.error ?? "Could not save.");
     setBusy(false);
   }
 
@@ -87,8 +87,8 @@ export function Discussion({ slug, initialComments, signedIn }: { slug: string; 
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body }),
     });
     if (response.status === 401) { router.push(`/sign-in?returnTo=${encodeURIComponent(location.pathname + "#discussion")}`); return; }
-    const result = await response.json() as { error?: string };
-    if (response.ok) refresh(); else setMessage(result.error ?? "Could not post your comment.");
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (response.ok) { setBody(""); refresh(); } else setMessage(result.error ?? "Could not post your comment.");
     setBusy(false);
   }
   return <div className="discussion-list">

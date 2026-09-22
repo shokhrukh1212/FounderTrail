@@ -263,3 +263,10 @@ test("admin correction owns names, categories and pricing without touching the r
   assert.match(table, /suggestedShortName/);
   assert.match(table, /Use this/);
 });
+
+test("posting a comment, reply or edit resets its form",()=>{
+  const discussion=readFileSync(new URL("../../components/Discussion.tsx",import.meta.url),"utf8");
+  assert.match(discussion,/if \(response\.ok\) \{ setBody\(""\); refresh\(\); \}/);
+  assert.match(discussion,/if \(response\.ok\) \{ setReply\(""\); setReplying\(false\); onChanged\(\); \}/);
+  assert.match(discussion,/if \(response\.ok\) \{ setEditing\(false\); onChanged\(\); \}/);
+});
