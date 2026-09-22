@@ -1,4 +1,8 @@
-# FounderTrail handoff status
+# FounderTrail handoff status (historical)
+
+This records the earlier sponsorship/Stripe implementation pass. Those customer-facing
+features are retired in the Pro Launch release. Use [`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md)
+and `docs/PRODUCT.md` for current behavior.
 
 Last updated: 2026-09-21.
 

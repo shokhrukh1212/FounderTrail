@@ -30,26 +30,26 @@ Legacy anonymous support is retained separately. The platform does not fabricate
 
 ## Metrics and trust
 
-FounderTrail activity distinguishes qualified profile views, outbound clicks, followers, launch votes, comments, and sponsored traffic. An outbound click is not called a customer, verified arrival, or sale. Known bots, obvious repeats, and owner/admin testing are filtered prospectively; counts remain filtered estimates.
+FounderTrail activity distinguishes qualified profile views, outbound clicks, followers, launch votes, and comments. An outbound click is not called a customer, verified arrival, or sale. Known bots, obvious repeats, and owner/admin testing are filtered prospectively; counts remain filtered estimates.
 
-Optional connected metrics use one supported provider first: a founder-supplied, restricted read-only Stripe key. Keys are validated, encrypted at rest, scoped to exact Stripe products or an explicitly confirmed whole account, and removable with their snapshots. Published revenue remains separated by currency and includes source, scope, period, as-of time, and methodology. FounderTrail sponsorship does not use Stripe.
+Founder-connected Stripe revenue and MRR are not part of this release. Existing records are retained privately for historical integrity, while the connection API returns `410 Gone` and no revenue claim is presented publicly.
 
 The existing domain/badge tracker remains optional and source-labelled. Installing it does not prove ownership, revenue, product quality, or improve launch order.
 
-## Sponsorship
+## Free and Pro
 
-FounderTrail sells one exclusive, clearly labelled sponsored placement at a time: USD 9 base price for 168 consecutive hours, one-time, with no renewal. It appears on This week and Discover only, in the desktop rail or after the third organic result on mobile. It never changes organic order.
+Free includes the public startup page, ordinary launch scheduling, community votes/discussion/follows, founder updates, approved listing media, and existing basic statistics. Pro is a one-time per-startup purchase that adds Launch Studio and one private seven-day results summary. The first 20 qualifying live purchases are USD 5 before tax; later purchases are USD 9 before tax.
 
-The purchaser must manage an approved listing. Creative and destination are reviewed before payment and snapshotted on the booking. Dodo Payments provides hosted checkout and verified payment/refund webhooks. Local transactions plus a PostgreSQL exclusion constraint prevent overlapping holds and bookings. A late or conflicting successful payment cannot displace another sponsor and enters the refund workflow.
+Pro never buys placement, ranking, votes, traffic, faster review, or a launch date. The visible Pro badge describes plan access, not identity or quality verification. Dodo Payments provides hosted checkout and signed payment/refund/dispute webhooks; browser return URLs never activate access.
 
-Lemon Squeezy is not used for sponsorship advertising. Its old webhook and records remain only for historical reconciliation, and the old paid-ranking checkout is retired.
+All sponsorship sales and public sponsored placements are disabled. Historical sponsor and Lemon Squeezy records remain only for reconciliation and any operator-led obligation resolution.
 
 ## Email and privacy
 
-Magic-link sign-in and transactional email use Resend when configured. Promotional founder email requires recorded consent and supports suppression and one-click unsubscribe. Follows do not imply marketing consent. The weekly followed-product digest is off by default.
+Google is the only public sign-in provider. Transactional email uses Resend when configured. Promotional founder email requires recorded consent and supports suppression and one-click unsubscribe. Follows do not imply marketing consent. The weekly followed-product digest is off by default.
 
 Account deletion cannot silently erase public products, ownership responsibilities, transactions, or required audit evidence. Owners must transfer or archive owned products first. Provider secrets and private evidence are minimized and excluded from public pages and logs.
 
 ## Operations boundary
 
-The code ships with sponsorship disabled. Production activation requires a tested database backup/restore, isolated migration rehearsal and reconciliation, authentication/email checks, Dodo test-mode payment/refund checks, Stripe restricted-key checks, and responsive/accessibility review. See `docs/foundertrail/` for the exact runbook and verification gates.
+The code ships with Pro checkout disabled. Production activation requires a tested database backup/restore, isolated migration rehearsal and reconciliation, authentication checks, a complete Dodo test-mode lifecycle, real PNG/report export inspection, and responsive/accessibility review. See `docs/foundertrail/PRO_LAUNCH_RUNBOOK.md` for the exact gates.

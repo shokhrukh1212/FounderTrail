@@ -13,12 +13,11 @@ const claimCreate=read("../../app/api/products/[slug]/claims/route.ts");
 const legacyClaim=read("../../app/api/products/[slug]/claims/legacy/route.ts");
 const ownerAuth=read("../owner-auth.ts");
 const sponsorBooking=read("../../app/api/sponsor/bookings/route.ts");
-const sponsorship=read("../sponsorship.ts");
+const proCheckout=read("../../app/api/owner/products/[slug]/pro/checkout/route.ts");
+const proLaunch=read("../pro-launch.ts");
 const dodoWebhook=read("../../app/api/webhooks/dodo/route.ts");
-const sponsorClick=read("../../app/sponsor/[bookingId]/go/route.ts");
-const adminRefund=read("../../app/api/admin/sponsors/[bookingId]/refund/route.ts");
+const adminProRefund=read("../../app/api/admin/pro/orders/[orderId]/refund/route.ts");
 const jobs=read("../foundertrail-jobs.ts");
-const stripe=read("../stripe-metrics.ts");
 const stripeRoute=read("../../app/api/owner/products/[slug]/metrics/stripe/route.ts");
 const legacyCheckout=read("../../app/api/checkout/route.ts");
 const accountSettings=read("../../app/api/account/settings/route.ts");
@@ -67,13 +66,14 @@ test("account ownership uses one-time claims rather than bearer mutation",()=>{
   assert.doesNotMatch(ownerAuth,/token_hash.*request|approvalToken|managementToken/);
 });
 
-test("admin operations expose required ownership, launch, activity, and sponsorship controls",()=>{
+test("admin operations expose required ownership, launch, activity, and Pro controls",()=>{
   assert.match(adminProducts,/ownership_status/);
   assert.match(adminProducts,/launch_status/);
   assert.match(adminProducts,/recent_activity_at/);
   assert.match(adminProducts,/category_name/);
-  assert.match(adminOperations,/sponsorIncome/);
-  assert.match(adminOperations,/sponsorInventory/);
+  assert.match(adminOperations,/proIncome/);
+  assert.match(adminOperations,/proAvailability/);
+  assert.match(adminOperations,/proOrders/);
   assert.match(ownerRoute,/p\.status IN \('draft','rejected'\)/);
   assert.match(ownerRoute,/Owner submitted requested changes/);
 });
@@ -110,32 +110,27 @@ test("account deletion revokes private access while retaining anonymized require
   assert.doesNotMatch(authConfig,/deleteUser:\s*\{\s*enabled:\s*true/);
 });
 
-test("Dodo is the fixed sponsorship provider and browser returns cannot activate inventory",()=>{
-  assert.match(sponsorBooking,/checkoutSessions\.create/);
-  assert.match(sponsorBooking,/allow_discount_code: false/);
-  assert.match(sponsorBooking,/holdMinutes/);
-  assert.match(sponsorBooking,/action: "sponsor-booking"/);
-  assert.match(sponsorship,/DODO_BUSINESS_MISMATCH/);
-  assert.match(sponsorship,/DODO_ENVIRONMENT_MISMATCH/);
-  assert.match(sponsorship,/product_cart\?\.length === 1/);
-  // Validated against the price and currency this booking actually sold, so a 7-day
-  // payment cannot activate a 30-day placement.
-  assert.match(sponsorship,/total_amount - tax !== booking\.price_minor/);
-  assert.match(sponsorship,/event\.data\.currency !== booking\.currency/);
-  assert.match(sponsorship,/sponsorTier\(booking\.duration_days\)/);
-  assert.match(sponsorship,/payment_conflict/);
+test("Dodo is the fixed Pro provider and browser returns cannot activate access",()=>{
+  assert.match(proCheckout,/checkoutSessions\.create/);
+  assert.match(proCheckout,/allow_discount_code: false/);
+  assert.match(proCheckout,/acceptedPriceMinor/);
+  assert.match(proCheckout,/foundertrail_order_type: "pro_launch"/);
+  assert.match(proLaunch,/DODO_BUSINESS_MISMATCH/);
+  assert.match(proLaunch,/DODO_ENVIRONMENT_MISMATCH/);
+  assert.match(proLaunch,/cart\.length === 1/);
+  assert.match(proLaunch,/total - tax !== order\.quoted_price_minor/);
+  assert.match(proLaunch,/event\.data\.currency !== PRO_CURRENCY/);
+  assert.match(proLaunch,/payment_conflict/);
   assert.match(dodoWebhook,/verifiedDodoWebhook/);
   assert.match(dodoWebhook,/ON CONFLICT\(webhook_id\) DO NOTHING/);
-  assert.match(sponsorClick,/event_type='impression'/);
-  assert.match(sponsorClick,/se\.visitor_hash=\$3/);
-  assert.match(adminRefund,/INSERT INTO notification_jobs/);
-  assert.match(adminRefund,/getDodoClient\(\)\.refunds\.create/);
-  assert.ok(adminRefund.indexOf("INSERT INTO notification_jobs") < adminRefund.indexOf("getDodoClient().refunds.create"));
+  assert.match(adminProRefund,/INSERT INTO notification_jobs/);
+  assert.match(jobs,/getDodoClient\(\)\.refunds\.create/);
   assert.match(jobs,/job\.payload\.reason/);
   assert.match(jobs,/processing_status='received'.*received_at<now\(\)-interval '5 minutes'/);
   assert.match(jobs,/FOR UPDATE SKIP LOCKED/);
   assert.match(jobs,/worker lease expired/);
-  assert.doesNotMatch(sponsorBooking,/Lemon|lemonsqueezy/i);
+  assert.match(sponsorBooking,/status: 410/);
+  assert.doesNotMatch(proCheckout,/Lemon|lemonsqueezy/i);
   assert.match(legacyCheckout,/LEGACY_CHECKOUT_RETIRED/);
   assert.match(legacyCheckout,/status: 410/);
 });
@@ -148,19 +143,7 @@ test("Stripe interval normalization uses precise minor-unit rational arithmetic"
   assert.throws(()=>normalizeRecurringMonthly({unitAmountDecimal:"-1",quantity:1,interval:"month",intervalCount:1}),/INVALID_MONEY/);
 });
 
-test("Stripe keys are restricted, scoped, opt-in, currency-separated, and purgeable",()=>{
-  assert.match(stripe,/\^rk_\(\?:test\|live\)_/);
-  assert.match(stripe,/subscriptions\.list/);
-  assert.match(stripe,/charges\.list/);
-  assert.match(stripe,/invoices\.list/);
-  assert.match(stripe,/products\.list/);
-  assert.match(stripe,/prices\.list/);
-  assert.match(stripe,/new Map<string, number>\(\)/);
-  assert.match(stripe,/item\.price\.currency\.toUpperCase\(\)/);
-  assert.match(stripe,/!revenue\.has\(item\.currency\).*revenue\.set\(item\.currency, 0\)/);
-  assert.match(stripeRoute,/confirmAccountWide/);
-  assert.match(stripeRoute,/metric_connection_scopes/);
-  assert.match(stripeRoute,/publish_revenue/);
-  assert.match(stripeRoute,/action: "stripe-metrics"/);
-  assert.match(stripeRoute,/DELETE FROM metric_connections/);
+test("Stripe connection endpoints are hard-disabled",()=>{
+  assert.match(stripeRoute,/status: 410/);
+  for (const method of ["GET","POST","PATCH","DELETE"]) assert.match(stripeRoute,new RegExp(`export const ${method} = retired`));
 });

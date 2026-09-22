@@ -3,9 +3,8 @@ import { headers } from "next/headers";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { brandCopy } from "@/lib/brand";
 import { query } from "@/lib/db";
-import { getActiveSponsors, getFounderTrailDiscovery, getUpdateFeed, type ActiveSponsor, type DiscoverySort, type FounderTrailView } from "@/lib/foundertrail-data";
+import { getFounderTrailDiscovery, getUpdateFeed, type DiscoverySort, type FounderTrailView } from "@/lib/foundertrail-data";
 import { StartupRow } from "@/components/StartupRow";
-import { SponsorCard, SponsorRow } from "@/components/SponsorSlot";
 import { ProductLogo } from "@/components/ProductLogo";
 import { LocalTime } from "@/components/LocalTime";
 
@@ -25,32 +24,18 @@ function href(input: Record<string, string | number | undefined>, hash = "produc
   return `/?${params.toString()}#${hash}`;
 }
 
-/** Sponsored rows appear after these organic positions, and only in the directory. */
-const SPONSORED_AFTER = [3, 8, 13];
-
-function ProductList({ products, page, sort, weekly = false, sponsors = [] }: {
+function ProductList({ products, page, sort, weekly = false }: {
   products: Awaited<ReturnType<typeof getFounderTrailDiscovery>>["products"];
   page: number;
   sort: DiscoverySort;
   weekly?: boolean;
-  sponsors?: ActiveSponsor[];
 }) {
-  // Sponsors are spliced into the rendered output, never into `products`. `position` is
-  // still derived from the organic index alone, so a paid row cannot take a rank number
-  // or push an organic result down the numbering.
-  const rows: React.ReactNode[] = [];
-  products.forEach((product, index) => {
-    rows.push(<StartupRow
+  return <div className="organic-list">{products.map((product, index) => <StartupRow
       key={product.id}
       product={product}
       weekly={weekly}
       position={weekly || sort === "most_upvoted" ? (page - 1) * 24 + index + 1 : undefined}
-    />);
-    const slot = SPONSORED_AFTER.indexOf(index + 1);
-    const sponsor = slot === -1 ? undefined : sponsors[slot];
-    if (sponsor) rows.push(<SponsorRow key={`sponsored-${sponsor.id}`} sponsor={sponsor} placement="discover_inline" />);
-  });
-  return <div className="organic-list">{rows}</div>;
+    />)}</div>;
 }
 
 export default async function Home({ searchParams }: { searchParams: Promise<HomeSearchParams> }) {
@@ -59,16 +44,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const sort: DiscoverySort = params.sort === "newest" ? "newest" : "most_upvoted";
   const user = await currentUserFromHeaders(await headers()).catch(() => null);
-  const [categories, sponsors] = await Promise.all([
-    query<{ slug: string; name: string; count: number }>(`SELECT c.slug,c.name,count(p.id)::int AS count
+  const categories = await query<{ slug: string; name: string; count: number }>(`SELECT c.slug,c.name,count(p.id)::int AS count
       FROM categories c LEFT JOIN products p ON p.primary_category_id=c.id AND p.status='published'
       WHERE c.slug=ANY($1::text[]) GROUP BY c.id,c.slug,c.name ORDER BY c.name`, [[
         "ai-tools", "productivity", "developer-tools", "marketing-seo", "sales-crm", "design-creative",
         "writing-content", "analytics-data", "finance-accounting", "ecommerce", "education", "health-fitness",
         "travel", "games", "directories-discovery", "advertising-sponsorship", "other",
-      ]]),
-    getActiveSponsors({ limit: 3 }),
-  ]);
+      ]]);
   const discovery = view === "updates" ? null : await getFounderTrailDiscovery({
     view,
     search: params.q,
@@ -78,7 +60,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
     page,
     userId: user?.id,
   });
-  const community = view === "this_week" ? await getFounderTrailDiscovery({ view: "discover", sort, page: 1, userId: user?.id }) : null;
+  const community = view === "this_week" ? await getFounderTrailDiscovery({ view: "discover", category: params.category, sort, page: 1, userId: user?.id }) : null;
   const feed = view === "updates" ? await getUpdateFeed(page, user?.id ?? null) : null;
   const week = discovery?.week;
   const products = discovery?.products ?? [];
@@ -119,17 +101,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
         <div className={`weekly-layout${products.length ? "" : " is-empty"}`}>
           <div>{products.length ? <ProductList products={products} page={discovery?.page ?? 1} sort={sort} weekly /> : <div className="weekly-empty"><div><h3>No launches this week yet.</h3><p>Discover the community below, or schedule your startup&apos;s launch.</p></div><div className="button-row"><Link className="button button-secondary" href="/my-products">Schedule your launch</Link><Link className="button button-secondary" href="#community">Browse startups</Link></div></div>}</div>
         </div>
-        {sponsors.length ? <section className="featured-sponsors" aria-labelledby="featured-sponsors-heading">
-          <header><h2 id="featured-sponsors-heading">Featured sponsors</h2><p>Paid placements. They never affect launch order or community ranking.</p></header>
-          <div className="featured-sponsor-grid">{sponsors.map((item) => <SponsorCard key={item.id} sponsor={item} placement="home_featured" />)}</div>
-        </section> : null}
         <section id="community" className="community-directory" aria-labelledby="community-heading">
-          <header><div><p className="eyebrow">Community directory</p><h2 id="community-heading">{sort === "newest" ? "Recently added startups" : "Community favourites"}</h2><p>{sort === "newest" ? "The latest approved startups." : "Explore startups ranked by community upvotes."}</p></div><div className="community-controls"><form action="/" method="get"><input type="hidden" name="view" value="this_week" /><label><span className="sr-only">Sort community</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label><button className="button button-secondary">Apply</button></form><Link className="text-link" href="/?view=discover&sort=most_upvoted#products">Browse and filter all →</Link></div></header>
+          <header><div><p className="eyebrow">Community directory</p><h2 id="community-heading">{sort === "newest" ? "Recently added startups" : "Community favourites"}</h2><p>{sort === "newest" ? "The latest approved startups." : "Explore startups ranked by community upvotes."}</p></div><div className="community-controls"><form action="/" method="get"><input type="hidden" name="view" value="this_week" /><label><span className="sr-only">Category</span><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label><label><span className="sr-only">Sort community</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label><button className="button button-secondary">Apply</button></form><Link className="text-link" href="/?view=discover&sort=most_upvoted#products">Browse and filter all →</Link></div></header>
           {community?.products.length ? <ProductList products={community.products} page={1} sort={sort} /> : <div className="empty-state compact-empty"><h3>No startups found</h3></div>}
         </section>
       </> : null}
 
-      {view === "discover" ? <>{result?.products.length ? <ProductList products={result.products} page={result.page} sort={sort} sponsors={sponsors} /> : <div className="empty-state compact-empty"><h3>No startups found</h3><p>Try broader filters.</p></div>}</> : null}
+      {view === "discover" ? <>{result?.products.length ? <ProductList products={result.products} page={result.page} sort={sort} /> : <div className="empty-state compact-empty"><h3>No startups found</h3><p>Try broader filters.</p></div>}</> : null}
 
       {pageTotal > 1 && view !== "this_week" ? <nav className="pagination" aria-label="Pages">{page > 1 ? <Link href={href({ view, q: params.q, category: params.category, pricing: params.pricing, sort, page: page - 1 })}>Previous</Link> : null}<span>Page {page} of {pageTotal}</span>{page < pageTotal ? <Link href={href({ view, q: params.q, category: params.category, pricing: params.pricing, sort, page: page + 1 })}>Next</Link> : null}</nav> : null}
     </section>

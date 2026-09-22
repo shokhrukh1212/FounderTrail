@@ -31,13 +31,18 @@ export const config = {
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   },
   metricEncryptionKey: process.env.METRIC_ENCRYPTION_KEY ?? "",
-  sponsorshipsEnabled: process.env.SPONSORSHIPS_ENABLED === "true",
+  // Public sponsorship sales and delivery are retired for the Pro Launch release.
+  // The legacy switch exists only for explicit reconciliation/refund operations.
+  sponsorshipsEnabled: false,
+  legacySponsorshipsEnabled: process.env.LEGACY_SPONSORSHIPS_ENABLED === "true",
+  proLaunchEnabled: process.env.PRO_LAUNCH_CHECKOUT_ENABLED === "true",
+  proReportEmailEnabled: process.env.PRO_REPORT_EMAIL_ENABLED === "true",
   /**
    * Founder-connected Stripe revenue/MRR. Off until the connector is finished: it still
    * needs Stripe OAuth/Connect rather than a pasted key, so nothing about revenue is
    * shown publicly. See the deferred-work section of the launch notes.
    */
-  founderMetricsEnabled: process.env.FOUNDER_METRICS_ENABLED === "true",
+  founderMetricsEnabled: false,
   /** Manually maintained Ahrefs proof point. Both values must be set or nothing renders. */
   ahrefs: {
     domainRating: process.env.AHREFS_DR ?? "",
@@ -64,6 +69,8 @@ export const config = {
     // fallback so an existing deployment does not break on upgrade.
     sponsorProductId7d: process.env.DODO_SPONSOR_PRODUCT_ID_7D || process.env.DODO_SPONSOR_PRODUCT_ID || "",
     sponsorProductId30d: process.env.DODO_SPONSOR_PRODUCT_ID_30D ?? "",
+    proIntroProductId: process.env.DODO_PRO_INTRO_PRODUCT_ID ?? "",
+    proStandardProductId: process.env.DODO_PRO_STANDARD_PRODUCT_ID ?? "",
   },
   upload: {
     driver: process.env.UPLOAD_STORAGE_DRIVER ?? "local",
@@ -159,9 +166,21 @@ export function sponsorSavings(): { savedMinor: number; percent: number; periods
 
 export function isDodoConfigured(): boolean {
   const dodo = config.dodoPayments;
-  return config.sponsorshipsEnabled
+  return config.legacySponsorshipsEnabled
     && Boolean(dodo.apiKey && dodo.webhookKey && dodo.businessId)
     && sponsorTiers().every((tier) => Boolean(tier.productId));
+}
+
+export function isDodoProviderConfigured(): boolean {
+  const dodo = config.dodoPayments;
+  return Boolean(dodo.apiKey && dodo.webhookKey && dodo.businessId);
+}
+
+export function isProLaunchConfigured(): boolean {
+  const dodo = config.dodoPayments;
+  return config.proLaunchEnabled
+    && isDodoProviderConfigured()
+    && Boolean(dodo.proIntroProductId && dodo.proStandardProductId);
 }
 
 export function isLemonSqueezyConfigured(): boolean {

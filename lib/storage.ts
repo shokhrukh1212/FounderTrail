@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { config } from "./config";
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
-type ImageKind = "logo" | "screenshot" | "update";
+type ImageKind = "logo" | "screenshot" | "update" | "launch-kit";
 export type StoredImage = {
   storageKey: string;
   publicUrl: string;
@@ -78,10 +78,11 @@ export async function validateAndStoreImage(file: File, kind: ImageKind): Promis
 }
 
 export async function readStoredImage(key: string): Promise<{ bytes: Buffer; mimeType: StoredImage["mimeType"] } | null> {
-  if(config.upload.driver!=="local")return null;
-  if (!/^(?:logo|screenshot|update)\/[0-9a-f-]{36}\.(?:png|jpg|webp)$/.test(key)) return null;
+  if (!/^(?:logo|screenshot|update|launch-kit)\/[0-9a-f-]{36}\.(?:png|jpg|webp)$/.test(key)) return null;
   try {
-    const bytes = await readFile(localPath(key));
+    const bytes = config.upload.driver === "s3"
+      ? Buffer.from(await (await s3Client().send(new GetObjectCommand({ Bucket: config.upload.s3.bucket, Key: key }))).Body!.transformToByteArray())
+      : await readFile(localPath(key));
     const mime = imageType(bytes);
     return mime ? { bytes, mimeType: mime } : null;
   } catch {
@@ -90,7 +91,7 @@ export async function readStoredImage(key: string): Promise<{ bytes: Buffer; mim
 }
 
 export async function removeStoredImage(key: string): Promise<void> {
-  if(!extname(key)||!/^(?:logo|screenshot|update)\//.test(key))return;
+  if(!extname(key)||!/^(?:logo|screenshot|update|launch-kit)\//.test(key))return;
   if(config.upload.driver==="s3"){await s3Client().send(new DeleteObjectCommand({Bucket:config.upload.s3.bucket,Key:key})).catch(()=>{});return;}
   await unlink(localPath(key)).catch(() => {});
 }

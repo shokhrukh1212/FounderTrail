@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { claimSignInUrl, safeReturnTo, signInUrl } from "../return-to";
 
@@ -20,10 +19,13 @@ const observability = read("../observability.ts");
  * generic 500. This walks the real source and fails if an uncast parameter comes back.
  */
 test("no jsonb_build_object call passes an uncast bound parameter", () => {
-  const files = execFileSync("find", ["app", "lib", "scripts", "-type", "f", "-name", "*.ts", "-o", "-path", "*/app/*", "-name", "*.tsx"], {
-    cwd: new URL("../../", import.meta.url).pathname,
-    encoding: "utf8",
-  }).trim().split("\n").filter(Boolean);
+  const root = new URL("../../", import.meta.url);
+  const walk = (directory: URL): string[] => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const target = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+    if (entry.isDirectory()) return walk(target);
+    return /\.tsx?$/.test(entry.name) ? [decodeURIComponent(target.pathname.slice(root.pathname.length))] : [];
+  });
+  const files = ["app/", "lib/", "scripts/"].flatMap((directory) => walk(new URL(directory, root)));
 
   const offenders: string[] = [];
   for (const file of files) {
@@ -110,18 +112,17 @@ test("the claim UI always releases its button and always says something", () => 
   assert.match(claimUi, /Reference: \$\{correlationId\}/);
 });
 
-test("founder revenue metrics are off by default and have one public gate", () => {
+test("founder revenue metrics are retired from both private and public surfaces", () => {
   const config = read("../config.ts");
-  const community = read("../product-community.ts");
   const dashboard = read("../../components/OwnerDashboard.tsx");
   const metricsPage = read("../../app/manage/[slug]/metrics/page.tsx");
+  const metricsRoute = read("../../app/api/owner/products/[slug]/metrics/stripe/route.ts");
 
-  // Opt-in only: an unset variable must leave the feature off.
-  assert.match(config, /founderMetricsEnabled: process\.env\.FOUNDER_METRICS_ENABLED === "true"/);
-  // Every public read goes through getPublishedConnectedMetrics, so gate it there.
-  assert.match(community, /if \(!config\.founderMetricsEnabled\) return \[\]/);
-  assert.match(metricsPage, /config\.founderMetricsEnabled && Boolean\(config\.metricEncryptionKey\)/);
-  // The dead CTA is gone from the owner dashboard.
+  assert.match(config, /founderMetricsEnabled: false/);
+  assert.match(metricsPage, /redirect\(`\/manage\/\$\{slug\}\?tab=verification`\)/);
+  assert.equal((metricsRoute.match(/status: 410/g) ?? []).length, 1);
+  assert.match(metricsRoute, /export const GET = retired/);
+  assert.match(metricsRoute, /export const DELETE = retired/);
   assert.doesNotMatch(dashboard, /\/metrics`\}>Metrics</);
   assert.match(read("../../.env.example"), /FOUNDER_METRICS_ENABLED=false/);
 });

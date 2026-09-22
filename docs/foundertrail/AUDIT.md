@@ -1,4 +1,8 @@
-# FounderTrail repository audit
+# FounderTrail repository audit (historical baseline)
+
+This audit predates Pro Launch and retains the original sponsorship/Stripe findings for
+traceability. Use [`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md) and `docs/PRODUCT.md`
+for current release behavior.
 
 Audit date: 2026-09-21. This document records the pre-migration system and the decisions used for the BidIndex-to-FounderTrail change. No production database was queried or mutated during this implementation session.
 

@@ -18,23 +18,23 @@ Then run baseline/migration reconciliation as described in `MIGRATION_RUNBOOK.md
 - Migration applies once under lock, records the expected checksum, and is a no-op on the second run.
 - Every original `products.id` exists; slug/URL/contact/legacy-owner hashes match; legacy votes, qualified clicks, media, and updates do not decrease.
 - No product is automatically enrolled in a launch.
-- Historical bids/transactions remain queryable and clearly separated from launch votes/sponsorship.
+- Historical bids/transactions and sponsor records remain queryable and clearly separated from launch votes and Pro purchases.
 - `POST /api/checkout` returns `410 Gone`; historical checkout status/webhook handling and `/r`, `/w`, and `/u` compatibility continue to work.
 
 ## Public product
 
-- Navigation says FounderTrail and contains Discover, Updates, Submit startup, and account access—no platform bidding cross-promotion.
+- Navigation says FounderTrail and contains Pricing, Updates, Submit startup, and account access—no Advertise or platform bidding cross-promotion.
 - This week includes only explicitly scheduled approved launches. With none, an honest empty state and real Discover list are both visible.
 - Discover search/category/pricing/sort/pagination work. Unknown price says “See website.”
 - Row name opens the detail page; Visit opens the destination; actions are not nested.
-- Product page order is identity/use/pricing, media, updates, discussion, optional metrics, ownership claim, then history. Contacts/credentials/provider IDs are absent.
-- Sponsor is one DOM node: desktop rail; after the first three organic rows on mobile; never in Updates; clearly labelled.
+- Product page order is identity/use/pricing, media, updates, discussion, ownership claim, then history. Contacts/credentials/provider IDs are absent.
+- No sponsor card, promoted row, advertising calendar, or sponsor checkout is exposed. Pro badges do not change organic order and are not labelled Verified.
 - Sitemap contains only public pages/products; private account/admin routes are noindex/disallowed.
 - Check 360 px, tablet, and desktop without horizontal overflow; keyboard focus and reduced motion remain usable.
 
 ## Accounts and community
 
-- Magic link is single-use/10-minute and rate limited. Optional Google linking cannot silently merge another account.
+- Google is the only public sign-in provider and cannot silently merge another account.
 - Signed-out follow/vote/comment redirects to sign-in. CSRF/origin checks reject cross-site writes.
 - Follow/unfollow is idempotent and does not imply promotional email consent.
 - Comments support top-level plus one reply level, author edit, report, and reversible admin hide. Rate limits and duplicate report constraints work.
@@ -59,26 +59,26 @@ Then run baseline/migration reconciliation as described in `MIGRATION_RUNBOOK.md
 - Ordering is active votes descending, approval time, product ID. Cron freezes final vote count/rank after the boundary.
 - Draft update is private; preview/edit/publish/archive work; ordinary update does not change launch dates.
 
-## Stripe metrics
+## Stripe retirement
 
-- Reject standard/secret/publishable keys; accept only a valid restricted read-only test key with every required read.
-- Scope picker shows exact product IDs; account-wide requires explicit confirmation; overlapping account/product mapping is rejected.
-- Revenue window, successful invoice-backed collection, partial refund allocation, currencies, recurring interval normalization, and MRR subscription states match the disclosed `stripe-v1` methodology.
-- Publication is off until selected. Public card shows source/scope/currency/period/as-of/stale details. No conversion or currency combining occurs.
-- Disconnect deletes secret, scopes, and snapshots. Logs/errors do not contain keys or customer/card/email data.
+- Every method on `/api/owner/products/<slug>/metrics/stripe` returns `410 Gone`.
+- Owner navigation and public product pages have no revenue/MRR connection or claim.
+- The scheduler does not refresh Stripe snapshots. Historical records are retained privately until an explicit separately reviewed removal migration exists.
 
-## Dodo sponsorship
+## Dodo Pro Launch
 
-- Two concurrent attempts for an overlapping interval produce one hold; adjacent `[end,start)` bookings are allowed.
-- Hold expires after 15 minutes locally. Browser success/cancel cannot mark a booking paid.
-- Signed test webhook validates event/business/environment/session/product/currency/base amount, is idempotent, and handles duplicates/out-of-order delivery.
-- Paid placement begins exactly at UTC start and ends at start + 168 hours. It never changes launch order.
-- Pre-start cancellation requests a full refund; active cancellation stops future display under the stated policy. Delivery conflict queues full refund.
-- Impression requires 50%/one second/visible tab. Click shares the page-view ID. Reload/duplicate events and obvious bots do not inflate counts.
-- Founder and admin reports match qualified database events. Creative/destination snapshots are immutable for a paid booking.
+- Two concurrent attempts for the twentieth intro allocation produce at most one slot; the other founder must explicitly accept $9.
+- A local hold lasts 24 hours and provider uncertainty retains it for reconciliation. Browser success/cancel cannot mark an order paid.
+- Signed test webhooks validate event/business/environment/session/payment/product/quantity/currency/pre-tax amount and subscription absence; `webhook-id` is idempotent.
+- Test/demo/admin grants do not consume live intro allocation. Paid/refunded intro purchases do; a startup cannot reclaim another intro price.
+- Partial refund retains access; full cumulative refund revokes it. Disputes suspend, restore, or revoke via explicit monotonic transitions.
+- Launch Studio exports real 1200×630 and 1080×1080 PNGs from the preview canvas and keeps uploads private.
+- Results use one future launch or activation anchor, seven half-open daily slices, filtered views/clicks, net votes/follows, visible comments, and an immutable final snapshot.
 
 ## Failure exercises
 
-- Missing auth/email/Dodo/Stripe configuration shows unavailable guidance, not fake success.
-- Dodo API timeout after hold, webhook retry, refund retry, expired checkout reconciliation, Stripe rate limit/pagination failure, stale snapshot, Resend failure, and cron retry leave durable inspectable state.
-- Disable sponsorships and revoke test keys; public discovery and historical listings continue to work.
+- Missing auth/email/Dodo/storage configuration shows unavailable guidance, not fake success.
+- Dodo API timeout after a hold, webhook retry, refund retry, expired checkout reconciliation, broken asset, incomplete report coverage, Resend failure, and cron retry leave durable inspectable state.
+- Disable Pro checkout and revoke test keys; public discovery, existing entitlements, and historical listings continue to work.
+
+Use the complete payment, artifact, responsive, and production gates in [PRO_LAUNCH_RUNBOOK.md](PRO_LAUNCH_RUNBOOK.md).

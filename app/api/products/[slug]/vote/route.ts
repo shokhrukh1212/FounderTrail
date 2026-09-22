@@ -79,6 +79,13 @@ export async function PUT(request: Request, context: RouteContext<"/api/products
         );
       }
 
+      const previousActive = previous.rows[0]?.active ?? false;
+      if (previousActive !== body.active) await client.query(
+        `INSERT INTO product_community_activity_events(product_id,launch_id,actor_user_id,event_type,change)
+         VALUES($1::uuid,$2::uuid,$3,'upvote',$4)`,
+        [product.id, launchEligible ? launch?.id ?? null : null, user.id, body.active ? 1 : -1],
+      );
+
       const totals = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM product_votes WHERE product_id=$1::uuid AND active AND ($2::boolean OR NOT is_demo)`,
         [product.id, product.is_demo],

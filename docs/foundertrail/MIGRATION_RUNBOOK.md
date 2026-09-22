@@ -1,5 +1,10 @@
 # FounderTrail migration runbook
 
+For the current Pro Launch release, use this preservation procedure together with
+[`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md). Rehearse every pending migration
+through `016_pro_launch`; the older numbered examples below describe the original
+FounderTrail migration and remain as historical context.
+
 Do not run these commands from an ordinary developer shell pointed at production. Use a controlled migration window, a named environment, and an operator who can restore the database.
 
 ## 1. Prepare and back up

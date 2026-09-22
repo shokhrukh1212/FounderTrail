@@ -18,8 +18,13 @@ export async function PUT(request: Request, context: RouteContext<"/api/products
       if (!allowed) throw new Error("RATE_LIMITED");
       const product = await client.query<{ id: string }>(`SELECT id::text FROM products WHERE slug=$1 AND status='published'`, [slug]);
       if (!product.rows[0]) return null;
-      if (body.active) await client.query(`INSERT INTO product_follows(product_id,user_id) VALUES($1::uuid,$2) ON CONFLICT DO NOTHING`, [product.rows[0].id, user.id]);
-      else await client.query(`DELETE FROM product_follows WHERE product_id=$1::uuid AND user_id=$2`, [product.rows[0].id, user.id]);
+      const changed = body.active
+        ? await client.query(`INSERT INTO product_follows(product_id,user_id) VALUES($1::uuid,$2) ON CONFLICT DO NOTHING RETURNING product_id`, [product.rows[0].id, user.id])
+        : await client.query(`DELETE FROM product_follows WHERE product_id=$1::uuid AND user_id=$2 RETURNING product_id`, [product.rows[0].id, user.id]);
+      if (changed.rowCount) await client.query(
+        `INSERT INTO product_community_activity_events(product_id,actor_user_id,event_type,change) VALUES($1::uuid,$2,'follow',$3)`,
+        [product.rows[0].id, user.id, body.active ? 1 : -1],
+      );
       const count = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM product_follows WHERE product_id=$1::uuid`, [product.rows[0].id]);
       return { active: body.active, count: count.rows[0]?.count ?? 0 };
     });

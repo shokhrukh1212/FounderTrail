@@ -1,5 +1,9 @@
 # FounderTrail implementation plan
 
+This plan documents the previous FounderTrail phase. Sponsorship sales/displays and
+Stripe revenue/MRR connections are retired in the Pro Launch release; see
+[`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md) for the current implementation.
+
 This is the execution plan produced from the repository audit. Implementation is organized so that schema addition precedes code activation and legacy identities remain stable.
 
 ## Sequence

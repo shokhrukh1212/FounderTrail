@@ -21,39 +21,21 @@ CONFIRM_ADMIN_ROLE=admin@example.com npm run foundertrail:set-admin -- admin@exa
 
 Run the command without `--apply` first to preview the masked verified Google identity. The email must match exactly. The script changes one active account, invalidates its sessions, audits the change, and otherwise refuses to proceed. See `GOOGLE_AND_ADMIN_SETUP.md` for the complete sequence.
 
-## Dodo Payments sponsorship
+## Dodo Payments Pro Launch
 
-The approved Dodo store needs one product representing the actual service: one clearly labelled FounderTrail sponsored placement for 168 consecutive hours, USD 9 base price, no recurring billing, and no discount/coupon path.
+Follow [PRO_LAUNCH_RUNBOOK.md](PRO_LAUNCH_RUNBOOK.md). Pro uses two separate one-time USD products: $5 introductory and $9 standard, both before tax. Configure `DODO_PRO_INTRO_PRODUCT_ID`, `DODO_PRO_STANDARD_PRODUCT_ID`, the matching environment credentials, and the signed webhook. Keep `PRO_LAUNCH_CHECKOUT_ENABLED=false` until every sandbox gate passes.
 
-Set `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_KEY`, `DODO_PAYMENTS_BUSINESS_ID`, `DODO_SPONSOR_PRODUCT_ID`, and `DODO_PAYMENTS_ENVIRONMENT=test_mode`. Keep `SPONSORSHIPS_ENABLED=false` until test verification passes. Register the exact webhook route:
-
-```text
-POST https://<current-domain>/api/webhooks/dodo
-```
-
-Subscribe to payment success/failure/cancellation and refund status events supported by the Dodo account. The handler verifies the raw signed payload, event ID, configured business/environment/product, USD currency, and USD 9 pre-tax base amount. Tax may be added by Dodo and is stored separately.
-
-FounderTrail holds inventory locally for 15 minutes. Dodo hosted-session expiry is not treated as authoritative inventory. A provider-confirmed payment that arrives after the local hold or conflicts with another booking is not displayed; it enters the durable refund queue. Test success, duplicate delivery, delayed/reordered events, failed payment, cancellation, conflict/refund, and provider reconciliation before switching both the provider and app to live mode.
-
-Lemon Squeezy must not be used or relabelled for sponsorship advertising. The old paid-ranking checkout now returns `410 Gone`; its status route and signed webhook remain only to reconcile historical orders. Retain old Lemon values only while that historical reconciliation is required.
-
-## Optional Stripe founder metrics
-
-Set `METRIC_ENCRYPTION_KEY` to exactly 32 random bytes encoded as base64 or 64 hex characters. A founder creates a Stripe restricted key beginning with `rk_test_` or `rk_live_` with read access only to Account, Products, Prices, Subscriptions, Invoices, and Charges. No write permission is needed.
-
-The connection flow validates those reads before encryption/storage. A founder chooses exact Stripe product IDs or explicitly confirms account-wide scope, then separately opts in to publish trailing-30-day collected revenue and/or MRR. The same Stripe account/product scope cannot be attached to multiple FounderTrail products. Disconnect purges the encrypted key and all snapshots.
-
-Stripe is not used for FounderTrail sponsorship checkout.
+New sponsorship sales and public placements remain disabled. Stripe revenue/MRR connection endpoints are also retired in this release. Keep legacy records and secrets only as long as historical reconciliation or refund obligations require them.
 
 ## Scheduler
 
-Call `GET /api/cron/tick` with `Authorization: Bearer <CRON_SECRET>`. Daily Vercel cron is the minimum fallback; a trusted external scheduler every 15–60 minutes provides faster hold cleanup, refund/webhook retries, Stripe refresh, launch archival, and digest delivery. Jobs are idempotent and bounded, but monitor failures and latency.
+Call `GET /api/cron/tick` with `Authorization: Bearer <CRON_SECRET>`. Daily Vercel cron is the minimum fallback; a trusted external scheduler every 15–60 minutes provides faster checkout reconciliation, refund/webhook retries, report finalization, launch archival, and digest delivery. Jobs are idempotent and bounded, but monitor failures and latency.
 
 ## Administrator operations
 
 - `/admin`: product moderation and private contact table.
-- `/admin/foundertrail`: ownership claims, content reports, launch scheduling, sponsorship/refunds, metric/job/provider health.
+- `/admin/foundertrail`: ownership claims, content reports, launch scheduling, Pro grants/revocation/refunds, allocation, income, report states, and provider/job health.
 - `/admin/founder-emails`: consent-aware founder campaign operations.
-- Review new listings separately from ownership. A sponsor must already be an approved, managed listing.
-- Manual claim decisions, content moderation, launch scheduling, and refund requests create audit records.
+- Review new listings separately from ownership. A Pro purchaser must already be a confirmed owner of an approved listing.
+- Manual claim decisions, content moderation, launch scheduling, Pro entitlement actions, and refund requests create audit records.
 - Founder contacts, claim evidence, credentials, payment IDs, provider payloads, and audit detail are private and must not appear in public pages or exports.

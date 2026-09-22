@@ -23,6 +23,7 @@ export type StartupCard = {
   launchId: string | null;
   launchVotes: number;
   followed: boolean;
+  isPro: boolean;
 };
 
 type StartupRow = {
@@ -30,7 +31,7 @@ type StartupRow = {
   logo_url: string | null; category_slug: string | null; category_name: string | null;
   pricing_model: string | null; starting_price_minor: string | null; pricing_currency: string | null;
   follower_count: number; all_time_upvotes: number; outbound_clicks: number; upvoted: boolean;
-  launch_id: string | null; launch_votes: number; followed: boolean;
+  launch_id: string | null; launch_votes: number; followed: boolean; is_pro: boolean;
 };
 
 function mapStartup(row: StartupRow): StartupCard {
@@ -43,7 +44,7 @@ function mapStartup(row: StartupRow): StartupCard {
     pricingCurrency: row.pricing_currency,
     followerCount: Number(row.follower_count),
     allTimeUpvotes: Number(row.all_time_upvotes), outboundClicks: Number(row.outbound_clicks), upvoted: row.upvoted,
-    launchId: row.launch_id, launchVotes: Number(row.launch_votes), followed: row.followed,
+    launchId: row.launch_id, launchVotes: Number(row.launch_votes), followed: row.followed, isPro: row.is_pro,
   };
 }
 
@@ -95,6 +96,7 @@ export async function getFounderTrailDiscovery(input: {
       pl.id::text AS launch_id,
       CASE WHEN pl.id IS NULL THEN 0 ELSE (SELECT count(*)::int FROM launch_votes lv WHERE lv.launch_id=pl.id AND lv.active) END AS launch_votes,
       CASE WHEN $${userParameter}::text IS NULL THEN false ELSE EXISTS(SELECT 1 FROM product_follows f WHERE f.product_id=p.id AND f.user_id=$${userParameter}) END AS followed
+      ,EXISTS(SELECT 1 FROM pro_entitlements pe WHERE pe.product_id=p.id AND pe.status='active') AS is_pro
     ${base} ORDER BY ${order} LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
   const weekRows = input.view === "this_week" ? await query<{ starts_at: Date; ends_at: Date }>(
     `SELECT starts_at,ends_at FROM launch_weeks WHERE starts_at<=now() AND now()<ends_at AND state IN ('scheduled','active') LIMIT 1`,

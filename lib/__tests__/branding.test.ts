@@ -32,9 +32,9 @@ test("root and product social metadata use generated 1200 by 630 previews",()=>{
   assert.match(productPage,/card: "summary_large_image"/);
 });
 
-test("active platform copy describes launches, updates, ownership, and sponsorship honestly",()=>{
+test("active platform copy describes launches, updates, ownership, and Pro honestly",()=>{
   assert.match(about,/How launch weeks work/);
-  assert.match(about,/processed by Dodo Payments/);
-  assert.match(about,/Paid sponsorship never bypasses review/);
+  assert.match(about,/Pro is a one-time launch-tools purchase/);
+  assert.match(about,/does not sell placement in this release/);
   assert.doesNotMatch(about,/accepts bidding-related products/);
 });

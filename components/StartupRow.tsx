@@ -3,6 +3,7 @@ import { ProductLogo } from "./ProductLogo";
 import { FollowButton } from "./FollowButton";
 import { VoteButton } from "./VoteButton";
 import type { StartupCard } from "@/lib/foundertrail-data";
+import { ProBadge } from "./ProBadge";
 
 function price(product: StartupCard): string | null {
   if (product.startingPriceMinor !== null && product.pricingCurrency) {
@@ -18,7 +19,7 @@ export function StartupRow({ product, position, weekly = false }: { product: Sta
     <span className="product-position">{position ? `#${position}` : ""}</span>
     <ProductLogo imageUrl={product.logoUrl} productUrl={product.websiteUrl} productName={product.name} className="product-list-logo" />
     <div className="startup-row-copy">
-      <Link href={`/product/${product.slug}`}><h2>{product.name}</h2></Link>
+      <div className="startup-name-line"><Link href={`/product/${product.slug}`}><h2>{product.name}</h2></Link>{product.isPro ? <ProBadge /> : null}</div>
       <p>{product.tagline}</p>
       <div className="startup-meta">
         {product.category ? <span>{product.category.name}</span> : null}

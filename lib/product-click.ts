@@ -6,6 +6,7 @@ import { ownerCredentialMatches } from "./owner-auth";
 import { ensureBidIndexVisitor } from "./bidindex-visitor";
 import { networkHash } from "./request-security";
 import { publicHttpUrl } from "./product-validation";
+import { currentUserFromHeaders } from "./auth";
 
 export type ProductClickOutcome = "counted" | "duplicate" | "bot" | "owner" | "rate_limited" | "not_found" | "error";
 
@@ -16,6 +17,7 @@ async function insertOutcome(client: PoolClient, input: { productId: string; vis
 export async function recordProductClick(request: Request, slug: string) {
   const source = "product" as const;
   const visitor = ensureBidIndexVisitor(request);
+  const accountUser = await currentUserFromHeaders(request.headers).catch(() => null);
   return withTransaction(async (client) => {
     const products = await client.query<{ id: string; website_url: string; approved_at: Date | null; token_hash: string; token_version: number }>(
       `SELECT p.id::text,p.website_url,p.approved_at,o.token_hash,o.token_version FROM products p JOIN product_owner_credentials o ON o.product_id=p.id WHERE p.slug=$1 AND p.status='published' AND ($2::boolean OR NOT p.is_demo) LIMIT 1`, [slug,process.env.NODE_ENV!=="production"]);
@@ -25,7 +27,8 @@ export async function recordProductClick(request: Request, slug: string) {
     if (!destination.ok) return { destination: null, visitor, outcome: "error" as const };
     const requestNetworkHash = networkHash(request, "outbound-click");
     const ownerToken = ownerTokenFromRequest(request, product.id);
-    if (ownerCredentialMatches({ productId: product.id, tokenHash: product.token_hash, tokenVersion: product.token_version, approvedAt: product.approved_at }, ownerToken)) {
+    const accountOwner = accountUser ? accountUser.role === "admin" || Boolean((await client.query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2`, [product.id, accountUser.id])).rowCount) : false;
+    if (accountOwner || ownerCredentialMatches({ productId: product.id, tokenHash: product.token_hash, tokenVersion: product.token_version, approvedAt: product.approved_at }, ownerToken)) {
       await insertOutcome(client, { productId: product.id, visitorHash: visitor.hash, networkHash: requestNetworkHash, outcome: "owner", source });
       return { destination: destination.url, visitor, outcome: "owner" as const };
     }

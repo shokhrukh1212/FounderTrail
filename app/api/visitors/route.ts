@@ -8,6 +8,7 @@ import { ownerCredentialMatches } from "@/lib/owner-auth";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { networkHash, requestOriginIsSameSite } from "@/lib/request-security";
 import { countAllTimeVisitors, getVisitorTotal } from "@/lib/visitors";
+import { currentUserFromHeaders } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const productSlug = typeof body?.productSlug === "string" && SLUG.test(body.productSlug) ? body.productSlug : null;
   const referralSlug = typeof body?.ref === "string" && SLUG.test(body.ref) ? body.ref : null;
   const visitor = ensureBidIndexVisitor(request);
+  const accountUser = await currentUserFromHeaders(request.headers).catch(() => null);
   const abuseHash = networkHash(request, "eligible-visitor");
   const cookies = request.headers.get("cookie") ?? "";
   const privateSession = /(?:^|;\s*)bidindex_admin=/.test(cookies) || /(?:^|;\s*)bidindex_owner_[a-f0-9]+=/.test(cookies);
@@ -57,7 +59,8 @@ export async function POST(request: Request) {
         );
         const product = products.rows[0];
         if (product) {
-          const owner = ownerCredentialMatches({ productId:product.id,tokenHash:product.token_hash,tokenVersion:product.token_version,approvedAt:product.approved_at }, ownerTokenFromRequest(request, product.id));
+          const accountOwner = accountUser ? accountUser.role === "admin" || Boolean((await client.query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2`, [product.id, accountUser.id])).rowCount) : false;
+          const owner = accountOwner || ownerCredentialMatches({ productId:product.id,tokenHash:product.token_hash,tokenVersion:product.token_version,approvedAt:product.approved_at }, ownerTokenFromRequest(request, product.id));
           const outcome = !allowed ? "rate_limited" : !eligible ? (isObviousBot(request) ? "bot" : "owner") : owner ? "owner" : "counted";
           const inserted = await client.query(
             `INSERT INTO product_listing_view_events (product_id,visitor_hash,network_hash,metric_date,outcome)
@@ -79,7 +82,8 @@ export async function POST(request: Request) {
         );
         const product = products.rows[0];
         if (product) {
-          const owner = ownerCredentialMatches({ productId:product.id,tokenHash:product.token_hash,tokenVersion:product.token_version,approvedAt:product.approved_at }, ownerTokenFromRequest(request, product.id));
+          const accountOwner = accountUser ? accountUser.role === "admin" || Boolean((await client.query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2`, [product.id, accountUser.id])).rowCount) : false;
+          const owner = accountOwner || ownerCredentialMatches({ productId:product.id,tokenHash:product.token_hash,tokenVersion:product.token_version,approvedAt:product.approved_at }, ownerTokenFromRequest(request, product.id));
           const outcome = !allowed ? "rate_limited" : !eligible ? (isObviousBot(request) ? "bot" : "owner") : owner ? "owner" : "counted";
           const inserted = await client.query(
             `INSERT INTO founder_referral_events (source_product_id,visitor_hash,network_hash,landing_path,outcome)

@@ -1,0 +1,12 @@
+ALTER TABLE notification_jobs DROP CONSTRAINT IF EXISTS notification_jobs_job_type_check;
+ALTER TABLE notification_jobs ADD CONSTRAINT notification_jobs_job_type_check CHECK (job_type IN ('weekly_digest','claim_invitation','transactional','sponsor_refund','sponsor_reconcile','metric_sync','launch_archive'));
+DROP TABLE IF EXISTS pro_reporting_coverage;
+DROP TABLE IF EXISTS pro_export_events;
+DROP TABLE IF EXISTS pro_refunds;
+DROP TABLE IF EXISTS product_community_activity_events;
+DROP TABLE IF EXISTS pro_launch_kit_assets;
+DROP TABLE IF EXISTS pro_launch_kit_drafts;
+DROP TABLE IF EXISTS pro_result_windows;
+DROP TABLE IF EXISTS pro_entitlement_events;
+DROP TABLE IF EXISTS pro_entitlements;
+DROP TABLE IF EXISTS pro_launch_orders;

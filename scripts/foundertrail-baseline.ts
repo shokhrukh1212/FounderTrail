@@ -17,6 +17,11 @@ type ProductFingerprint = {
   contactHash: string;
   ownerHash: string | null;
   legacyVotes: number;
+  claims: number;
+  launches: number;
+  followers: number;
+  comments: number;
+  listingViews: number;
   outboundClicks: number;
   media: number;
   updates: number;
@@ -59,10 +64,15 @@ async function capture(): Promise<Report> {
   }
   const products = await pool.query<{
     id: string; slug: string; website_url: string; contact_email: string;
-    token_hash: string | null; legacy_votes: number; outbound_clicks: number;
+    token_hash: string | null; legacy_votes: number; claims: number; launches: number; followers: number; comments: number; listing_views: number; outbound_clicks: number;
     media: number; updates: number;
   }>(`SELECT p.id::text,p.slug,p.website_url,p.contact_email,o.token_hash,
       (SELECT count(*)::int FROM product_votes v WHERE v.product_id=p.id) AS legacy_votes,
+      (SELECT count(*)::int FROM product_claims c WHERE c.product_id=p.id) AS claims,
+      (SELECT count(*)::int FROM product_launches l WHERE l.product_id=p.id) AS launches,
+      (SELECT count(*)::int FROM product_follows f WHERE f.product_id=p.id) AS followers,
+      (SELECT count(*)::int FROM product_comments c WHERE c.product_id=p.id) AS comments,
+      (SELECT count(*)::int FROM product_listing_view_events e WHERE e.product_id=p.id AND e.outcome='counted') AS listing_views,
       (SELECT count(*)::int FROM product_outbound_click_events e WHERE e.product_id=p.id AND e.outcome='counted') AS outbound_clicks,
       (SELECT count(*)::int FROM product_media m WHERE m.product_id=p.id) AS media,
       (SELECT count(*)::int FROM product_updates u WHERE u.product_id=p.id) AS updates
@@ -84,6 +94,11 @@ async function capture(): Promise<Report> {
       contactHash: digest(row.contact_email.trim().toLowerCase()),
       ownerHash: row.token_hash ? digest(row.token_hash) : null,
       legacyVotes: row.legacy_votes,
+      claims: row.claims,
+      launches: row.launches,
+      followers: row.followers,
+      comments: row.comments,
+      listingViews: row.listing_views,
       outboundClicks: row.outbound_clicks,
       media: row.media,
       updates: row.updates,
@@ -105,7 +120,7 @@ function compare(before: Report, after: Report) {
     for (const field of ["slugHash", "urlHash", "contactHash", "ownerHash"] as const) {
       if (original[field] !== current[field]) failures.push(`${original.id}: ${field} changed`);
     }
-    for (const field of ["legacyVotes", "outboundClicks", "media", "updates"] as const) {
+    for (const field of ["legacyVotes", "claims", "launches", "followers", "comments", "listingViews", "outboundClicks", "media", "updates"] as const) {
       if (current[field] < original[field]) failures.push(`${original.id}: ${field} decreased`);
     }
   }
