@@ -5,6 +5,28 @@ function codePointLength(value: string): number {
   return Array.from(value).length;
 }
 
+/**
+ * X (and LinkedIn, Slack…) cache a link's card by URL, image included, for days. A link
+ * shared before the current share-image design would keep showing the old card, so every
+ * link that goes into a post carries this version, and the page's og:image does too.
+ * Bump it whenever the product share image changes. Canonical URLs stay unversioned.
+ */
+export const SHARE_CARD_VERSION = "1";
+
+/** The product URL to put in a post: the canonical page plus the share-card version. */
+export function sharedProductUrl(siteUrl: string, slug: string): string {
+  const url = new URL(canonicalProductUrl(siteUrl, slug));
+  url.searchParams.set("v", SHARE_CARD_VERSION);
+  return url.toString();
+}
+
+/** The product's share image, versioned with the share links so both refresh together. */
+export function productShareImageUrl(siteUrl: string, slug: string): string {
+  const url = new URL(`/product/${encodeURIComponent(slug)}/opengraph-image`, `${siteUrl.replace(/\/+$/, "")}/`);
+  url.searchParams.set("v", SHARE_CARD_VERSION);
+  return url.toString();
+}
+
 export function canonicalProductUrl(siteUrl: string, slug: string): string {
   return new URL(`/product/${encodeURIComponent(slug)}`, `${siteUrl.replace(/\/+$/, "")}/`).toString();
 }
@@ -12,6 +34,7 @@ export function canonicalProductUrl(siteUrl: string, slug: string): string {
 export function productLaunchUrl(siteUrl: string, slug: string): string {
   const url = new URL(canonicalProductUrl(siteUrl, slug));
   url.search = new URLSearchParams({
+    v: SHARE_CARD_VERSION,
     ref: slug,
     utm_source: "x",
     utm_medium: "social",
@@ -74,7 +97,7 @@ export function xProductShareIntent(input: { siteUrl: string; slug: string; shor
   const origin = publicShareOrigin(input.siteUrl);
   const parameters = new URLSearchParams({
     text: productShareText(input.shortProductName),
-    url: canonicalProductUrl(origin, input.slug),
+    url: sharedProductUrl(origin, input.slug),
   });
   return `https://x.com/intent/tweet?${parameters.toString()}`;
 }

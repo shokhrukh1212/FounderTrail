@@ -28,7 +28,7 @@ test("root and product social metadata use 1200 by 630 previews",()=>{
   assert.match(layout,/width: 1200/);
   assert.match(layout,/height: 630/);
   assert.match(productPage,/canonicalProductUrl\(config\.siteUrl, slug\)/);
-  assert.match(productPage,/\/product\/\$\{encodeURIComponent\(slug\)\}\/opengraph-image/);
+  assert.match(productPage,/const image = productShareImageUrl\(config\.siteUrl, slug\)/);
   assert.match(productPage,/card: "summary_large_image"/);
 });
 

@@ -4,6 +4,7 @@ import { defaultLaunchKitDraft, normalizeLaunchKitDraft, type LaunchFacts } from
 import { query, withTransaction } from "@/lib/db";
 import { config } from "@/lib/config";
 import { requestOriginIsSameSite } from "@/lib/request-security";
+import { sharedProductUrl } from "@/lib/product-share";
 
 async function facts(productId: string): Promise<LaunchFacts | null> {
   const rows = await query<{ name: string; tagline: string; use_case: string | null; intended_audience: string | null; website_url: string; slug: string; launch_state: string | null }>(
@@ -14,7 +15,7 @@ async function facts(productId: string): Promise<LaunchFacts | null> {
      FROM products p WHERE p.id=$1::uuid`, [productId],
   );
   const row = rows[0];
-  return row ? { name: row.name, tagline: row.tagline, useCase: row.use_case, audience: row.intended_audience, websiteUrl: row.website_url, founderTrailUrl: `${config.siteUrl}/product/${row.slug}`, launchState: row.launch_state === "upcoming" || row.launch_state === "live" ? row.launch_state : "listed" } : null;
+  return row ? { name: row.name, tagline: row.tagline, useCase: row.use_case, audience: row.intended_audience, websiteUrl: row.website_url, founderTrailUrl: sharedProductUrl(config.siteUrl, row.slug), launchState: row.launch_state === "upcoming" || row.launch_state === "live" ? row.launch_state : "listed" } : null;
 }
 
 export async function GET(request: Request, context: RouteContext<"/api/owner/products/[slug]/launch-kit/draft">) {

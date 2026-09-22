@@ -146,7 +146,8 @@ test("product-page sharing drafts exactly one sentence and one canonical link", 
   const parsed = new URL(intent);
   assert.equal(parsed.origin + parsed.pathname, "https://x.com/intent/tweet");
   assert.equal(parsed.searchParams.get("text"), "Discover AgentHill on FounderTrail.");
-  assert.equal(parsed.searchParams.get("url"), "https://foundertrail.example/product/agent%20hill");
+  // The shared link carries the share-card version so X fetches the current card.
+  assert.equal(parsed.searchParams.get("url"), "https://foundertrail.example/product/agent%20hill?v=1");
   // The link appears once: in the url parameter, never also inside the text.
   assert.doesNotMatch(parsed.searchParams.get("text") ?? "", /http/);
   assert.equal(canonicalProductUrl("https://foundertrail.example/", "a-b"), "https://foundertrail.example/product/a-b");
@@ -279,4 +280,20 @@ test("website logos reach the launch graphic at their real size and fill the til
   assert.doesNotMatch(mediaRoute,/fit: "contain"/);
   assert.match(graphic,/const inset = isFullBleedLogo\(logo\) \? 0 : size \* 0\.1/);
   assert.match(graphic,/Math\.max\(box \/ w, box \/ h\)/);
+});
+
+test("every link that goes into a post, and the share image, carry the share-card version",async()=>{
+  const share=await import("../product-share");
+  const { displayUrl } = await import("../launch-kit");
+  assert.equal(share.sharedProductUrl("https://bidindex.dev/","yourhour"),`https://bidindex.dev/product/yourhour?v=${share.SHARE_CARD_VERSION}`);
+  assert.equal(share.productShareImageUrl("https://bidindex.dev","yourhour"),`https://bidindex.dev/product/yourhour/opengraph-image?v=${share.SHARE_CARD_VERSION}`);
+  assert.equal(new URL(share.productLaunchUrl("https://bidindex.dev","yourhour")).searchParams.get("v"),share.SHARE_CARD_VERSION);
+  // Canonical URLs (search engines, emails) stay clean.
+  assert.equal(share.canonicalProductUrl("https://bidindex.dev","yourhour"),"https://bidindex.dev/product/yourhour");
+  // The launch graphic prints the address without the version or tracking.
+  assert.equal(displayUrl("https://bidindex.dev/product/yourhour?v=1&ref=x#top"),"bidindex.dev/product/yourhour");
+  const panel=readFileSync(new URL("../../components/LaunchKitPanel.tsx",import.meta.url),"utf8");
+  const draftRoute=readFileSync(new URL("../../app/api/owner/products/[slug]/launch-kit/draft/route.ts",import.meta.url),"utf8");
+  assert.match(panel,/founderTrailUrl: sharedProductUrl\(config\.siteUrl, slug\)/);
+  assert.match(draftRoute,/founderTrailUrl: sharedProductUrl\(config\.siteUrl, row\.slug\)/);
 });

@@ -18,7 +18,7 @@ import { getProductDetail } from "@/lib/product-data";
 import { getProductComments, getProductCommunityState } from "@/lib/product-community";
 import { publicPricingLabel } from "@/lib/product-pricing";
 import { categoryFilterHref } from "@/lib/categories";
-import { canonicalProductUrl } from "@/lib/product-share";
+import { canonicalProductUrl, productShareImageUrl } from "@/lib/product-share";
 import { getProState } from "@/lib/pro-launch";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PageProps<"/product/[slug]">)
   const product = await getProductDetail(slug);
   if (!product) return { title: "Startup not found", robots: { index: false, follow: false } };
   const canonicalUrl = canonicalProductUrl(config.siteUrl, slug);
-  const image = new URL(`/product/${encodeURIComponent(slug)}/opengraph-image`, `${config.siteUrl}/`).toString();
+  const image = productShareImageUrl(config.siteUrl, slug);
   return {
     title: product.displayName,
     description: product.tagline,

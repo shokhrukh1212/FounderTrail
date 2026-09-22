@@ -56,8 +56,9 @@ function source(value: unknown, fallback = ""): string {
 export const LISTING_LOGO_SOURCE = "listing:logo";
 
 /** The URL as printed on the graphic: no protocol, no trailing slash. */
+/** A URL as printed on the graphic: no scheme, query (share-card version, UTM) or hash. */
 export function displayUrl(url: string): string {
-  return url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  return url.replace(/^https?:\/\//i, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
 }
 
 export function generatedSocial(facts: LaunchFacts): Pick<LaunchSocialDraft, "short" | "linkedin" | "altText"> {
