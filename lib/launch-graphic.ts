@@ -145,6 +145,42 @@ function imageSize(image: HTMLImageElement) {
   return { w: image.naturalWidth || 512, h: image.naturalHeight || image.naturalWidth || 512 };
 }
 
+const fullBleedLogos = new WeakMap<HTMLImageElement, boolean>();
+
+/**
+ * True for an opaque, square logo such as an app icon: it carries its own background, so it
+ * fills the tile edge to edge instead of sitting inside a white frame. Transparent or wide
+ * logos keep the inset so nothing is cropped. Reading pixels needs a same-origin image; if
+ * the canvas refuses, the inset is the safe answer.
+ */
+function isFullBleedLogo(logo: HTMLImageElement): boolean {
+  const cached = fullBleedLogos.get(logo);
+  if (cached !== undefined) return cached;
+  let result = false;
+  const { w, h } = imageSize(logo);
+  if (Math.abs(w / h - 1) <= 0.08) {
+    try {
+      const n = 12, probe = document.createElement("canvas"); probe.width = n; probe.height = n;
+      const context = probe.getContext("2d", { willReadFrequently: true });
+      if (context) {
+        context.drawImage(logo, 0, 0, n, n);
+        const data = context.getImageData(0, 0, n, n).data;
+        let edge = 0, opaque = 0;
+        for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) {
+          if (x !== 0 && y !== 0 && x !== n - 1 && y !== n - 1) continue;
+          edge += 1; if (data[(y * n + x) * 4 + 3] > 240) opaque += 1;
+        }
+        // A rounded app icon leaves its corners transparent, so a clear majority of the edge,
+        // not all of it, must be solid. A logo on a transparent background touches the edge
+        // in a few places at most.
+        result = opaque / edge >= 0.6;
+      }
+    } catch { result = false; }
+  }
+  fullBleedLogos.set(logo, result);
+  return result;
+}
+
 function drawLogoTile(ctx: CanvasRenderingContext2D, t: Typesetter, p: Palette, accent: string, logo: HTMLImageElement | null, name: string, x: number, y: number, size: number) {
   const radius = size * 0.24;
   drawShadowed(ctx, p, size * 0.32, size * 0.1, () => {
@@ -156,7 +192,8 @@ function drawLogoTile(ctx: CanvasRenderingContext2D, t: Typesetter, p: Palette, 
   if (logo) {
     ctx.save(); roundRect(ctx, x, y, size, size, radius); ctx.clip();
     const { w, h } = imageSize(logo);
-    const inset = size * 0.1, box = size - inset * 2, scale = Math.min(box / w, box / h);
+    const inset = isFullBleedLogo(logo) ? 0 : size * 0.1, box = size - inset * 2;
+    const scale = inset ? Math.min(box / w, box / h) : Math.max(box / w, box / h);
     ctx.drawImage(logo, x + (size - w * scale) / 2, y + (size - h * scale) / 2, w * scale, h * scale);
     ctx.restore();
   } else {

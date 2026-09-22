@@ -41,7 +41,9 @@ async function listingLogoPng(productId: string): Promise<Buffer | null> {
   if (!logo) return null;
   try {
     return await sharp(logo.bytes, { density: 384, limitInputPixels: 24_000_000 })
-      .resize(512, 512, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, withoutEnlargement: logo.contentType !== "image/svg+xml" })
+      // Never pad onto a fixed canvas: a 48px favicon padded to 512px would be drawn as a
+      // dot in the middle of the tile, and would hide how small it really is from the studio.
+      .resize(512, 512, { fit: "inside", withoutEnlargement: logo.contentType !== "image/svg+xml" })
       .png().toBuffer();
   } catch {
     return null;

@@ -270,3 +270,13 @@ test("posting a comment, reply or edit resets its form",()=>{
   assert.match(discussion,/if \(response\.ok\) \{ setReply\(""\); setReplying\(false\); onChanged\(\); \}/);
   assert.match(discussion,/if \(response\.ok\) \{ setEditing\(false\); onChanged\(\); \}/);
 });
+
+test("website logos reach the launch graphic at their real size and fill the tile when opaque",()=>{
+  const mediaRoute=readFileSync(new URL("../../app/api/owner/products/[slug]/launch-kit/media/[mediaId]/route.ts",import.meta.url),"utf8");
+  const graphic=readFileSync(new URL("../launch-graphic.ts",import.meta.url),"utf8");
+  // Padding a 48px favicon onto a 512px canvas drew it as a dot and hid how small it was.
+  assert.match(mediaRoute,/fit: "inside"/);
+  assert.doesNotMatch(mediaRoute,/fit: "contain"/);
+  assert.match(graphic,/const inset = isFullBleedLogo\(logo\) \? 0 : size \* 0\.1/);
+  assert.match(graphic,/Math\.max\(box \/ w, box \/ h\)/);
+});
