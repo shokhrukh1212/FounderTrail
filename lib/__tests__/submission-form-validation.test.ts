@@ -17,8 +17,7 @@ function validForm(): FormData {
   form.set("websiteUrl", "https://product.example");
   form.set("name", "Example product");
   form.set("tagline", "A concise description of the product.");
-  form.set("categoryId", "1");
-  form.set("pricingModel", "unknown");
+  form.set("categories", "developer-tools");
   form.set("contactEmail", "founder@example.com");
   form.set("ownershipConsent", "on");
   return form;
@@ -33,7 +32,7 @@ test("required submission errors are attached to their exact fields", () => {
   assert.match(errors.websiteUrl ?? "", /website/i);
   assert.match(errors.name ?? "", /product name/i);
   assert.match(errors.tagline ?? "", /one-line description/i);
-  assert.match(errors.categoryId ?? "", /category/i);
+  assert.match(errors.categories ?? "", /category/i);
   assert.match(errors.contactEmail ?? "", /contact email/i);
   assert.match(errors.ownershipConsent ?? "", /authorized/i);
 });
@@ -61,10 +60,17 @@ test("submission UI renders inline accessible errors and focuses the first inval
   assert.match(submissionFormSource, /isSubmissionField\(result\.field\)/);
 });
 
-test("a pricing model must be chosen, and each step validates only its own fields", () => {
-  const missing = validForm();
-  missing.delete("pricingModel");
-  assert.equal(validateSubmissionForm(missing).pricingModel, "Choose a pricing model.");
+test("pricing stays optional, and each step validates only its own fields", () => {
+  // No pricing at all is a complete submission: the public row is simply omitted.
+  assert.equal(validateSubmissionForm(validForm()).pricingModel, undefined);
+  const amountWithoutModel = validForm();
+  amountWithoutModel.set("startingPrice", "9");
+  assert.match(validateSubmissionForm(amountWithoutModel).pricingModel ?? "", /pricing model/i);
+  const amountWithoutBasis = validForm();
+  amountWithoutBasis.set("pricingModel", "paid");
+  amountWithoutBasis.set("startingPrice", "29");
+  amountWithoutBasis.set("pricingCurrency", "USD");
+  assert.match(validateSubmissionForm(amountWithoutBasis).pricingBasis ?? "", /one-time, monthly/i);
 
   // Step 1 only owns the website, so an empty name must not block leaving it.
   const website = new FormData();
@@ -73,9 +79,10 @@ test("a pricing model must be chosen, and each step validates only its own field
   assert.deepEqual(validateSubmissionStep(website, 2), {
     name: "Enter a product name using 80 characters or fewer.",
     tagline: "Add a one-line description using 160 characters or fewer.",
-    categoryId: "Choose a category.",
-    pricingModel: "Choose a pricing model.",
+    categories: "Choose at least one category.",
   });
+  // A saved draft is allowed to be incomplete.
+  assert.equal(validateSubmissionStep(website, 2, { draft: true }).categories, undefined);
 
   // Every field belongs to exactly one step.
   const owned = [...SUBMISSION_STEPS[1], ...SUBMISSION_STEPS[2], ...SUBMISSION_STEPS[3]];

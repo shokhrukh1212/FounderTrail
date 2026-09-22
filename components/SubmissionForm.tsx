@@ -15,6 +15,9 @@ import {
   type SubmissionStep,
 } from "@/lib/submission-form-validation";
 import { ProductLogo } from "./ProductLogo";
+import { CategoryPicker } from "./CategoryPicker";
+import { PricingFields } from "./PricingFields";
+import { EMPTY_PRICING } from "@/lib/product-pricing";
 
 type Metadata = {
   productName: string;
@@ -37,7 +40,7 @@ function fieldDescription(field: SubmissionField, errors: SubmissionFieldErrors,
   return [errors[field] ? `submission-${field}-error` : null, helperId].filter(Boolean).join(" ") || undefined;
 }
 
-export function SubmissionForm({ categories, accountName = "", accountEmail = "" }: { categories: Array<{ id: string; name: string }>; accountName?: string; accountEmail?: string }) {
+export function SubmissionForm({ accountName = "", accountEmail = "" }: { accountName?: string; accountEmail?: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const screenshotsInputRef = useRef<HTMLInputElement>(null);
@@ -86,7 +89,12 @@ export function SubmissionForm({ categories, accountName = "", accountEmail = ""
   function focusField(field: SubmissionField) {
     requestAnimationFrame(() => {
       const control = formRef.current?.elements.namedItem(field);
-      const target = control instanceof RadioNodeList ? control.item(0) : control;
+      let target = control instanceof RadioNodeList ? control.item(0) : control;
+      // The category picker posts a hidden field. Focus its search box instead, so the
+      // founder lands on the control they can actually use.
+      if (target instanceof HTMLInputElement && target.type === "hidden") {
+        target = target.parentElement?.querySelector("input:not([type=hidden]), select, button") ?? target;
+      }
       if (!(target instanceof HTMLElement)) return;
       target.focus({ preventScroll: true });
       target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -211,7 +219,7 @@ export function SubmissionForm({ categories, accountName = "", accountEmail = ""
     const form = formRef.current;
     if (!form) return;
     const data = submissionData(form, null);
-    const stepErrors = validateSubmissionStep(data, step);
+    const stepErrors = validateSubmissionStep(data, step, { draft: true });
     setFieldErrors((current) => ({ ...current, ...stepErrors }));
     const firstInvalid = Object.keys(stepErrors).find(isSubmissionField);
     if (firstInvalid) { focusField(firstInvalid); return; }
@@ -220,15 +228,18 @@ export function SubmissionForm({ categories, accountName = "", accountEmail = ""
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = submissionData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter);
-    const validation = validateSubmissionForm(data);
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const data = submissionData(event.currentTarget, submitter);
+    // A saved draft is allowed to be incomplete; submitting for review is not.
+    const draft = data.get("submissionStatus") === "draft";
+    const validation = validateSubmissionForm(data, { draft });
     setFieldErrors(validation);
     setError("");
     setExistingProduct(null);
     const firstInvalid = Object.keys(validation).find(isSubmissionField);
     if (firstInvalid) {
       // Send the founder back to the step that actually owns the problem.
-      const owningStep = ([1, 2, 3] as SubmissionStep[]).find((candidate) => Object.keys(validateSubmissionStep(data, candidate)).includes(firstInvalid));
+      const owningStep = ([1, 2, 3] as SubmissionStep[]).find((candidate) => Object.keys(validateSubmissionStep(data, candidate, { draft })).includes(firstInvalid));
       if (owningStep) setStep(owningStep);
       focusField(firstInvalid);
       return;
@@ -337,18 +348,15 @@ export function SubmissionForm({ categories, accountName = "", accountEmail = ""
           <div className="submission-fields">
             <div className="form-grid">
               <div className="form-field">
-                <label htmlFor="submission-name">Startup name</label>
-                <input id="submission-name" name="name" required maxLength={80} value={name} onChange={(event) => { edited.current.add("name"); setName(event.target.value); }} placeholder="e.g. Atlas" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldDescription("name", fieldErrors)} />
+                <label htmlFor="submission-name">Product name</label>
+                <input id="submission-name" name="name" required maxLength={80} value={name} onChange={(event) => { edited.current.add("name"); setName(event.target.value); }} placeholder="e.g. Atlas" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldDescription("name", fieldErrors, "submission-name-help")} />
+                <small id="submission-name-help" className="field-help">Your product&apos;s name only; put its tagline below.</small>
                 <FieldError field="name" errors={fieldErrors} />
               </div>
-              <div className="form-field">
-                <label htmlFor="submission-categoryId">Category</label>
-                <select id="submission-categoryId" name="categoryId" required defaultValue="" aria-invalid={Boolean(fieldErrors.categoryId)} aria-describedby={fieldDescription("categoryId", fieldErrors)}>
-                  <option value="" disabled>Choose a category</option>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-                <FieldError field="categoryId" errors={fieldErrors} />
-              </div>
+            </div>
+            <div className="form-field">
+              <CategoryPicker initial={[]} invalid={Boolean(fieldErrors.categories)} describedBy={fieldErrors.categories ? "submission-categories-error" : undefined} />
+              <FieldError field="categories" errors={fieldErrors} />
             </div>
             <div className="form-field">
               <label htmlFor="submission-tagline">One-line description <small>{tagline.length}/160</small></label>
@@ -357,28 +365,7 @@ export function SubmissionForm({ categories, accountName = "", accountEmail = ""
             </div>
             <div className="form-field"><label htmlFor="submission-useCase">What does it help people do?</label><textarea id="submission-useCase" name="useCase" maxLength={500} rows={3} placeholder="Describe the task or problem in plain language." /></div>
             <div className="form-field"><label htmlFor="submission-intendedAudience">Who is it for?</label><input id="submission-intendedAudience" name="intendedAudience" maxLength={500} placeholder="e.g. Independent SaaS founders" /></div>
-            <div className="form-grid">
-              <div className="form-field">
-                <label htmlFor="submission-pricingModel">Pricing</label>
-                <select id="submission-pricingModel" name="pricingModel" required defaultValue="" aria-invalid={Boolean(fieldErrors.pricingModel)} aria-describedby={fieldDescription("pricingModel", fieldErrors)}>
-                  <option value="" disabled>Choose a pricing model</option>
-                  <option value="unknown">See website</option>
-                  <option value="free">Free</option>
-                  <option value="freemium">Freemium</option>
-                  <option value="paid">Paid</option>
-                  <option value="open_source">Open source</option>
-                  <option value="contact">Contact sales</option>
-                </select>
-                <FieldError field="pricingModel" errors={fieldErrors} />
-              </div>
-              <div className="form-field">
-                <label htmlFor="submission-startingPrice">Known starting price <small>Optional</small></label>
-                <div className="price-entry">
-                  <select name="pricingCurrency" defaultValue="USD" aria-label="Currency"><option>USD</option><option>EUR</option><option>GBP</option></select>
-                  <input id="submission-startingPrice" name="startingPrice" type="number" min="0" step="0.01" placeholder="9.00" />
-                </div>
-              </div>
-            </div>
+            <PricingFields pricing={EMPTY_PRICING} />
           </div>
         </div>
 

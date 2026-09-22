@@ -4,7 +4,7 @@ FounderTrail is a startup discovery and progress platform. People can discover u
 
 The application keeps existing BidIndex product identities, slugs, redirects, support totals, transactions, and audit history. Historical bidding data is clearly separated from FounderTrail launch ranking. New paid-ranking checkout is retired.
 
-Start with the [Google/admin setup guide](docs/foundertrail/GOOGLE_AND_ADMIN_SETUP.md), [Pro Launch runbook](docs/foundertrail/PRO_LAUNCH_RUNBOOK.md), [setup guide](docs/foundertrail/SETUP.md), [migration runbook](docs/foundertrail/MIGRATION_RUNBOOK.md), and [verification checklist](docs/foundertrail/VERIFICATION.md).
+Start with the [Google/admin setup guide](docs/foundertrail/GOOGLE_AND_ADMIN_SETUP.md), [Pro Launch runbook](docs/foundertrail/PRO_LAUNCH_RUNBOOK.md), [content and product UI follow-up](docs/foundertrail/CONTENT_UI_FOLLOWUP.md), [setup guide](docs/foundertrail/SETUP.md), [migration runbook](docs/foundertrail/MIGRATION_RUNBOOK.md), and [verification checklist](docs/foundertrail/VERIFICATION.md).
 
 ## Local setup
 

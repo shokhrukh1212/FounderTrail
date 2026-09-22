@@ -32,7 +32,7 @@ test("public product projections do not expose private founder information",()=>
 
 test("admin products use a compact responsive table and details side panel",()=>{
   assert.match(table,/<table/);
-  assert.match(table,/View details/);
+  assert.match(table,/Edit listing/);
   assert.match(table,/role="dialog"/);
   assert.match(css,/@media\s*\(max-width:\s*700px\)[\s\S]*admin-product-table/);
   assert.match(css,/admin-detail-panel/);

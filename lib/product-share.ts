@@ -34,6 +34,51 @@ export function launchPostText(productName: string, description = "", foundingPr
   return `${fullName}\n\n${closing}`;
 }
 
+/**
+ * The product page's Share on X draft. A visitor is not the founder, so the text makes no
+ * claim about who is posting, adds no slogan, metrics or hashtags, and carries the link
+ * exactly once — X appends the `url` parameter itself.
+ */
+export function productShareText(shortProductName: string): string {
+  const name = shortProductName.replace(/\s+/g, " ").trim();
+  return `Discover ${name} on FounderTrail.`;
+}
+
+function isLocalOrigin(value: string): boolean {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A localhost site URL is fine while developing but must never end up inside a real post.
+ * If SITE_URL is still local on a deployment, the platform's own production hostname is
+ * used instead of publishing an address nobody else can open.
+ */
+export function publicShareOrigin(siteUrl: string): string {
+  const trimmed = siteUrl.replace(/\/+$/, "");
+  if (!isLocalOrigin(trimmed)) return trimmed;
+  const deployment = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (!deployment) return trimmed;
+  return `https://${deployment.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+}
+
+/**
+ * X's supported web intent for a product page. It opens the composer so the visitor can
+ * edit before posting; nothing is posted automatically and no X credentials are involved.
+ */
+export function xProductShareIntent(input: { siteUrl: string; slug: string; shortProductName: string }): string {
+  const origin = publicShareOrigin(input.siteUrl);
+  const parameters = new URLSearchParams({
+    text: productShareText(input.shortProductName),
+    url: canonicalProductUrl(origin, input.slug),
+  });
+  return `https://x.com/intent/tweet?${parameters.toString()}`;
+}
+
 export function validXHandle(value: string | null | undefined): string | null {
   const handle = (value ?? "").trim().replace(/^@/, "");
   return /^[A-Za-z0-9_]{1,15}$/.test(handle) ? handle : null;

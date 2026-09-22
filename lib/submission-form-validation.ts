@@ -1,9 +1,16 @@
+import { normalizeCategorySelection } from "./categories";
+import { parsePricingInput } from "./product-pricing";
+
 export const SUBMISSION_FIELDS = [
   "websiteUrl",
   "name",
   "tagline",
-  "categoryId",
+  "categories",
   "pricingModel",
+  "startingPrice",
+  "pricingCurrency",
+  "pricingBasis",
+  "pricingUnit",
   "contactEmail",
   "founderSocialHandle",
   "logo",
@@ -16,7 +23,6 @@ export type SubmissionFieldErrors = Partial<Record<SubmissionField, string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const PRICING_MODELS = new Set(["free", "freemium", "paid", "open_source", "contact", "unknown"]);
 
 /**
  * Which fields each step of the submission flow owns. Advancing a step validates only
@@ -24,7 +30,7 @@ const PRICING_MODELS = new Set(["free", "freemium", "paid", "open_source", "cont
  */
 export const SUBMISSION_STEPS = {
   1: ["websiteUrl"],
-  2: ["name", "tagline", "categoryId", "pricingModel", "logo", "screenshots"],
+  2: ["name", "tagline", "categories", "pricingModel", "startingPrice", "pricingCurrency", "pricingBasis", "pricingUnit", "logo", "screenshots"],
   3: ["contactEmail", "founderSocialHandle", "ownershipConsent"],
 } as const satisfies Record<1 | 2 | 3, readonly SubmissionField[]>;
 
@@ -65,7 +71,8 @@ export function screenshotFilesError(files: File[]): string | null {
   return null;
 }
 
-export function validateSubmissionForm(form: FormData): SubmissionFieldErrors {
+/** `draft` relaxes only what a saved-but-unfinished listing is allowed to be missing. */
+export function validateSubmissionForm(form: FormData, options: { draft?: boolean } = {}): SubmissionFieldErrors {
   const errors: SubmissionFieldErrors = {};
   const website = value(form, "websiteUrl");
   const websiteError = websiteFieldError(website);
@@ -75,8 +82,21 @@ export function validateSubmissionForm(form: FormData): SubmissionFieldErrors {
   if (!name || name.length > 80) errors.name = "Enter a product name using 80 characters or fewer.";
   const tagline = value(form, "tagline");
   if (!tagline || tagline.length > 160) errors.tagline = "Add a one-line description using 160 characters or fewer.";
-  if (!/^\d+$/.test(value(form, "categoryId"))) errors.categoryId = "Choose a category.";
-  if (!PRICING_MODELS.has(value(form, "pricingModel"))) errors.pricingModel = "Choose a pricing model.";
+
+  const categories = normalizeCategorySelection(value(form, "categories"), { allowEmpty: options.draft });
+  if (!categories.ok) errors.categories = categories.error;
+
+  // Pricing is optional everywhere. The same parser runs on the server, so a form that
+  // passes here cannot be rejected later for a different reason.
+  const pricing = parsePricingInput({
+    pricingModel: value(form, "pricingModel"),
+    startingPrice: value(form, "startingPrice"),
+    pricingCurrency: value(form, "pricingCurrency"),
+    pricingBasis: value(form, "pricingBasis"),
+    pricingUnit: value(form, "pricingUnit"),
+    pricingPerSeat: form.get("pricingPerSeat") === "on",
+  });
+  if (!pricing.ok && isSubmissionField(pricing.field)) errors[pricing.field] = pricing.error;
 
   const email = value(form, "contactEmail");
   if (!EMAIL.test(email) || email.length > 320) errors.contactEmail = "Enter a valid private contact email.";
@@ -103,8 +123,8 @@ export function isSubmissionField(value: unknown): value is SubmissionField {
 }
 
 /** The subset of validateSubmissionForm that belongs to one step. */
-export function validateSubmissionStep(form: FormData, step: SubmissionStep): SubmissionFieldErrors {
-  const all = validateSubmissionForm(form);
+export function validateSubmissionStep(form: FormData, step: SubmissionStep, options: { draft?: boolean } = {}): SubmissionFieldErrors {
+  const all = validateSubmissionForm(form, options);
   const owned = new Set<string>(SUBMISSION_STEPS[step]);
   const errors: SubmissionFieldErrors = {};
   for (const [field, message] of Object.entries(all)) {

@@ -13,7 +13,7 @@ import { networkHash, requestOriginIsSameSite } from "@/lib/request-security";
 import { firstFreeSlug, slugify } from "@/lib/slug";
 import { removeStoredImage, validateAndStoreImage, type StoredImage } from "@/lib/storage";
 import { fetchPinnedPublic, fetchSubmissionMetadata, verifyMetadata } from "@/lib/submission-metadata";
-import { FOUNDERTRAIL_CATEGORY_SLUGS } from "@/lib/categories";
+import { applyProductCategories, InvalidCategorySelection } from "@/lib/product-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +36,9 @@ export async function POST(request: Request) {
   }
   let form: FormData;
   try { form = await request.formData(); } catch { return NextResponse.json({ error: "Invalid form data." }, { status: 400 }); }
-  const validated = validateProductSubmission(form);
-  if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
   const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "pending";
+  const validated = validateProductSubmission(form, { draft: requestedStatus === "draft" });
+  if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
   // The same rule runs at step 1 of the form via /api/products/metadata, so the two
   // must share one implementation or the messages drift apart.
   const duplicate = await findDomainDuplicate(validated.value.normalizedDomain, user.id);
@@ -77,27 +77,43 @@ export async function POST(request: Request) {
       const allowed = await consumeRateLimit(client, { action: "submission", keyHash: networkHash(request, "submission"), limit: 5, windowSeconds: 3600 });
       if (!allowed) throw new Error("RATE_LIMITED");
       const slug = await uniqueSlug(client, validated.value.name);
-      const category = await client.query(`SELECT 1 FROM categories WHERE id=$1 AND slug=ANY($2::text[])`, [validated.value.categoryId, FOUNDERTRAIL_CATEGORY_SLUGS]);
-      if (!category.rowCount) throw new Error("INVALID_CATEGORY");
       const metadata = submittedMetadata;
       const emailPreferenceId = await ensureFounderPreference(client, validated.value.contactEmail, form.get("marketingOptIn") === "on");
       const product = await client.query<{ id: string }>(
+        // The founder types their product's name under a label that asks for the name
+        // only, so it is also stored as the short display name (when it fits the display
+        // limit). The submitted name itself is never rewritten afterwards.
         `INSERT INTO products
            (slug, website_url, submitted_url, normalized_domain, name, tagline, founder_name,
             contact_email, founder_social_handle, launch_at, launch_date, status,
-            submission_consent_at, submission_consent_version, email_preference_id,created_by_user_id,
-            use_case,intended_audience,pricing_model,starting_price_minor,pricing_currency,primary_category_id,
-            category_provenance,pricing_provenance,pricing_checked_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14::uuid,$15,$16,$17,$18,$19,$20,$21,'founder','founder',now())
+            submission_consent_at, submission_consent_version, email_preference_id, created_by_user_id,
+            use_case, intended_audience,
+            pricing_model, starting_price_minor, pricing_currency, pricing_basis, pricing_unit,
+            pricing_per_seat, is_open_source,
+            short_name, short_name_source, short_name_updated_at, short_name_updated_by,
+            pricing_source, pricing_confirmed_at, pricing_confirmed_by, category_provenance)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14::uuid,$15,$16,$17,
+            $18,$19,$20,$21,$22,$23,$24,
+            $25, CASE WHEN $25::text IS NULL THEN NULL ELSE 'founder' END,
+            CASE WHEN $25::text IS NULL THEN NULL ELSE now() END,
+            CASE WHEN $25::text IS NULL THEN NULL ELSE $15 END,
+            CASE WHEN $18::text IS NULL THEN NULL ELSE 'founder' END,
+            CASE WHEN $18::text IS NULL THEN NULL ELSE now() END,
+            CASE WHEN $18::text IS NULL THEN NULL ELSE $15 END,
+            'founder')
          RETURNING id::text`,
         [slug, validated.value.websiteUrl, validated.value.websiteUrl, validated.value.normalizedDomain,
          validated.value.name, validated.value.tagline, validated.value.founderName,
          validated.value.contactEmail, validated.value.founderSocialHandle, validated.value.launchAt,
-         validated.value.launchDate, requestedStatus, validated.value.consentVersion, emailPreferenceId,user.id,
-         validated.value.useCase,validated.value.intendedAudience,validated.value.pricingModel,
-         validated.value.startingPriceMinor,validated.value.pricingCurrency,validated.value.categoryId],
+         validated.value.launchDate, requestedStatus, validated.value.consentVersion, emailPreferenceId, user.id,
+         validated.value.useCase, validated.value.intendedAudience,
+         validated.value.pricing.model, validated.value.pricing.startingPriceMinor, validated.value.pricing.currency,
+         validated.value.pricing.basis, validated.value.pricing.unit, validated.value.pricing.perSeat,
+         validated.value.isOpenSource,
+         validated.value.name.length <= 60 ? validated.value.name : null],
       );
       const productId = product.rows[0].id;
+      if (validated.value.categorySlugs.length) await applyProductCategories(client, productId, validated.value.categorySlugs, "founder");
       await client.query(`INSERT INTO product_owner_credentials (product_id, token_hash) VALUES ($1::uuid,$2)`, [productId, ownerHash]);
       await client.query(`INSERT INTO product_claims(product_id,requester_id,evidence_method,challenge_token_hash,challenge_expires_at,evidence) VALUES($1::uuid,$2,'domain_file',$3,now()+interval '7 days',jsonb_build_object('source','new_submission'))`,[productId,user.id,claimChallengeHash]);
       await client.query(
@@ -132,7 +148,7 @@ export async function POST(request: Request) {
     await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const code = error instanceof Error ? error.message : "";
     if (code === "RATE_LIMITED") return NextResponse.json({ error: "Too many submissions. Try again later." }, { status: 429 });
-    if (code === "INVALID_CATEGORY") return NextResponse.json({ error: "Choose a valid category.", field: "categoryId" }, { status: 400 });
+    if (error instanceof InvalidCategorySelection) return NextResponse.json({ error: error.message, field: "categories" }, { status: 400 });
     // The founder only ever sees the generic message below, so the log has to carry
     // everything the database said about the failure. Row values are left out: they
     // repeat the founder's email back into the log.

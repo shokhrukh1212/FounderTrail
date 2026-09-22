@@ -6,6 +6,12 @@ type Product = { id: string; slug: string; name: string; tagline: string; descri
 type Pricing = { model: "free" | "freemium" | "paid" | "open_source" | "contact" | "unknown"; startingMinor: number | null; currency: string | null; evidenceUrl: string; reason: string; confidence: "high" | "medium" | "low" };
 type Category = { slug: string; reason: string; confidence: "high" | "medium" | "low" };
 
+/**
+ * Categories and pricing are chosen by people, not by this script. `--apply` now only
+ * records proposals for admin review: it never writes products.primary_category_id,
+ * products.pricing_model or any other public classification. Admins classify products in
+ * the admin product editor, and founders choose their own categories and pricing.
+ */
 const apply = process.argv.includes("--apply");
 const limitArg = process.argv.find((value) => value.startsWith("--limit="));
 const limit = limitArg ? Math.max(1, Number.parseInt(limitArg.split("=")[1] ?? "", 10) || 1) : 500;
@@ -131,7 +137,7 @@ try {
     return summary;
   }, {});
   console.log(JSON.stringify({
-    mode: apply ? "apply" : "dry-run",
+    mode: apply ? "record-proposals" : "dry-run",
     version,
     total: results.length,
     proposedCategories: counts(results.map((item) => item.category.slug)),
@@ -149,31 +155,21 @@ try {
   }, null, 2));
 
   if (apply) {
-    if (process.env.CONFIRM_METADATA_ENRICHMENT !== version) throw new Error(`Set CONFIRM_METADATA_ENRICHMENT=${version} to apply after reviewing the dry run.`);
+    if (process.env.CONFIRM_METADATA_ENRICHMENT !== version) throw new Error(`Set CONFIRM_METADATA_ENRICHMENT=${version} to record proposals after reviewing the dry run.`);
+    console.log("Recording review proposals only. Categories and pricing are never assigned automatically.");
     await pool.query("BEGIN");
     try {
       for (const { product, category, pricing } of results) {
-        if (!(FOUNDERTRAIL_CATEGORY_SLUGS as readonly string[]).includes(category.slug)) continue;
-        const categoryRow = await pool.query<{ id: string }>(`SELECT id::text FROM categories WHERE slug=$1`, [category.slug]);
-        const categoryId = categoryRow.rows[0]?.id;
-        const canClassify = !product.category_provenance || product.category_provenance === "foundertrail-category-v1-review";
-        if (categoryId && canClassify) {
-          await pool.query(`INSERT INTO product_classification_audits(product_id,classification_kind,old_value,proposed_value,evidence_url,reason,confidence,review_state,classification_version,applied_at)
-            VALUES($1::uuid,'category',$2,$3,$4,$5,$6,$7,$8,CASE WHEN $7='applied' THEN now() END)
-            ON CONFLICT(product_id,classification_kind,classification_version) DO NOTHING`, [product.id, product.category_slug, category.slug, product.website_url, category.reason, category.confidence, category.confidence === "high" ? "applied" : "needs_review", version]);
-          if (category.confidence === "high") {
-            await pool.query(`UPDATE products SET primary_category_id=$2::bigint,category_review_required=false,category_provenance=$3,updated_at=now() WHERE id=$1::uuid`, [product.id, categoryId, version]);
-            await pool.query(`DELETE FROM product_categories WHERE product_id=$1::uuid AND position=0`, [product.id]);
-            await pool.query(`INSERT INTO product_categories(product_id,category_id,position) VALUES($1::uuid,$2::bigint,0) ON CONFLICT(product_id,category_id) DO UPDATE SET position=0`, [product.id, categoryId]);
-            await pool.query(`UPDATE product_classification_audits SET review_state='rejected' WHERE product_id=$1::uuid AND classification_kind='category' AND review_state='needs_review' AND classification_version<>$2`, [product.id, version]);
-          }
+        // Proposals only. Every row lands in the review queue; nothing touches the
+        // product's public category or pricing.
+        if ((FOUNDERTRAIL_CATEGORY_SLUGS as readonly string[]).includes(category.slug)) {
+          await pool.query(`INSERT INTO product_classification_audits(product_id,classification_kind,old_value,proposed_value,evidence_url,reason,confidence,review_state,classification_version)
+            VALUES($1::uuid,'category',$2,$3,$4,$5,$6,'needs_review',$7)
+            ON CONFLICT(product_id,classification_kind,classification_version) DO NOTHING`, [product.id, product.category_slug, category.slug, product.website_url, category.reason, category.confidence, version]);
         }
-        const canPrice = !product.pricing_provenance && (!product.pricing_model || product.pricing_model === "unknown");
-        const pricingState = pricing.model !== "unknown" ? "applied" : "needs_review";
-        await pool.query(`INSERT INTO product_classification_audits(product_id,classification_kind,old_value,proposed_value,evidence_url,reason,confidence,review_state,classification_version,applied_at)
-          VALUES($1::uuid,'pricing',$2,$3,$4,$5,$6,$7,$8,CASE WHEN $7='applied' THEN now() END)
-          ON CONFLICT(product_id,classification_kind,classification_version) DO NOTHING`, [product.id, product.pricing_model, pricing.model, pricing.evidenceUrl, pricing.reason, pricing.confidence, pricingState, version]);
-        if (canPrice && pricing.model !== "unknown") await pool.query(`UPDATE products SET pricing_model=$2,starting_price_minor=$3,pricing_currency=$4,pricing_evidence_url=$5,pricing_checked_at=now(),pricing_provenance=$6,updated_at=now() WHERE id=$1::uuid`, [product.id, pricing.model, pricing.startingMinor, pricing.currency, pricing.evidenceUrl, version]);
+        await pool.query(`INSERT INTO product_classification_audits(product_id,classification_kind,old_value,proposed_value,evidence_url,reason,confidence,review_state,classification_version)
+          VALUES($1::uuid,'pricing',$2,$3,$4,$5,$6,'needs_review',$7)
+          ON CONFLICT(product_id,classification_kind,classification_version) DO NOTHING`, [product.id, product.pricing_model, pricing.model, pricing.evidenceUrl, pricing.reason, pricing.confidence, version]);
       }
       await pool.query("COMMIT");
     } catch (error) {

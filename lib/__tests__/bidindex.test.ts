@@ -74,9 +74,14 @@ test("money events require integer minor units and idempotent identifiers", () =
 
 test("product submission validates required public fields", () => {
   const form = new FormData();
-  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "A useful startup", contactEmail: "maker@example.com", categoryId: "1", pricingModel: "unknown", ownershipConsent: "on" }).forEach(([key,value]) => form.set(key,value));
+  Object.entries({ websiteUrl: "https://launch.example", name: "Launch", tagline: "A useful startup", contactEmail: "maker@example.com", categories: "developer-tools", ownershipConsent: "on" }).forEach(([key,value]) => form.set(key,value));
   assert.equal(validateProductSubmission(form).ok, true);
-  assert.equal(form.has("categoryId"), true);
+  // One to three categories, chosen by a person; pricing stays optional.
+  form.set("categories", "developer-tools,ai-assistants,productivity,marketing-seo");
+  assert.equal(validateProductSubmission(form).ok, false);
+  form.set("categories", "other,developer-tools");
+  assert.equal(validateProductSubmission(form).ok, false);
+  form.set("categories", "developer-tools");
   form.delete("contactEmail");
   assert.equal(validateProductSubmission(form).ok, false);
   form.set("contactEmail","maker@example.com");

@@ -1,10 +1,19 @@
+import type { ProductPricing } from "./product-pricing";
+
 export type AdminProductSummary = {
   id: string;
   slug: string;
+  /** The name exactly as submitted. */
   name: string;
+  /** The reviewed short brand name, when one has been set. */
+  shortName: string | null;
+  /** What the public sees today. */
+  displayName: string;
   websiteUrl: string;
   normalizedDomain: string;
-  category: string | null;
+  categories: Array<{ slug: string; name: string }>;
+  /** Still on Other, or flagged by the category reset as needing classification. */
+  needsClassification: boolean;
   founderName: string | null;
   contactEmail: string;
   founderSocialHandle: string | null;
@@ -29,6 +38,8 @@ export type AdminProductDetail = {
     id: string;
     slug: string;
     name: string;
+    shortName: string | null;
+    displayName: string;
     tagline: string;
     description: string | null;
     websiteUrl: string;
@@ -44,7 +55,15 @@ export type AdminProductDetail = {
     approvedAt: string | null;
     consentAt: string | null;
     consentVersion: string | null;
-    category: string | null;
+    categories: Array<{ slug: string; name: string }>;
+    categoryProvenance: string | null;
+    needsClassification: boolean;
+    pricing: ProductPricing;
+    pricingSource: "founder" | "admin" | null;
+    pricingConfirmedAt: string | null;
+    isOpenSource: boolean;
+    /** Machine-inferred pricing, kept for review only. Never published as-is. */
+    legacyPricing: { model: string | null; startingPriceMinor: number | null; currency: string | null; provenance: string | null; evidenceUrl: string | null; checkedAt: string | null } | null;
     domainOverrideApproved: boolean;
     foundingPosition: number | null;
     biddingMechanism: string | null;

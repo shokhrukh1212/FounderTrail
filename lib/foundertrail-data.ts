@@ -1,6 +1,8 @@
 import "server-only";
 import { config } from "./config";
 import { query } from "./db";
+import { FOUNDERTRAIL_CATEGORIES, FOUNDERTRAIL_CATEGORY_SLUGS } from "./categories";
+import { decodeEntities, displayProductName, publicText } from "./display-text";
 
 let warnedAboutMissingProSchema = false;
 
@@ -25,16 +27,14 @@ export type StartupCard = {
   id: string;
   slug: string;
   websiteUrl: string;
+  /** The brand name to print: the reviewed short name when one exists. */
   name: string;
   tagline: string;
   logoUrl: string | null;
-  category: { slug: string; name: string } | null;
-  pricingModel: string | null;
-  startingPriceMinor: number | null;
-  pricingCurrency: string | null;
+  categories: Array<{ slug: string; name: string }>;
   followerCount: number;
   allTimeUpvotes: number;
-  outboundClicks: number;
+  commentCount: number;
   upvoted: boolean;
   launchId: string | null;
   launchVotes: number;
@@ -43,23 +43,20 @@ export type StartupCard = {
 };
 
 type StartupRow = {
-  id: string; slug: string; website_url: string; name: string; tagline: string;
-  logo_url: string | null; category_slug: string | null; category_name: string | null;
-  pricing_model: string | null; starting_price_minor: string | null; pricing_currency: string | null;
-  follower_count: number; all_time_upvotes: number; outbound_clicks: number; upvoted: boolean;
+  id: string; slug: string; website_url: string; name: string; short_name: string | null; tagline: string;
+  logo_url: string | null; categories: Array<{ slug: string; name: string }> | null;
+  follower_count: number; all_time_upvotes: number; comment_count: number; upvoted: boolean;
   launch_id: string | null; launch_votes: number; followed: boolean; is_pro: boolean;
 };
 
 function mapStartup(row: StartupRow): StartupCard {
   return {
-    id: row.id, slug: row.slug, websiteUrl: row.website_url, name: row.name, tagline: row.tagline,
+    id: row.id, slug: row.slug, websiteUrl: row.website_url,
+    name: displayProductName(row.name, row.short_name), tagline: publicText(row.tagline),
     logoUrl: row.logo_url,
-    category: row.category_slug && row.category_name ? { slug: row.category_slug, name: row.category_name } : null,
-    pricingModel: row.pricing_model,
-    startingPriceMinor: row.starting_price_minor === null ? null : Number(row.starting_price_minor),
-    pricingCurrency: row.pricing_currency,
+    categories: row.categories ?? [],
     followerCount: Number(row.follower_count),
-    allTimeUpvotes: Number(row.all_time_upvotes), outboundClicks: Number(row.outbound_clicks), upvoted: row.upvoted,
+    allTimeUpvotes: Number(row.all_time_upvotes), commentCount: Number(row.comment_count), upvoted: row.upvoted,
     launchId: row.launch_id, launchVotes: Number(row.launch_votes), followed: row.followed, isPro: row.is_pro,
   };
 }
@@ -82,16 +79,22 @@ export async function getFounderTrailDiscovery(input: {
   if (search) {
     baseParams.push(`%${search.replace(/[\\%_]/g, "\\$&")}%`);
     const n = baseParams.length;
-    filters.push(`(p.name ILIKE $${n} ESCAPE '\\' OR p.tagline ILIKE $${n} ESCAPE '\\' OR coalesce(p.description,'') ILIKE $${n} ESCAPE '\\' OR coalesce(p.use_case,'') ILIKE $${n} ESCAPE '\\')`);
+    filters.push(`(p.name ILIKE $${n} ESCAPE '\\' OR coalesce(p.short_name,'') ILIKE $${n} ESCAPE '\\' OR p.tagline ILIKE $${n} ESCAPE '\\' OR coalesce(p.description,'') ILIKE $${n} ESCAPE '\\' OR coalesce(p.use_case,'') ILIKE $${n} ESCAPE '\\')`);
   }
-  if (input.category) { baseParams.push(input.category); filters.push(`c.slug=$${baseParams.length}`); }
+  // Any of a product's one-to-three categories matches, combined with the other filters.
+  // EXISTS rather than a join, so a product is never counted or listed twice.
+  if (input.category) {
+    baseParams.push(input.category);
+    filters.push(`EXISTS(SELECT 1 FROM product_categories fpc JOIN categories fc ON fc.id=fpc.category_id
+      WHERE fpc.product_id=p.id AND fc.slug=$${baseParams.length})`);
+  }
   if (input.pricing) {
     baseParams.push(input.pricing);
     filters.push(input.pricing === "unknown"
       ? `coalesce(p.pricing_model,'unknown')=$${baseParams.length}`
       : `p.pricing_model=$${baseParams.length}`);
   }
-  const base = `FROM products p ${launchJoin} LEFT JOIN categories c ON c.id=p.primary_category_id WHERE ${filters.join(" AND ")}`;
+  const base = `FROM products p ${launchJoin} WHERE ${filters.join(" AND ")}`;
   const totalRows = await query<{ total: number }>(`SELECT count(*)::int AS total ${base}`, baseParams);
   const total = totalRows[0]?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -102,13 +105,14 @@ export async function getFounderTrailDiscovery(input: {
     ? `launch_votes DESC,pl.approved_at,p.id`
     : input.sort === "newest" ? `p.created_at DESC,p.id` : `all_time_upvotes DESC,p.created_at,p.id`;
   const isPro = await proEntitlementSelect();
-  const rows = await query<StartupRow>(`SELECT p.id::text,p.slug,p.website_url,p.name,p.tagline,
+  const rows = await query<StartupRow>(`SELECT p.id::text,p.slug,p.website_url,p.name,p.short_name,p.tagline,
       COALESCE((SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1),
         (SELECT '/api/products/'||p.slug||'/logo' FROM product_submission_metadata sm WHERE sm.product_id=p.id AND sm.extracted_logo_url IS NOT NULL LIMIT 1)) AS logo_url,
-      c.slug AS category_slug,c.name AS category_name,p.pricing_model,p.starting_price_minor::text,p.pricing_currency,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('slug',cc.slug,'name',cc.name) ORDER BY pc.position)
+        FROM product_categories pc JOIN categories cc ON cc.id=pc.category_id WHERE pc.product_id=p.id),'[]'::jsonb) AS categories,
       (SELECT count(*)::int FROM product_follows f WHERE f.product_id=p.id) AS follower_count,
       (SELECT count(*)::int FROM product_votes pv WHERE pv.product_id=p.id AND pv.active AND (p.is_demo OR NOT pv.is_demo)) AS all_time_upvotes,
-      (SELECT count(*)::int FROM product_outbound_click_events oce WHERE oce.product_id=p.id AND oce.outcome='counted') AS outbound_clicks,
+      (SELECT count(*)::int FROM product_comments pcm WHERE pcm.product_id=p.id AND pcm.hidden_at IS NULL) AS comment_count,
       CASE WHEN $${userParameter}::text IS NULL THEN false ELSE EXISTS(SELECT 1 FROM product_votes pv WHERE pv.product_id=p.id AND pv.user_id=$${userParameter} AND pv.active) END AS upvoted,
       pl.id::text AS launch_id,
       CASE WHEN pl.id IS NULL THEN 0 ELSE (SELECT count(*)::int FROM launch_votes lv WHERE lv.launch_id=pl.id AND lv.active) END AS launch_votes,
@@ -121,6 +125,30 @@ export async function getFounderTrailDiscovery(input: {
   return { products: rows.map(mapStartup), total, page, pageCount, week: weekRows[0] ? { startsAt: new Date(weekRows[0].starts_at), endsAt: new Date(weekRows[0].ends_at) } : null };
 }
 
+export type CategoryFacet = { slug: string; name: string; count: number };
+
+/**
+ * The taxonomy with how many published startups sit in each category. A product is counted
+ * once per category it belongs to, never twice. The full list is always returned, so every
+ * filter can be offered even while every product is still Other.
+ */
+export async function getCategoryFacets(): Promise<CategoryFacet[]> {
+  const rows = await query<{ slug: string; name: string; count: number }>(
+    `SELECT c.slug,c.name,
+            (SELECT count(DISTINCT pc.product_id)::int
+               FROM product_categories pc JOIN products p ON p.id=pc.product_id
+              WHERE pc.category_id=c.id AND p.status='published' AND ($2::boolean OR NOT p.is_demo)) AS count
+       FROM categories c WHERE c.slug=ANY($1::text[])`,
+    [FOUNDERTRAIL_CATEGORY_SLUGS, process.env.NODE_ENV !== "production"],
+  );
+  const counts = new Map(rows.map((row) => [row.slug, Number(row.count)]));
+  return FOUNDERTRAIL_CATEGORIES.map((category) => ({
+    slug: category.slug,
+    name: category.name,
+    count: counts.get(category.slug) ?? 0,
+  }));
+}
+
 export type UpdateFeedItem = { id: string; productSlug: string; productName: string; logoUrl: string | null; type: string; title: string; body: string; linkUrl: string | null; publishedAt: Date };
 
 export async function getUpdateFeed(page = 1, userId: string | null = null, followedOnly = false): Promise<{ updates: UpdateFeedItem[]; total: number; page: number; pageCount: number }> {
@@ -129,12 +157,12 @@ export async function getUpdateFeed(page = 1, userId: string | null = null, foll
   const baseParams: unknown[] = followedOnly ? [process.env.NODE_ENV !== "production", userId] : [process.env.NODE_ENV !== "production"];
   const count = await query<{ total: number }>(`SELECT count(*)::int AS total FROM product_updates u JOIN products p ON p.id=u.product_id WHERE ${where}`, baseParams);
   const total = count[0]?.total ?? 0; const pageCount = Math.max(1, Math.ceil(total / size)); const current = Math.max(1, Math.min(Math.trunc(page), pageCount));
-  const rows = await query<{ id: string; product_slug: string; product_name: string; logo_url: string | null; type: string; title: string; body: string; link_url: string | null; published_at: Date }>(
-    `SELECT u.id::text,p.slug AS product_slug,p.name AS product_name,(SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1) AS logo_url,u.type,u.title,u.body,u.link_url,u.published_at
+  const rows = await query<{ id: string; product_slug: string; product_name: string; short_name: string | null; logo_url: string | null; type: string; title: string; body: string; link_url: string | null; published_at: Date }>(
+    `SELECT u.id::text,p.slug AS product_slug,p.name AS product_name,p.short_name,(SELECT m.public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' LIMIT 1) AS logo_url,u.type,u.title,u.body,u.link_url,u.published_at
       FROM product_updates u JOIN products p ON p.id=u.product_id WHERE ${where} ORDER BY u.published_at DESC,u.id DESC LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`,
     [...baseParams, size, (current - 1) * size],
   );
-  return { updates: rows.map((row) => ({ id: row.id, productSlug: row.product_slug, productName: row.product_name, logoUrl: row.logo_url, type: row.type, title: row.title, body: row.body, linkUrl: row.link_url, publishedAt: new Date(row.published_at) })), total, page: current, pageCount };
+  return { updates: rows.map((row) => ({ id: row.id, productSlug: row.product_slug, productName: displayProductName(row.product_name, row.short_name), logoUrl: row.logo_url, type: row.type, title: publicText(row.title), body: decodeEntities(row.body), linkUrl: row.link_url, publishedAt: new Date(row.published_at) })), total, page: current, pageCount };
 }
 
 export type ActiveSponsor = { id: string; productId: string; slug: string; name: string; tagline: string; logoUrl: string | null; category: string | null };

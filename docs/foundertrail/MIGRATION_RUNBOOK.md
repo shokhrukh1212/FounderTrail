@@ -1,9 +1,15 @@
 # FounderTrail migration runbook
 
-For the current Pro Launch release, use this preservation procedure together with
-[`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md). Rehearse every pending migration
-through `016_pro_launch`; the older numbered examples below describe the original
+For the current release, use this preservation procedure together with
+[`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md) and
+[`CONTENT_UI_FOLLOWUP.md`](CONTENT_UI_FOLLOWUP.md). Rehearse every pending migration
+through `017_content_ui_followup`; the older numbered examples below describe the original
 FounderTrail migration and remain as historical context.
+
+`017` contains the one requested destructive step: every product that exists at migration
+time is archived in `product_category_archive` and then set to Other. The run is recorded in
+`category_migration_runs`, so a second run changes nothing, and
+`npm run categories:restore` reverses it for products nobody has classified since.
 
 Do not run these commands from an ordinary developer shell pointed at production. Use a controlled migration window, a named environment, and an operator who can restore the database.
 

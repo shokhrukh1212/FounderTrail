@@ -1,5 +1,7 @@
 import "server-only";
 import { query } from "./db";
+import { decodeEntities, displayProductName, publicText } from "./display-text";
+import type { PricingBasis, PricingModel, ProductPricing } from "./product-pricing";
 
 export const DISCOVERY_VIEWS = ["today", "trending", "verified", "newest"] as const;
 export type DiscoveryView = (typeof DISCOVERY_VIEWS)[number];
@@ -22,7 +24,12 @@ export type ProductCardData = {
   id: string;
   slug: string;
   websiteUrl: string;
+  /** The name exactly as submitted. Editors show this; public surfaces show displayName. */
   name: string;
+  /** The founder's or admin's short brand name, when one has been supplied. */
+  shortName: string | null;
+  /** What the public sees: the short name when set, otherwise the submitted name. */
+  displayName: string;
   tagline: string;
   launchAt: Date;
   publishedAt: Date;
@@ -43,6 +50,7 @@ type ProductCardRow = {
   slug: string;
   website_url: string;
   name: string;
+  short_name: string | null;
   tagline: string;
   launch_at: Date;
   published_at: Date;
@@ -68,7 +76,7 @@ type ProductCardRow = {
 };
 
 const CARD_COLUMNS = `
-  p.id::text, p.slug, p.website_url, p.name, p.tagline, p.launch_at,
+  p.id::text, p.slug, p.website_url, p.name, p.short_name, p.tagline, p.launch_at,
   p.published_at, p.is_demo,
   (SELECT i.product_verified_at FROM product_integrations i WHERE i.product_id=p.id) AS product_verified_at,
   COALESCE(
@@ -77,11 +85,11 @@ const CARD_COLUMNS = `
     (SELECT '/api/products/' || p.slug || '/logo' FROM product_submission_metadata sm
       WHERE sm.product_id = p.id AND sm.extracted_logo_url IS NOT NULL LIMIT 1)
   ) AS logo_url,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name))
-    FROM categories c WHERE c.id = p.primary_category_id),
-    (SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name) ORDER BY pc.position)
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name) ORDER BY pc.position)
       FROM product_categories pc JOIN categories c ON c.id = pc.category_id
-      WHERE pc.product_id = p.id), '[]'::jsonb) AS categories,
+      WHERE pc.product_id = p.id),
+    (SELECT jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name))
+      FROM categories c WHERE c.id = p.primary_category_id), '[]'::jsonb) AS categories,
   (SELECT count(*)::int FROM product_votes v
     WHERE v.product_id = p.id AND v.active AND (p.is_demo OR NOT v.is_demo)) AS vote_count,
   (SELECT count(*)::int FROM product_votes v
@@ -144,7 +152,9 @@ function card(row: ProductCardRow): ProductCardData {
     slug: row.slug,
     websiteUrl: row.website_url,
     name: row.name,
-    tagline: row.tagline,
+    shortName: row.short_name,
+    displayName: displayProductName(row.name, row.short_name),
+    tagline: publicText(row.tagline),
     launchAt: new Date(row.launch_at),
     publishedAt: new Date(row.published_at),
     isDemo: row.is_demo,
@@ -461,7 +471,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
   ]);
   return {
     ...card(row),
-    description: row.description,
+    description: row.description === null ? null : decodeEntities(row.description),
     founderName: row.founder_name,
     founderSocialHandle: row.founder_social_handle,
     biddingMechanism: row.bidding_mechanism,
@@ -482,17 +492,19 @@ export type ManagedProduct = ProductDetail & {
   approvedAt: Date | null;
   marketingOptedIn: boolean;
   marketingSuppressed: boolean;
-  primaryCategoryId: string | null;
-  pricingModel: "free" | "freemium" | "paid" | "open_source" | "contact" | "unknown";
-  startingPriceMinor: number | null;
-  pricingCurrency: string | null;
+  /** The product's 1-3 category slugs, primary first. Empty while a draft is incomplete. */
+  categorySlugs: string[];
+  pricing: ProductPricing;
+  isOpenSource: boolean;
 };
 
 export async function getManagedProduct(slug: string): Promise<(ManagedProduct & { ownerTokenHash: string; ownerTokenVersion: number }) | null> {
   const rows = await query<{
-    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean; primary_category_id: string | null; pricing_model: ManagedProduct["pricingModel"] | null; starting_price_minor: string | null; pricing_currency: string | null;
+    id: string; status: ProductStatus; contact_email: string; approved_at: Date | null; token_hash: string; token_version: number; marketing_opted_in: boolean; marketing_suppressed: boolean; category_slugs: string[] | null; pricing_model: PricingModel | null; starting_price_minor: string | null; pricing_currency: string | null; pricing_basis: PricingBasis | null; pricing_unit: string | null; pricing_per_seat: boolean; is_open_source: boolean;
   }>(
-    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,p.primary_category_id::text,p.pricing_model,p.starting_price_minor::text,p.pricing_currency,
+    `SELECT p.id::text,p.status,p.contact_email,p.approved_at,o.token_hash,o.token_version,
+            p.pricing_model,p.starting_price_minor::text,p.pricing_currency,p.pricing_basis,p.pricing_unit,p.pricing_per_seat,p.is_open_source,
+            (SELECT array_agg(c.slug ORDER BY pc.position) FROM product_categories pc JOIN categories c ON c.id=pc.category_id WHERE pc.product_id=p.id) AS category_slugs,
             (pref.marketing_unsubscribed_at IS NULL AND NOT EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_opted_in,
             (pref.marketing_unsubscribed_at IS NOT NULL OR EXISTS (SELECT 1 FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email)) AS marketing_suppressed
        FROM products p JOIN product_owner_credentials o ON o.product_id = p.id
@@ -503,18 +515,38 @@ export async function getManagedProduct(slug: string): Promise<(ManagedProduct &
   const auth = rows[0];
   if (!auth) return null;
   const publicDetail = await getProductDetailIncludingUnpublished(slug);
-  return publicDetail ? { ...publicDetail, status: auth.status, contactEmail: auth.contact_email, approvedAt: auth.approved_at ? new Date(auth.approved_at) : null, marketingOptedIn:auth.marketing_opted_in,marketingSuppressed:auth.marketing_suppressed,primaryCategoryId:auth.primary_category_id,pricingModel:auth.pricing_model??"unknown",startingPriceMinor:auth.starting_price_minor===null?null:Number(auth.starting_price_minor),pricingCurrency:auth.pricing_currency,ownerTokenHash: auth.token_hash, ownerTokenVersion: auth.token_version } : null;
+  if (!publicDetail) return null;
+  return {
+    ...publicDetail,
+    status: auth.status,
+    contactEmail: auth.contact_email,
+    approvedAt: auth.approved_at ? new Date(auth.approved_at) : null,
+    marketingOptedIn: auth.marketing_opted_in,
+    marketingSuppressed: auth.marketing_suppressed,
+    categorySlugs: auth.category_slugs ?? [],
+    pricing: {
+      model: auth.pricing_model,
+      startingPriceMinor: auth.starting_price_minor === null ? null : Number(auth.starting_price_minor),
+      currency: auth.pricing_currency,
+      basis: auth.pricing_basis,
+      unit: auth.pricing_unit,
+      perSeat: auth.pricing_per_seat,
+    },
+    isOpenSource: auth.is_open_source,
+    ownerTokenHash: auth.token_hash,
+    ownerTokenVersion: auth.token_version,
+  };
 }
 
 async function getProductDetailIncludingUnpublished(slug: string): Promise<ProductDetail | null> {
   const rows = await query<{
-    id: string; slug: string; website_url: string; name: string; tagline: string; launch_at: Date;
+    id: string; slug: string; website_url: string; name: string; short_name: string | null; tagline: string; launch_at: Date;
     published_at: Date | null; is_demo: boolean; description: string | null; founder_name: string | null;
     founder_social_handle: string | null; bidding_mechanism: string | null; minimum_bid_minor: string | null;
     current_bid_minor: string | null; bid_currency: string | null; public_analytics_url: string | null;
     data_disclosure: string | null; product_verified_at: Date | null;
   }>(
-    `SELECT id::text, slug, website_url, name, tagline, launch_at, published_at, is_demo,
+    `SELECT id::text, slug, website_url, name, short_name, tagline, launch_at, published_at, is_demo,
             description, founder_name, founder_social_handle, bidding_mechanism,
             minimum_bid_minor::text, current_bid_minor::text, bid_currency,
             public_analytics_url, data_disclosure,
@@ -531,13 +563,15 @@ async function getProductDetailIncludingUnpublished(slug: string): Promise<Produ
     query<{ count: number }>(`SELECT count(*)::int AS count FROM product_votes WHERE product_id = $1 AND active`, [row.id]),
   ]);
   return {
-    id: row.id, slug: row.slug, websiteUrl: row.website_url, name: row.name, tagline: row.tagline,
+    id: row.id, slug: row.slug, websiteUrl: row.website_url, name: row.name,
+    shortName: row.short_name, displayName: displayProductName(row.name, row.short_name), tagline: publicText(row.tagline),
     launchAt: new Date(row.launch_at), publishedAt: new Date(row.published_at ?? row.launch_at), isDemo: row.is_demo,
     logoUrl: media.find((item) => item.kind === "logo")?.public_url ?? null, categories,
     voteCount: votes[0]?.count ?? 0, weeklyVotes: 0, weeklyClicks: 0, totalClicks: 0, updateCount: updates.length,
     metrics: metrics.map((item) => ({ type: item.metric_type, source: item.source, currency: item.currency, value: Number(item.value), sourceUrl: item.source_url, updatedAt: new Date(item.updated_at), lastEventAt: item.last_event_at ? new Date(item.last_event_at) : null, measurementPeriod: item.measurement_period })),
     isVerified: row.product_verified_at !== null,
-    description: row.description, founderName: row.founder_name, founderSocialHandle: row.founder_social_handle,
+    description: row.description === null ? null : decodeEntities(row.description),
+    founderName: row.founder_name, founderSocialHandle: row.founder_social_handle,
     biddingMechanism: row.bidding_mechanism, minimumBidMinor: row.minimum_bid_minor === null ? null : Number(row.minimum_bid_minor),
     currentBidMinor: row.current_bid_minor === null ? null : Number(row.current_bid_minor), bidCurrency: row.bid_currency,
     publicAnalyticsUrl: row.public_analytics_url, dataDisclosure: row.data_disclosure, boardPosition: null,

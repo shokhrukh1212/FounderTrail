@@ -35,12 +35,16 @@ test("weekly launch order is isolated from legacy support and paid placement",()
   assert.match(migration,/UNIQUE\(product_id\)/);
 });
 
-test("startup rows keep detail, destination, and compact actions separate",()=>{
-  assert.match(row,/href=\{`\/product\/\$\{product\.slug\}`\}/);
-  assert.match(row,/href=\{`\/go\/\$\{product\.slug\}\?source=directory`\}/);
-  assert.match(row,/pricingModel/);
-  assert.doesNotMatch(row,/See website/);
+test("startup rows carry one internal destination and the three community actions",()=>{
+  // Logo and name link to the product page; the row itself is not one big anchor.
+  assert.match(row,/const productHref = `\/product\/\$\{product\.slug\}`/);
   assert.match(row,/VoteButton/);
-  assert.match(row,/outbound click/);
+  assert.match(row,/CommentsLink/);
   assert.match(row,/FollowButton/);
+  assert.match(row,/categoryFilterHref/);
+  // Visit website, outbound-click counts and pricing pills belong to the detail page.
+  assert.doesNotMatch(row,/\/go\//);
+  assert.doesNotMatch(row,/outbound click/);
+  assert.doesNotMatch(row,/pricing/i);
+  assert.doesNotMatch(row,/See website/);
 });

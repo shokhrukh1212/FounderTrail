@@ -1,13 +1,16 @@
 import "server-only";
 import { config } from "./config";
 import { query } from "./db";
+import { decodeEntities } from "./display-text";
+import type { PricingBasis, PricingModel, ProductPricing } from "./product-pricing";
 
 export type ProductCommunityState = {
   useCase: string | null;
   intendedAudience: string | null;
-  pricingModel: string | null;
-  startingPriceMinor: number | null;
-  pricingCurrency: string | null;
+  /** Only ever what a founder or admin supplied; never inferred. */
+  pricing: ProductPricing;
+  isOpenSource: boolean;
+  commentCount: number;
   followerCount: number;
   followed: boolean;
   allTimeUpvotes: number;
@@ -51,9 +54,14 @@ export async function getProductCommunityState(productId: string, userId: string
   const rows = await query<{
     use_case: string | null;
     intended_audience: string | null;
-    pricing_model: string | null;
+    pricing_model: PricingModel | null;
     starting_price_minor: string | null;
     pricing_currency: string | null;
+    pricing_basis: PricingBasis | null;
+    pricing_unit: string | null;
+    pricing_per_seat: boolean;
+    is_open_source: boolean;
+    comment_count: number;
     follower_count: number;
     followed: boolean;
     all_time_upvotes: number;
@@ -69,6 +77,8 @@ export async function getProductCommunityState(productId: string, userId: string
     launch_active: boolean | null;
   }>(
     `SELECT p.use_case,p.intended_audience,p.pricing_model,p.starting_price_minor::text,p.pricing_currency,
+            p.pricing_basis,p.pricing_unit,p.pricing_per_seat,p.is_open_source,
+            (SELECT count(*)::int FROM product_comments pcm WHERE pcm.product_id=p.id AND pcm.hidden_at IS NULL) AS comment_count,
             (SELECT count(*)::int FROM product_follows f WHERE f.product_id=p.id) AS follower_count,
             CASE WHEN $2::text IS NULL THEN false ELSE EXISTS(
               SELECT 1 FROM product_follows f WHERE f.product_id=p.id AND f.user_id=$2
@@ -104,11 +114,18 @@ export async function getProductCommunityState(productId: string, userId: string
   const row = rows[0];
   if (!row) throw new Error("PRODUCT_NOT_FOUND");
   return {
-    useCase: row.use_case,
-    intendedAudience: row.intended_audience,
-    pricingModel: row.pricing_model,
-    startingPriceMinor: row.starting_price_minor === null ? null : Number(row.starting_price_minor),
-    pricingCurrency: row.pricing_currency,
+    useCase: row.use_case === null ? null : decodeEntities(row.use_case),
+    intendedAudience: row.intended_audience === null ? null : decodeEntities(row.intended_audience),
+    pricing: {
+      model: row.pricing_model,
+      startingPriceMinor: row.starting_price_minor === null ? null : Number(row.starting_price_minor),
+      currency: row.pricing_currency,
+      basis: row.pricing_basis,
+      unit: row.pricing_unit,
+      perSeat: row.pricing_per_seat,
+    },
+    isOpenSource: row.is_open_source,
+    commentCount: Number(row.comment_count),
     followerCount: Number(row.follower_count),
     followed: row.followed,
     allTimeUpvotes: Number(row.all_time_upvotes),
@@ -189,19 +206,4 @@ export async function getPublishedConnectedMetrics(productId: string): Promise<C
     refreshedAt: new Date(row.last_synced_at),
     stale: Date.now() - new Date(row.last_synced_at).getTime() > 48 * 60 * 60 * 1000,
   }));
-}
-
-export function pricingLabel(input: Pick<ProductCommunityState, "pricingModel" | "startingPriceMinor" | "pricingCurrency">): string {
-  if (input.startingPriceMinor !== null && input.pricingCurrency) {
-    return `From ${new Intl.NumberFormat("en", { style: "currency", currency: input.pricingCurrency }).format(input.startingPriceMinor / 100)}`;
-  }
-  const labels: Record<string, string> = {
-    free: "Free",
-    freemium: "Freemium",
-    paid: "Paid",
-    open_source: "Open source",
-    contact: "Contact sales",
-    unknown: "See website",
-  };
-  return input.pricingModel ? labels[input.pricingModel] ?? "See website" : "See website";
 }

@@ -21,6 +21,7 @@
     "test": "node --import tsx --test lib/__tests__/*.test.ts",
     "reset": "tsx --env-file=.env.local scripts/reset-board.ts",
     "votes:set": "tsx --env-file=.env.local scripts/set-product-upvotes.ts",
+    "categories:restore": "tsx --env-file=.env.local scripts/restore-product-categories.ts",
     "test:db": "tsx --env-file=.env.local scripts/db-contract-check.ts",
     "diagnose:claim": "tsx --env-file=.env.local scripts/diagnose-claim.ts",
     "migrate:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/migrate.ts",

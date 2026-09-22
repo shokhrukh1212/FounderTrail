@@ -13,7 +13,7 @@ const ownerRecoveryRoute=readFileSync(new URL("../../app/api/admin/products/[slu
 const integrationManager=readFileSync(new URL("../../components/IntegrationManager.tsx",import.meta.url),"utf8");
 const migration=readFileSync(new URL("../../migrations/004_submission_simplification.up.sql",import.meta.url),"utf8");
 
-function minimalForm(){const form=new FormData();for(const [key,value] of Object.entries({websiteUrl:"https://manual.example",name:"Manual",tagline:"A manually entered product",contactEmail:"private@example.com",categoryId:"1",pricingModel:"unknown",ownershipConsent:"on"}))form.set(key,value);return form;}
+function minimalForm(){const form=new FormData();for(const [key,value] of Object.entries({websiteUrl:"https://manual.example",name:"Manual",tagline:"A manually entered product",contactEmail:"private@example.com",categories:"productivity",ownershipConsent:"on"}))form.set(key,value);return form;}
 
 test("manual submission works without extraction or founder fields",()=>{
   const result=validateProductSubmission(minimalForm());assert.equal(result.ok,true);
@@ -26,8 +26,8 @@ test("contact email is private and pending products stay out of public DTOs",()=
   assert.match(productData,/p\.status = 'published'/);
   assert.match(submissionRoute,/requestedStatus/);
   assert.match(submissionRoute,/launch_date, status/);
-  assert.match(submissionRoute,/primary_category_id/);
-  assert.match(submissionRoute,/validated\.value\.categoryId/);
+  assert.match(submissionRoute,/applyProductCategories/);
+  assert.match(submissionRoute,/validated\.value\.categorySlugs/);
 });
 
 test("production excludes demo data from public discovery and actions",()=>{
@@ -41,8 +41,8 @@ test("launching today uses the submitted UTC launch date",()=>{
 });
 
 test("admin owns category assignment and duplicate-domain override",()=>{
-  assert.match(adminRoute,/INVALID_CATEGORY/);assert.match(adminRoute,/DUPLICATE_DOMAIN/);assert.match(adminRoute,/overrideDuplicate/);
-  assert.match(migration,/Pay-to-rank directory/);assert.match(migration,/Ad auction or digital billboard/);assert.match(migration,/Game or experiment/);
+  assert.match(adminRoute,/InvalidCategorySelection/);assert.match(adminRoute,/DUPLICATE_DOMAIN/);assert.match(adminRoute,/overrideDuplicate/);
+  assert.match(adminRoute,/applyProductCategories\(client, product\.id, categorySlugs, "admin"\)/);
 });
 
 test("public evidence requires admin acceptance before an aggregate is written",()=>{

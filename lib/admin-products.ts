@@ -1,9 +1,11 @@
 import "server-only";
 import { query } from "./db";
+import { displayProductName } from "./display-text";
 import type { AdminProductDetail, AdminProductSummary } from "./admin-product-types";
 
 type SummaryRow = {
-  id: string; slug: string; name: string; website_url: string; normalized_domain:string; category_name:string|null; founder_name: string | null;
+  id: string; slug: string; name: string; short_name: string | null; website_url: string; normalized_domain:string;
+  categories: Array<{ slug: string; name: string }> | null; category_review_required: boolean; founder_name: string | null;
   contact_email: string; founder_social_handle: string | null; status: string; product_verified_at: Date | null;
   domain_verified_at: Date | null; upvotes: number; product_views: number; referred_visitors: number;
   submitted_at: Date; approved_at: Date | null; approval_email_status: string; approval_email_sent_at: Date | null;
@@ -12,7 +14,10 @@ type SummaryRow = {
 };
 
 export async function listAdminProducts(): Promise<AdminProductSummary[]> {
-  const rows = await query<SummaryRow>(`SELECT p.id::text,p.slug,p.name,p.website_url,p.normalized_domain,c.name AS category_name,p.founder_name,p.contact_email,
+  const rows = await query<SummaryRow>(`SELECT p.id::text,p.slug,p.name,p.short_name,p.website_url,p.normalized_domain,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('slug',cc.slug,'name',cc.name) ORDER BY pc.position)
+        FROM product_categories pc JOIN categories cc ON cc.id=pc.category_id WHERE pc.product_id=p.id),'[]'::jsonb) AS categories,
+      p.category_review_required,p.founder_name,p.contact_email,
       p.founder_social_handle,p.status,i.product_verified_at,i.domain_verified_at,
       CASE WHEN EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) THEN 'claimed'
         WHEN EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='disputed') THEN 'disputed'
@@ -29,10 +34,14 @@ export async function listAdminProducts(): Promise<AdminProductSummary[]> {
       (SELECT count(*)::int FROM founder_referral_events e WHERE e.source_product_id=p.id AND e.outcome='counted') AS referred_visitors,
       p.submitted_at,p.approved_at,p.approval_email_status,p.approval_email_sent_at,
       (SELECT public_url FROM product_media m WHERE m.product_id=p.id AND m.kind='logo' ORDER BY m.position LIMIT 1) AS logo_url
-    FROM products p LEFT JOIN categories c ON c.id=p.primary_category_id LEFT JOIN product_integrations i ON i.product_id=p.id
+    FROM products p LEFT JOIN product_integrations i ON i.product_id=p.id
     WHERE NOT p.is_demo ORDER BY p.submitted_at DESC,p.id`);
   return rows.map(row => ({
-    id:row.id,slug:row.slug,name:row.name,websiteUrl:row.website_url,normalizedDomain:row.normalized_domain,category:row.category_name,founderName:row.founder_name,
+    id:row.id,slug:row.slug,name:row.name,shortName:row.short_name,displayName:displayProductName(row.name,row.short_name),
+    websiteUrl:row.website_url,normalizedDomain:row.normalized_domain,
+    categories:row.categories??[],
+    needsClassification:row.category_review_required||!(row.categories??[]).length||(row.categories??[]).every(category=>category.slug==="other"),
+    founderName:row.founder_name,
     contactEmail:row.contact_email,founderSocialHandle:row.founder_social_handle,status:row.status,ownershipStatus:row.ownership_status,launchStatus:row.launch_status,launchWeekStart:row.launch_week_start?new Date(row.launch_week_start).toISOString():null,recentActivityAt:new Date(row.recent_activity_at).toISOString(),
     verificationStatus:row.product_verified_at?"verified":row.domain_verified_at?"domain_verified":"not_verified",
     upvotes:Number(row.upvotes),productViews:Number(row.product_views),referredVisitors:Number(row.referred_visitors),
@@ -43,12 +52,19 @@ export async function listAdminProducts(): Promise<AdminProductSummary[]> {
 }
 
 export async function getAdminProductDetail(slug: string): Promise<AdminProductDetail | null> {
-  const products = await query<Record<string, unknown>>(`SELECT p.id::text,p.slug,p.name,p.tagline,p.description,p.website_url,p.submitted_url,
+  const products = await query<Record<string, unknown>>(`SELECT p.id::text,p.slug,p.name,p.short_name,p.tagline,p.description,p.website_url,p.submitted_url,
       p.normalized_domain,p.founder_name,p.contact_email,p.founder_social_handle,p.status,p.launch_date::text,p.submitted_at,
       p.published_at,p.approved_at,p.submission_consent_at,p.submission_consent_version,p.domain_override_approved,
       p.founding_position,p.bidding_mechanism,p.minimum_bid_minor::text,p.current_bid_minor::text,p.bid_currency,
       p.public_analytics_url,p.data_disclosure,p.approval_email_status,p.approval_email_sent_at,
-      p.approval_email_last_attempt_at,p.approval_email_last_failure,c.name AS category_name,
+      p.approval_email_last_attempt_at,p.approval_email_last_failure,
+      p.pricing_model,p.starting_price_minor::text,p.pricing_currency,p.pricing_basis,p.pricing_unit,p.pricing_per_seat,
+      p.pricing_source,p.pricing_confirmed_at,p.is_open_source,p.category_provenance,p.category_review_required,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('slug',cc.slug,'name',cc.name) ORDER BY pc.position)
+        FROM product_categories pc JOIN categories cc ON cc.id=pc.category_id WHERE pc.product_id=p.id),'[]'::jsonb) AS categories,
+      (SELECT jsonb_build_object('model',l.pricing_model,'startingPriceMinor',l.starting_price_minor,'currency',l.pricing_currency,
+        'provenance',l.pricing_provenance,'evidenceUrl',l.pricing_evidence_url,'checkedAt',l.pricing_checked_at)
+        FROM product_pricing_legacy l WHERE l.product_id=p.id) AS legacy_pricing,
       pref.marketing_opt_in_at,pref.marketing_unsubscribed_at,
       COALESCE((SELECT array_agg(s.reason ORDER BY s.reason) FROM founder_email_suppressions s WHERE s.normalized_email=pref.normalized_email),'{}'::text[]) AS suppressions,
       i.domain_status,i.allowed_domain,i.verification_method,i.domain_verified_at,i.badge_status,i.badge_installed_at,i.product_verified_at,
@@ -59,7 +75,6 @@ export async function getAdminProductDetail(slug: string): Promise<AdminProductD
       (SELECT count(*)::int FROM product_outbound_click_events e WHERE e.product_id=p.id AND e.outcome='counted') AS outbound_clicks
     FROM products p
     JOIN founder_email_preferences pref ON pref.id=p.email_preference_id
-    LEFT JOIN categories c ON c.id=p.primary_category_id
     LEFT JOIN product_integrations i ON i.product_id=p.id
     LEFT JOIN product_owner_credentials o ON o.product_id=p.id
     WHERE p.slug=$1 AND NOT p.is_demo LIMIT 1`,[slug]);
@@ -73,7 +88,15 @@ export async function getAdminProductDetail(slug: string): Promise<AdminProductD
   const numberOrNull=(value:unknown)=>value===null||value===undefined?null:Number(value);
   const m=metadata[0];
   return {
-    product:{id,slug:String(p.slug),name:String(p.name),tagline:String(p.tagline),description:p.description===null?null:String(p.description),websiteUrl:String(p.website_url),submittedUrl:String(p.submitted_url),normalizedDomain:String(p.normalized_domain),founderName:p.founder_name===null?null:String(p.founder_name),contactEmail:String(p.contact_email),founderSocialHandle:p.founder_social_handle===null?null:String(p.founder_social_handle),status:String(p.status),launchDate:String(p.launch_date),submittedAt:iso(p.submitted_at)!,publishedAt:iso(p.published_at),approvedAt:iso(p.approved_at),consentAt:iso(p.submission_consent_at),consentVersion:p.submission_consent_version===null?null:String(p.submission_consent_version),category:p.category_name===null?null:String(p.category_name),domainOverrideApproved:Boolean(p.domain_override_approved),foundingPosition:numberOrNull(p.founding_position),biddingMechanism:p.bidding_mechanism===null?null:String(p.bidding_mechanism),minimumBidMinor:numberOrNull(p.minimum_bid_minor),currentBidMinor:numberOrNull(p.current_bid_minor),bidCurrency:p.bid_currency===null?null:String(p.bid_currency),publicAnalyticsUrl:p.public_analytics_url===null?null:String(p.public_analytics_url),dataDisclosure:p.data_disclosure===null?null:String(p.data_disclosure)},
+    product:{id,slug:String(p.slug),name:String(p.name),shortName:p.short_name===null?null:String(p.short_name),displayName:displayProductName(String(p.name),p.short_name===null?null:String(p.short_name)),tagline:String(p.tagline),description:p.description===null?null:String(p.description),websiteUrl:String(p.website_url),submittedUrl:String(p.submitted_url),normalizedDomain:String(p.normalized_domain),founderName:p.founder_name===null?null:String(p.founder_name),contactEmail:String(p.contact_email),founderSocialHandle:p.founder_social_handle===null?null:String(p.founder_social_handle),status:String(p.status),launchDate:String(p.launch_date),submittedAt:iso(p.submitted_at)!,publishedAt:iso(p.published_at),approvedAt:iso(p.approved_at),consentAt:iso(p.submission_consent_at),consentVersion:p.submission_consent_version===null?null:String(p.submission_consent_version),categories:Array.isArray(p.categories)?p.categories as Array<{slug:string;name:string}>:[],
+      categoryProvenance:p.category_provenance===null?null:String(p.category_provenance),
+      needsClassification:Boolean(p.category_review_required)||!(Array.isArray(p.categories)&&p.categories.length)||(p.categories as Array<{slug:string}>).every(category=>category.slug==="other"),
+      pricing:{model:(p.pricing_model??null) as AdminProductDetail["product"]["pricing"]["model"],startingPriceMinor:numberOrNull(p.starting_price_minor),currency:p.pricing_currency===null?null:String(p.pricing_currency),basis:(p.pricing_basis??null) as AdminProductDetail["product"]["pricing"]["basis"],unit:p.pricing_unit===null?null:String(p.pricing_unit),perSeat:Boolean(p.pricing_per_seat)},
+      pricingSource:(p.pricing_source??null) as "founder"|"admin"|null,
+      pricingConfirmedAt:iso(p.pricing_confirmed_at),
+      isOpenSource:Boolean(p.is_open_source),
+      legacyPricing:p.legacy_pricing?{...(p.legacy_pricing as Record<string,unknown>),startingPriceMinor:numberOrNull((p.legacy_pricing as Record<string,unknown>).startingPriceMinor),checkedAt:iso((p.legacy_pricing as Record<string,unknown>).checkedAt)} as AdminProductDetail["product"]["legacyPricing"]:null,
+      domainOverrideApproved:Boolean(p.domain_override_approved),foundingPosition:numberOrNull(p.founding_position),biddingMechanism:p.bidding_mechanism===null?null:String(p.bidding_mechanism),minimumBidMinor:numberOrNull(p.minimum_bid_minor),currentBidMinor:numberOrNull(p.current_bid_minor),bidCurrency:p.bid_currency===null?null:String(p.bid_currency),publicAnalyticsUrl:p.public_analytics_url===null?null:String(p.public_analytics_url),dataDisclosure:p.data_disclosure===null?null:String(p.data_disclosure)},
     email:{marketingOptedIn:!p.marketing_unsubscribed_at&&!(Array.isArray(p.suppressions)&&p.suppressions.length),marketingUnsubscribedAt:iso(p.marketing_unsubscribed_at),suppressions:Array.isArray(p.suppressions)?p.suppressions.map(String):[],approvalStatus:String(p.approval_email_status),approvalSentAt:iso(p.approval_email_sent_at),approvalLastAttemptAt:iso(p.approval_email_last_attempt_at),approvalFailure:p.approval_email_last_failure===null?null:String(p.approval_email_last_failure)},
     verification:{domainStatus:String(p.domain_status??"not_started"),allowedDomain:p.allowed_domain===null||p.allowed_domain===undefined?null:String(p.allowed_domain),verificationMethod:p.verification_method===null||p.verification_method===undefined?null:String(p.verification_method),domainVerifiedAt:iso(p.domain_verified_at),badgeStatus:String(p.badge_status??"not_started"),badgeInstalledAt:iso(p.badge_installed_at),productVerifiedAt:iso(p.product_verified_at)},
     ownerCredential:{createdAt:iso(p.owner_created_at),rotatedAt:iso(p.owner_rotated_at)},

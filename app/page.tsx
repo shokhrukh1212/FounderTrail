@@ -2,11 +2,11 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { brandCopy } from "@/lib/brand";
-import { query } from "@/lib/db";
-import { getFounderTrailDiscovery, getUpdateFeed, type DiscoverySort, type FounderTrailView } from "@/lib/foundertrail-data";
+import { getCategoryFacets, getFounderTrailDiscovery, getUpdateFeed, type DiscoverySort, type FounderTrailView } from "@/lib/foundertrail-data";
 import { StartupRow } from "@/components/StartupRow";
 import { ProductLogo } from "@/components/ProductLogo";
 import { LocalTime } from "@/components/LocalTime";
+import { PRICING_MODELS, PRICING_MODEL_LABELS } from "@/lib/product-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +44,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const sort: DiscoverySort = params.sort === "newest" ? "newest" : "most_upvoted";
   const user = await currentUserFromHeaders(await headers()).catch(() => null);
-  const categories = await query<{ slug: string; name: string; count: number }>(`SELECT c.slug,c.name,count(p.id)::int AS count
-      FROM categories c LEFT JOIN products p ON p.primary_category_id=c.id AND p.status='published'
-      WHERE c.slug=ANY($1::text[]) GROUP BY c.id,c.slug,c.name ORDER BY c.name`, [[
-        "ai-tools", "productivity", "developer-tools", "marketing-seo", "sales-crm", "design-creative",
-        "writing-content", "analytics-data", "finance-accounting", "ecommerce", "education", "health-fitness",
-        "travel", "games", "directories-discovery", "advertising-sponsorship", "other",
-      ]]);
+  const categories = await getCategoryFacets();
   const discovery = view === "updates" ? null : await getFounderTrailDiscovery({
     view,
     search: params.q,
@@ -87,7 +81,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
         <input type="hidden" name="view" value="discover" />
         <label><span className="sr-only">Search</span><input type="search" name="q" defaultValue={params.q} placeholder="Search names, descriptions and use cases" /></label>
         <label><span className="sr-only">Category</span><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option key={category.slug} value={category.slug}>{category.name} ({category.count})</option>)}</select></label>
-        <label><span className="sr-only">Pricing</span><select name="pricing" defaultValue={params.pricing ?? ""}><option value="">All pricing</option><option value="free">Free</option><option value="freemium">Freemium</option><option value="paid">Paid</option><option value="open_source">Open source</option><option value="contact">Contact sales</option><option value="unknown">Pricing not listed</option></select></label>
+        <label><span className="sr-only">Pricing</span><select name="pricing" defaultValue={params.pricing ?? ""}><option value="">All pricing</option>{PRICING_MODELS.map((model) => <option key={model} value={model}>{PRICING_MODEL_LABELS[model]}</option>)}</select></label>
         <label><span className="sr-only">Sort</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label>
         <button className="button button-secondary">Apply</button>
       </form> : null}

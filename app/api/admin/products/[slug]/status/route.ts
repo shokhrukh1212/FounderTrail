@@ -6,7 +6,8 @@ import { config } from "@/lib/config";
 import { withTransaction } from "@/lib/db";
 import { requestOriginIsSameSite } from "@/lib/request-security";
 import { canonicalProductUrl } from "@/lib/product-share";
-import { FOUNDERTRAIL_CATEGORY_SLUGS } from "@/lib/categories";
+import { normalizeCategorySelection } from "@/lib/categories";
+import { applyProductCategories, InvalidCategorySelection } from "@/lib/product-categories";
 
 function text(value: unknown, max: number) {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null;
@@ -19,7 +20,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
   if (!(await validAdminRequest(request))) return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   const { slug } = await context.params;
   const body = await request.json().catch(() => null) as {
-    status?: unknown; name?: unknown; tagline?: unknown; categoryId?: unknown;
+    status?: unknown; name?: unknown; tagline?: unknown; categories?: unknown;
     reason?: unknown; overrideDuplicate?: unknown;
   } | null;
   if (body?.status !== "published" && body?.status !== "rejected") return NextResponse.json({ error: "Invalid moderation status." }, { status: 400 });
@@ -41,14 +42,12 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
       }
       if (product.status !== "pending") throw new Error("ALREADY_REVIEWED");
 
-      let categoryId: string | null = null;
+      // Approval assigns the same one-to-three categories the rest of the app uses.
+      let categorySlugs: string[] = [];
       if (body.status === "published") {
-        const category = await client.query<{ id: string }>(
-          `SELECT id::text FROM categories WHERE id=$1::bigint AND slug=ANY($2::text[])`,
-          [String(body.categoryId ?? ""),FOUNDERTRAIL_CATEGORY_SLUGS],
-        );
-        categoryId = category.rows[0]?.id ?? null;
-        if (!categoryId) throw new Error("INVALID_CATEGORY");
+        const selection = normalizeCategorySelection(body.categories);
+        if (!selection.ok) throw new InvalidCategorySelection(selection.error);
+        categorySlugs = selection.slugs;
         const duplicate = await client.query(
           `SELECT 1 FROM products WHERE normalized_domain=$1 AND status='published' AND id<>$2::uuid LIMIT 1`,
           [product.normalized_domain, product.id],
@@ -58,20 +57,18 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
 
       const updated = await client.query<{ slug: string; name: string; approved_at: Date | null }>(
         `UPDATE products
-            SET status=$2,name=$3,tagline=$4,primary_category_id=$5::bigint,
-                category_provenance=CASE WHEN $5::bigint IS NULL THEN category_provenance ELSE 'admin' END,
-                category_review_required=CASE WHEN $5::bigint IS NULL THEN category_review_required ELSE false END,
-                domain_override_approved=$6,
+            SET status=$2,name=$3,tagline=$4,
+                short_name=CASE WHEN char_length(btrim($3::text)) BETWEEN 1 AND 60 THEN $3::text ELSE short_name END,
+                short_name_source=CASE WHEN char_length(btrim($3::text)) BETWEEN 1 AND 60 THEN 'admin' ELSE short_name_source END,
+                short_name_updated_at=CASE WHEN char_length(btrim($3::text)) BETWEEN 1 AND 60 THEN now() ELSE short_name_updated_at END,
+                domain_override_approved=$5,
                 approved_at=CASE WHEN $2='published' THEN COALESCE(approved_at,now()) ELSE approved_at END,
                 published_at=CASE WHEN $2='published' THEN COALESCE(published_at,now()) ELSE published_at END,
                 updated_at=now()
           WHERE id=$1::uuid RETURNING slug,name,approved_at`,
-        [product.id, body.status, name, tagline, categoryId, body.status === "published" && body.overrideDuplicate === true],
+        [product.id, body.status, name, tagline, body.status === "published" && body.overrideDuplicate === true],
       );
-      if (body.status === "published" && categoryId) {
-        await client.query(`DELETE FROM product_categories WHERE product_id=$1::uuid AND position=0`, [product.id]);
-        await client.query(`INSERT INTO product_categories (product_id,category_id,position) VALUES ($1::uuid,$2::bigint,0) ON CONFLICT (product_id,category_id) DO UPDATE SET position=0`, [product.id, categoryId]);
-      }
+      if (body.status === "published") await applyProductCategories(client, product.id, categorySlugs, "admin");
       await client.query(
         `INSERT INTO product_moderation_events (product_id,from_status,to_status,internal_reason) VALUES ($1::uuid,$2,$3,$4)`,
         [product.id, product.status, body.status, reason],
@@ -105,7 +102,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "DUPLICATE_DOMAIN") return NextResponse.json({ error: "An approved product already uses this domain. Confirm the duplicate override to continue." }, { status: 409 });
-    if (code === "INVALID_CATEGORY") return NextResponse.json({ error: "Choose one primary category." }, { status: 400 });
+    if (error instanceof InvalidCategorySelection) return NextResponse.json({ error: error.message, field: "categories" }, { status: 400 });
     if (code === "ALREADY_REVIEWED") return NextResponse.json({ error: "This submission was already reviewed." }, { status: 409 });
     const databaseError = error as { code?: unknown; constraint?: unknown };
     const databaseCode = typeof databaseError?.code === "string" && /^[A-Z0-9]{1,12}$/i.test(databaseError.code) ? databaseError.code : "unexpected";

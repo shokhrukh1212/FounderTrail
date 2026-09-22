@@ -3,10 +3,12 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export function VoteButton({ slug, initialCount, initialActive = false }: {
+export function VoteButton({ slug, initialCount, initialActive = false, productName }: {
   slug: string;
   initialCount: number;
   initialActive?: boolean;
+  /** Read out instead of the slug, so the control names the product a person sees. */
+  productName?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,7 +70,7 @@ export function VoteButton({ slug, initialCount, initialActive = false }: {
       type="button"
       className={`vote-button${active ? " is-active" : ""}`}
       aria-pressed={active}
-      aria-label={`${active ? "Remove upvote from" : "Upvote"} ${slug}. ${count} upvotes${error ? ". Last update failed" : ""}`}
+      aria-label={`${active ? "Remove upvote from" : "Upvote"} ${productName || slug}. ${count} upvotes${error ? ". Last update failed" : ""}`}
       disabled={busy}
       onClick={() => void setVote(!active)}
       title={`${count.toLocaleString()} all-time upvote${count === 1 ? "" : "s"}`}

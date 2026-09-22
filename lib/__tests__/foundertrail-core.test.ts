@@ -70,7 +70,7 @@ test("admin operations expose required ownership, launch, activity, and Pro cont
   assert.match(adminProducts,/ownership_status/);
   assert.match(adminProducts,/launch_status/);
   assert.match(adminProducts,/recent_activity_at/);
-  assert.match(adminProducts,/category_name/);
+  assert.match(adminProducts,/needsClassification/);
   assert.match(adminOperations,/proIncome/);
   assert.match(adminOperations,/proAvailability/);
   assert.match(adminOperations,/proOrders/);

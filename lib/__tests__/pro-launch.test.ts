@@ -124,7 +124,9 @@ test("results use one locked half-open seven-day window and immutable completion
 });
 
 test("the Pro badge is explicit and is never presented as verification", () => {
-  assert.match(badge, />✓<\/span> Pro/);
-  assert.match(badge, /Pro startup/);
+  // A tick would read as a verification mark, which Pro is not.
+  assert.doesNotMatch(badge, /✓/);
+  assert.match(badge, /Pro plan/);
+  assert.match(badge, /Not identity or revenue verification/);
   assert.doesNotMatch(badge, /Verified/);
 });
