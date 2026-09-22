@@ -11,12 +11,12 @@ import { ProBadge } from "./ProBadge";
  * One product row, shared by the weekly launch list, community favourites and the
  * discovery directory so all three read identically.
  *
- * The row is not one big link: the logo and the name link to the product page, the
- * category chips link to the matching directory filter, and the actions are their own
- * controls. Nesting those inside a row-wide anchor would make the interactive elements
- * ambiguous for keyboard and screen-reader users.
+ * Clicking anywhere on the row opens the product page, but the row is not one big anchor:
+ * the name link is stretched over it in CSS, while the category chips (directory filter)
+ * and the vote, comment and follow controls stay separate targets above it. Nesting them
+ * inside a row-wide anchor would make them ambiguous for keyboard and screen-reader users.
  */
-export function StartupRow({ product, position, weekly = false }: { product: StartupCard; position?: number; weekly?: boolean }) {
+export function StartupRow({ product, position }: { product: StartupCard; position?: number }) {
   const productHref = `/product/${product.slug}`;
   return <article className="startup-row">
     <span className="product-position">{position ? `#${position}` : ""}</span>
@@ -34,8 +34,7 @@ export function StartupRow({ product, position, weekly = false }: { product: Sta
       <p>{product.tagline}</p>
       {product.categories.length ? <div className="startup-meta">
         {product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}
-        {weekly ? <span className="startup-meta-note">{product.launchVotes.toLocaleString()} this week</span> : null}
-      </div> : weekly ? <div className="startup-meta"><span className="startup-meta-note">{product.launchVotes.toLocaleString()} this week</span></div> : null}
+      </div> : null}
     </div>
     <div className="startup-actions">
       <VoteButton slug={product.slug} initialCount={product.allTimeUpvotes} initialActive={product.upvoted} productName={product.name} />

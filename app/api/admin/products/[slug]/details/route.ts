@@ -38,7 +38,6 @@ export async function PATCH(request:Request,context:RouteContext<"/api/admin/pro
 
   const pricing=parsePricingInput(body);
   if(!pricing.ok)return NextResponse.json({error:pricing.error,field:pricing.field},{status:400});
-  const openSource=body.isOpenSource===true||body.isOpenSource==="on";
 
   try{
     const updated=await withTransaction(async(client)=>{
@@ -52,20 +51,20 @@ export async function PATCH(request:Request,context:RouteContext<"/api/admin/pro
                 short_name_updated_at=CASE WHEN $2::text IS NULL THEN NULL ELSE now() END,
                 short_name_updated_by=CASE WHEN $2::text IS NULL THEN NULL ELSE $3 END,
                 pricing_model=$4,starting_price_minor=$5,pricing_currency=$6,pricing_basis=$7,pricing_unit=$8,
-                pricing_per_seat=$9,is_open_source=$10,
+                pricing_per_seat=$9,
                 pricing_source=CASE WHEN $4::text IS NULL THEN NULL ELSE 'admin' END,
                 pricing_confirmed_at=CASE WHEN $4::text IS NULL THEN NULL ELSE now() END,
                 pricing_confirmed_by=CASE WHEN $4::text IS NULL THEN NULL ELSE $3 END,
                 updated_at=now()
           WHERE id=$1::uuid`,
         [productId,shortName,actor?.id??null,pricing.value.model,pricing.value.startingPriceMinor,pricing.value.currency,
-         pricing.value.basis,pricing.value.unit,pricing.value.perSeat,openSource],
+         pricing.value.basis,pricing.value.unit,pricing.value.perSeat],
       );
       await applyProductCategories(client,productId,categories.slugs,"admin");
       await client.query(
         `INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details)
-         VALUES($1,'admin','product.listing_corrected',$2::uuid,jsonb_build_object('shortName',$3::text,'categories',$4::text[],'pricingModel',$5::text,'openSource',$6::boolean))`,
-        [actor?.id??null,productId,shortName,categories.slugs,pricing.value.model,openSource],
+         VALUES($1,'admin','product.listing_corrected',$2::uuid,jsonb_build_object('shortName',$3::text,'categories',$4::text[],'pricingModel',$5::text))`,
+        [actor?.id??null,productId,shortName,categories.slugs,pricing.value.model],
       );
       return productId;
     });

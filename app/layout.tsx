@@ -17,7 +17,7 @@ const publicSiteUrl = new URL(config.siteUrl);
 const socialTitle = brandCopy.metaTitle;
 const socialDescription = brandCopy.metaDescription;
 const socialImage = {
-  url: "/opengraph-image",
+  url: "/brand/og.png",
   width: 1200,
   height: 630,
   type: "image/png",
@@ -39,12 +39,11 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   metadataBase: publicSiteUrl,
-  // No `icons` here on purpose. Declaring one pins the tag to a bare "/icon.svg", and a
-  // browser that has already cached a favicon under that exact URL keeps showing the old
-  // artwork forever. Left alone, the app/icon.svg file convention emits the same file
-  // with a content hash on the URL, so changing the logo changes the URL and the tab
-  // updates. Whenever the logo changes, change components/Logo.tsx and app/icon.svg
-  // together -- they are the same mark drawn twice.
+  // No `icons` here on purpose. Declaring one pins the tag to a bare URL, and a browser
+  // that has already cached a favicon under that exact URL keeps showing the old artwork
+  // forever. Left alone, the app/icon.png and app/apple-icon.png file conventions emit
+  // their files with a content hash on the URL, so a new logo reaches every tab. Every
+  // brand image is derived from public/logo.png -- see components/Logo.tsx.
   title: {
     default: socialTitle,
     template: `%s · ${config.siteName}`,

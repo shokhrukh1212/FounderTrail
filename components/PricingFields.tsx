@@ -21,11 +21,7 @@ import {
  * to Free or Contact sales, and supplying one is what makes the currency and the billing
  * basis required.
  */
-export function PricingFields({ pricing, openSource = false, showOpenSource = true }: {
-  pricing: ProductPricing;
-  openSource?: boolean;
-  showOpenSource?: boolean;
-}) {
+export function PricingFields({ pricing }: { pricing: ProductPricing }) {
   const id = useId();
   const initial = pricingFormValues(pricing);
   const [model, setModel] = useState(initial.pricingModel);
@@ -98,10 +94,6 @@ export function PricingFields({ pricing, openSource = false, showOpenSource = tr
     {amountAllowed && amount ? <label className="consent-row">
       <input type="checkbox" name="pricingPerSeat" checked={perSeat} onChange={(event) => setPerSeat(event.target.checked)} />
       <span>This amount is per seat.</span>
-    </label> : null}
-    {showOpenSource ? <label className="consent-row">
-      <input type="checkbox" name="isOpenSource" defaultChecked={openSource} />
-      <span>This product is open source. Open source is recorded separately from pricing, because open-source products can still charge for hosting or services.</span>
     </label> : null}
     <p className="form-hint" aria-live="polite">Public pricing row: {preview ? <strong>{preview}</strong> : "not shown"}</p>
   </div>;

@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { IntegrationManager, type IntegrationState } from "@/components/IntegrationManager";
 import { ProductLogo } from "@/components/ProductLogo";
 import { XShareLink } from "@/components/XShareLink";
@@ -9,6 +10,7 @@ import type { ManagedProduct } from "@/lib/product-data";
 import { ProBadge } from "@/components/ProBadge";
 import { CategoryPicker } from "@/components/CategoryPicker";
 import { PricingFields } from "@/components/PricingFields";
+import { OWNER_TABS, ownerTabHref, type OwnerTab } from "@/lib/owner-tabs";
 
 async function jsonRequest(url: string, init: RequestInit) {
   const response = await fetch(url, init);
@@ -18,12 +20,15 @@ async function jsonRequest(url: string, init: RequestInit) {
 }
 
 type Evidence = { id: string; metricType: string; url: string; note: string | null; status: string };
-type Tab = "product" | "updates" | "verification";
 type Media = ManagedProduct["media"][number];
 type WorkspaceUpdate = { id:string;type:string;title:string;body:string;linkUrl:string|null;status:"draft"|"published"|"archived";publishedAt:string|null;updatedAt:string };
 
-export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, growth, evidence, integration, siteUrl,initialReviewReason, proStatus, initialTab = "product" }: { product: ManagedProduct; workspaceUpdates:WorkspaceUpdate[]; outboundClicks: number; growth:{listingViews:number;outboundClicks:number;followers:number;comments:number;launchVotes:number}; evidence: Evidence[]; integration: IntegrationState; siteUrl: string;initialReviewReason:string|null; proStatus:string|null; initialTab?: Tab }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+/**
+ * One owner workspace. A single row of tabs — each a real URL — drives everything below
+ * the status banner; the header and banner stay put. Launch kit and Results are rendered
+ * on the server and handed in as `children`, so they sit inside the same shell.
+ */
+export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, growth, evidence, integration, siteUrl,initialReviewReason, proStatus, tab = "overview", children }: { product: ManagedProduct; workspaceUpdates:WorkspaceUpdate[]; outboundClicks: number; growth:{listingViews:number;outboundClicks:number;followers:number;comments:number;launchVotes:number}; evidence: Evidence[]; integration: IntegrationState; siteUrl: string;initialReviewReason:string|null; proStatus:string|null; tab?: OwnerTab; children?: ReactNode }) {
   const [currentStatus, setCurrentStatus] = useState(product.status);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [reviewReason,setReviewReason]=useState(initialReviewReason??"");
@@ -67,6 +72,15 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
       await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       setNotice("Product information saved.");
     } catch (caught) { failed(caught, "Could not save product information."); } finally { setBusy(""); }
+  }
+
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); start("settings");
+    try {
+      const marketingOptIn = new FormData(event.currentTarget).get("marketingOptIn") === "on";
+      await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "update_settings", marketingOptIn }) });
+      setNotice("Settings saved.");
+    } catch (caught) { failed(caught, "Could not save settings."); } finally { setBusy(""); }
   }
 
   async function submitDraft(){start("submit-draft");try{await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"submit_for_review"})});setCurrentStatus("pending");setReviewReason("");setNotice("Submitted for review.")}catch(caught){failed(caught,"Verify ownership before submitting for review.")}finally{setBusy("")}}
@@ -138,34 +152,58 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
   const logo = media.find((item) => item.kind === "logo");
   const screenshots = media.filter((item) => item.kind === "screenshot").sort((a, b) => a.position - b.position);
   const verified = Boolean(integration?.productVerifiedAt);
-  const tabs: Array<{ id: Tab; label: string }> = [{ id: "product", label: "Product" }, { id: "updates", label: "Updates" }, { id: "verification", label: "Verification & data" }];
+  const isPro = proStatus === "active";
+  const embedded = tab === "launch-kit" || tab === "results";
+
+  // On narrow screens the tab row scrolls sideways; keep the current tab visible in it.
+  const tabNav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = tabNav.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (nav && active && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2;
+  }, [tab]);
 
   return <>
-    <header className="manager-heading owner-summary"><div><p className="eyebrow">Owner management</p><div className="startup-name-line"><h1>{product.displayName}</h1>{proStatus === "active" ? <ProBadge /> : null}</div><p><span className={`status-pill status-${currentStatus}`}>{currentStatus === "pending" ? "Pending review" : currentStatus === "published" ? "Published" : currentStatus}</span><span aria-hidden="true"> · </span><strong className={verified ? "verified-text" : "muted-text"}>{verified ? "Ownership and product control confirmed" : "Product control not verified"}</strong><span aria-hidden="true"> · </span>{outboundClicks.toLocaleString()} unique outbound clicks</p></div>{currentStatus === "published" ? <a className="button button-secondary" href={`/product/${product.slug}`}>View public page</a> : null}</header>
-    <nav className="owner-page-nav" aria-label="Startup management"><a aria-current="page" href={`/manage/${product.slug}`}>Overview</a><a href={`/manage/${product.slug}?tab=updates#manage-product`}>Updates</a><a href={`/manage/${product.slug}?tab=verification#manage-product`}>Verification &amp; settings</a><a href={`/manage/${product.slug}/launch-kit`}>Launch kit</a><a href={`/manage/${product.slug}/results`}>Results</a></nav>
+    <header className="manager-heading owner-summary print-hide"><div><p className="eyebrow">Owner management</p><div className="startup-name-line"><h1>{product.displayName}</h1>{isPro ? <ProBadge /> : null}</div><p><span className={`status-pill status-${currentStatus}`}>{currentStatus === "pending" ? "Pending review" : currentStatus === "published" ? "Published" : currentStatus}</span><span aria-hidden="true"> · </span><strong className={verified ? "verified-text" : "muted-text"}>{verified ? "Ownership and product control confirmed" : "Product control not verified"}</strong><span aria-hidden="true"> · </span>{outboundClicks.toLocaleString()} unique outbound clicks</p></div></header>
+
+    <nav ref={tabNav} id="manage-product" className="owner-page-nav print-hide" aria-label="Startup management">
+      {OWNER_TABS.map((item) => <Link key={item.id} href={ownerTabHref(product.slug, item.id)} scroll={false} aria-current={tab === item.id ? "page" : undefined}>{item.label}</Link>)}
+    </nav>
+
+    <div className="print-hide">
     {currentStatus === "draft" ? <section className="owner-status-banner is-pending"><div><strong>Your draft is private</strong><p>Verify control of the product domain, then send the draft to moderation.</p></div><div className="owner-live-actions"><a className="button button-secondary" href={`/claim/${product.slug}`}>Verify ownership</a><button className="button button-primary" disabled={busy==="submit-draft"} onClick={()=>void submitDraft()}>Submit for review</button></div></section>:null}
     {currentStatus === "pending" ? <section className="owner-status-banner is-pending"><div><strong>Pending review</strong><p>Your product is waiting for approval. We’ll email you when it goes live.</p></div><button className="button button-secondary" type="button" disabled={checkingStatus} onClick={() => void checkStatus(true)}>{checkingStatus ? "Checking…" : "Check status"}</button></section> : null}
     {currentStatus === "rejected" ? <section className="owner-status-banner is-pending"><div><strong>Changes requested</strong><p>{reviewReason||"Review the listing details, make the requested changes, and submit it again."}</p></div><button className="button button-primary" disabled={busy==="submit-draft"} onClick={()=>void submitDraft()}>{busy==="submit-draft"?"Submitting…":"Submit changes for review"}</button></section>:null}
-    {currentStatus === "published" ? <section className="owner-status-banner is-live"><div><strong>Your product is live on FounderTrail.</strong><p>Your listing is public. Share it, answer useful questions, and publish meaningful progress.</p></div><div className="owner-live-actions"><XShareLink siteUrl={siteUrl} slug={product.slug} productName={product.displayName} source="owner" className="button button-primary" /><a className="button button-secondary" href={`/product/${product.slug}`}>View public page</a><a className="button button-secondary" href={`/manage/${product.slug}/launch`}>Launch</a><a className="button button-secondary" href={proStatus === "active" ? `/manage/${product.slug}/launch-kit` : `/manage/${product.slug}/pro`}>{proStatus === "active" ? "Open launch kit" : "Upgrade to Pro"}</a><a className="text-button owner-manage-link" href="#manage-product">Manage product</a></div></section> : null}
-    {currentStatus === "published" ? <section className="owner-growth-summary manager-card"><h2>Your product activity</h2><div>{[["Qualified profile views",growth.listingViews],["Qualified outbound clicks",growth.outboundClicks],["Current followers",growth.followers],["Visible discussion posts",growth.comments],["Current launch votes",growth.launchVotes]].map(([label,value])=><span key={String(label)}><strong>{value.toLocaleString()}</strong><small>{label}</small></span>)}</div><p>Views and clicks are all-time qualified FounderTrail events; followers and visible posts are current totals. Launch votes are separate from historical BidIndex support. Pro never changes organic launch order.</p></section> : null}
+    {currentStatus === "published" ? <section className="owner-status-banner is-live"><div><strong>Your product is live on FounderTrail.</strong><p>Your listing is public. Share it, answer useful questions, and publish meaningful progress.</p></div><div className="owner-live-actions is-single-row"><XShareLink siteUrl={siteUrl} slug={product.slug} productName={product.displayName} source="owner" className="button button-primary" /><a className="button button-secondary" href={`/product/${product.slug}`}>View public page</a><a className="button button-secondary" href={`/manage/${product.slug}/launch`}>Schedule launch</a>{isPro ? null : <a className="button button-secondary" href={`/manage/${product.slug}/pro`}>Upgrade to Pro</a>}</div></section> : null}
     {notice ? <p className="manager-notice is-success" role="status">{notice}</p> : null}{error ? <p className="form-error" role="alert">{error}</p> : null}
-    <div id="manage-product" className="owner-tabs" role="tablist" aria-label="Product management sections">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
+    </div>
 
-    {tab === "product" ? <div role="tabpanel" className="owner-tab-panel">
+    {embedded ? <div className="owner-tab-panel is-wide">{children}</div> : null}
+
+    {tab === "overview" ? <div className="owner-tab-panel">
+      {currentStatus === "published" ? <section className="owner-growth-summary manager-card"><h2>Your product activity</h2><div>{[["Qualified profile views",growth.listingViews],["Qualified outbound clicks",growth.outboundClicks],["Current followers",growth.followers],["Visible discussion posts",growth.comments],["Current launch votes",growth.launchVotes]].map(([label,value])=><span key={String(label)}><strong>{value.toLocaleString()}</strong><small>{label}</small></span>)}</div><p>Views and clicks are all-time qualified FounderTrail events; followers and visible posts are current totals. Launch votes are separate from historical BidIndex support. Pro never changes organic launch order.</p></section> : null}
       <section className="manager-card"><h2>Product information</h2><form className="submission-form compact-form" onSubmit={saveProduct}>
         <label>Product name <small>Your product&apos;s name only; put its tagline below.</small><input name="shortName" required maxLength={60} defaultValue={product.displayName} placeholder="e.g. Atlas" /></label>
         <label>One-line description <small>160 characters maximum</small><input name="tagline" required maxLength={160} defaultValue={product.tagline} placeholder="e.g. Turn support questions into clear, searchable answers." /></label>
         <div className="form-grid"><label>Founder name <small>Optional</small><input name="founderName" maxLength={120} defaultValue={product.founderName ?? ""} placeholder="e.g. Alex Smith" /></label><label>Founder X/social handle <small>Optional</small><input name="founderSocialHandle" maxLength={120} defaultValue={product.founderSocialHandle ?? ""} placeholder="e.g. @alexsmith" /></label></div>
         <CategoryPicker initial={product.categorySlugs} />
-        <PricingFields pricing={product.pricing} openSource={product.isOpenSource} />
-        <label className="consent-row optional-marketing"><input name="marketingOptIn" type="checkbox" defaultChecked={product.marketingOptedIn} disabled={product.marketingSuppressed} /> <span>Send me occasional FounderTrail product and founder news.{product.marketingSuppressed ? " This address is permanently unsubscribed or suppressed." : ""}</span></label>
-        <label>Product website<input value={product.websiteUrl} readOnly aria-readonly="true" /></label><p className="form-hint">URL changes require administrator review because changing the domain invalidates ownership verification. Contact FounderTrail to request a change.</p>
+        <PricingFields pricing={product.pricing} />
         <button className="button button-primary" disabled={busy === "product"}>{busy === "product" ? "Saving…" : "Save product"}</button>
       </form></section>
       <section className="manager-card"><h2>Logo and screenshots</h2><div className="owner-media-logo"><ProductLogo productName={product.displayName} productUrl={product.websiteUrl} imageUrl={logo?.url ?? product.logoUrl} className="product-detail-logo" /><form className="compact-upload" onSubmit={(event) => uploadMedia(event, "logo")}><label>Replace logo<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required /></label><small>PNG, JPEG or WebP. Maximum 2 MB.</small><button className="button button-secondary" disabled={busy === "media-logo"}>{busy === "media-logo" ? "Uploading…" : "Replace logo"}</button></form></div>
         <div className="screenshot-manager-heading"><div><strong>Screenshots</strong><small>{screenshots.length} of 4</small></div>{screenshots.length < 4 ? <form className="compact-upload screenshot-upload" onSubmit={(event) => uploadMedia(event, "screenshot")}><label>Add screenshots<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required /></label><button className="button button-secondary" disabled={busy === "media-screenshot"}>{busy === "media-screenshot" ? "Uploading…" : "Add screenshot"}</button></form> : null}</div>
         {screenshots.length ? <div className="owner-media-grid">{screenshots.map((item) => <figure key={item.id}><Image src={item.url} alt={item.altText || `${product.displayName} screenshot`} width={480} height={300} unoptimized /><button type="button" disabled={busy === `delete-${item.id}`} onClick={() => deleteMedia(item)}>Remove</button></figure>)}</div> : <div className="quiet-empty compact-empty">No screenshots added yet.</div>}
       </section>
+    </div> : null}
+
+    {tab === "settings" ? <div className="owner-tab-panel">
+      <section className="manager-card"><h2>Founder emails</h2><form className="submission-form compact-form" onSubmit={saveSettings}>
+        <label className="consent-row optional-marketing"><input name="marketingOptIn" type="checkbox" defaultChecked={product.marketingOptedIn} disabled={product.marketingSuppressed} /> <span>Send me occasional FounderTrail product and founder news.{product.marketingSuppressed ? " This address is permanently unsubscribed or suppressed." : ""}</span></label>
+        <p className="form-hint">Approval, ownership and payment emails are always sent; this only covers optional news.</p>
+        <button className="button button-primary" disabled={busy === "settings" || product.marketingSuppressed}>{busy === "settings" ? "Saving…" : "Save settings"}</button>
+      </form></section>
+      <section className="manager-card"><h2>Product website</h2><div className="submission-form compact-form"><label>Website<input value={product.websiteUrl} readOnly aria-readonly="true" /></label><p className="form-hint">URL changes require administrator review because changing the domain invalidates ownership verification. Contact FounderTrail to request a change.</p></div></section>
+      <section className="manager-card"><h2>Account</h2><p>Your weekly followed-products digest and account deletion live in your account settings.</p><a className="button button-secondary" href="/settings">Open account settings</a></section>
     </div> : null}
 
     {tab === "updates" ? <div role="tabpanel" className="owner-tab-panel"><section className="manager-card"><h2>Write an update</h2><p>Preview a saved draft here, then publish it when it is ready. Updates do not reset your launch date.</p><form className="submission-form compact-form" onSubmit={publishUpdate}><label>Type<select name="type"><option value="feature">Feature</option><option value="improvement">Improvement</option><option value="milestone">Milestone</option></select></label><label>Title<input name="title" required maxLength={140} placeholder="e.g. Added team exports" /></label><label>Short body<textarea name="body" required maxLength={1500} rows={5} placeholder="Explain what changed and why it matters." /></label><label>Optional link<input name="linkUrl" type="url" maxLength={2048} placeholder="https://yourproduct.com/changelog" /></label><div className="button-row"><button name="status" value="draft" className="button button-secondary" disabled={busy === "update"}>Save draft</button><button name="status" value="published" className="button button-primary" disabled={busy === "update"}>{busy === "update" ? "Saving…" : "Publish update"}</button></div></form></section><section className="manager-card"><h2>Updates</h2>{updates.length ? <div className="owner-update-list">{updates.map((update) => <article key={update.id} className={`update-${update.status}`}><div><strong>{update.title}</strong><span>{update.status} · {update.type} · {new Date(update.publishedAt??update.updatedAt).toLocaleDateString()}</span></div><p>{update.body}</p>{update.linkUrl ? <a href={update.linkUrl} target="_blank" rel="nofollow noopener noreferrer">Open link ↗</a> : null}<div className="comment-actions">{update.status!=="archived"?<button type="button" onClick={()=>void updateAction(update,"save")}>Edit</button>:null}{update.status==="draft"?<button type="button" onClick={()=>void updateAction(update,"publish")}>Publish</button>:null}{update.status!=="archived"?<button type="button" onClick={()=>void updateAction(update,"archive")}>Archive</button>:null}</div></article>)}</div> : <div className="quiet-empty compact-empty">No updates yet.</div>}</section></div> : null}

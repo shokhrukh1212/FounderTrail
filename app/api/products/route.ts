@@ -89,14 +89,14 @@ export async function POST(request: Request) {
             submission_consent_at, submission_consent_version, email_preference_id, created_by_user_id,
             use_case, intended_audience,
             pricing_model, starting_price_minor, pricing_currency, pricing_basis, pricing_unit,
-            pricing_per_seat, is_open_source,
+            pricing_per_seat,
             short_name, short_name_source, short_name_updated_at, short_name_updated_by,
             pricing_source, pricing_confirmed_at, pricing_confirmed_by, category_provenance)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14::uuid,$15,$16,$17,
-            $18,$19,$20,$21,$22,$23,$24,
-            $25, CASE WHEN $25::text IS NULL THEN NULL ELSE 'founder' END,
-            CASE WHEN $25::text IS NULL THEN NULL ELSE now() END,
-            CASE WHEN $25::text IS NULL THEN NULL ELSE $15 END,
+            $18,$19,$20,$21,$22,$23,
+            $24, CASE WHEN $24::text IS NULL THEN NULL ELSE 'founder' END,
+            CASE WHEN $24::text IS NULL THEN NULL ELSE now() END,
+            CASE WHEN $24::text IS NULL THEN NULL ELSE $15 END,
             CASE WHEN $18::text IS NULL THEN NULL ELSE 'founder' END,
             CASE WHEN $18::text IS NULL THEN NULL ELSE now() END,
             CASE WHEN $18::text IS NULL THEN NULL ELSE $15 END,
@@ -109,7 +109,6 @@ export async function POST(request: Request) {
          validated.value.useCase, validated.value.intendedAudience,
          validated.value.pricing.model, validated.value.pricing.startingPriceMinor, validated.value.pricing.currency,
          validated.value.pricing.basis, validated.value.pricing.unit, validated.value.pricing.perSeat,
-         validated.value.isOpenSource,
          validated.value.name.length <= 60 ? validated.value.name : null],
       );
       const productId = product.rows[0].id;

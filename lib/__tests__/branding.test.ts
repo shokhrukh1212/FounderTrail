@@ -22,8 +22,8 @@ test("FounderTrail uses the approved discovery positioning",()=>{
   assert.doesNotMatch(header,/Bid live|Leaderboards/);
 });
 
-test("root and product social metadata use generated 1200 by 630 previews",()=>{
-  assert.match(layout,/url: "\/opengraph-image"/);
+test("root and product social metadata use 1200 by 630 previews",()=>{
+  assert.match(layout,/url: "\/brand\/og\.png"/);
   assert.match(layout,/type: "image\/png"/);
   assert.match(layout,/width: 1200/);
   assert.match(layout,/height: 630/);

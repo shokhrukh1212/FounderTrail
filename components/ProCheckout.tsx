@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { PlanFeatureList } from "./PlanFeatureList";
+import { PRO_INTRO_SLOTS, PRO_PLAN_FEATURES, introPriceLine } from "@/lib/plan-features";
 
-type Props = { slug: string; name: string; initialPriceMinor: 500 | 900; orderId: string | null; configured: boolean };
+type Props = { slug: string; name: string; initialPriceMinor: 500 | 900; introAvailable: number; orderId: string | null; configured: boolean };
 
-export function ProCheckout({ slug, name, initialPriceMinor, orderId, configured }: Props) {
+export function ProCheckout({ slug, name, initialPriceMinor, introAvailable, orderId, configured }: Props) {
   const [price, setPrice] = useState(initialPriceMinor);
   const [state, setState] = useState<"ready" | "opening" | "confirming" | "active" | "failed" | "refunded" | "suspended">(orderId ? "confirming" : "ready");
   const [message, setMessage] = useState("");
@@ -39,13 +41,15 @@ export function ProCheckout({ slug, name, initialPriceMinor, orderId, configured
     window.location.assign(result.checkoutUrl);
   }
 
-  if (state === "active") return <section className="pro-success" aria-live="polite"><p className="eyebrow">Payment confirmed</p><h2>{name} is now Pro</h2><p>Your launch tools are ready. Pro does not change ranking, placement, moderation, or review treatment.</p><div className="button-row"><Link className="button button-primary" href={`/manage/${slug}/launch-kit`}>Create launch image</Link><Link className="button button-secondary" href={`/manage/${slug}/launch-kit#social-posts`}>Write launch post</Link><Link className="button button-secondary" href={`/manage/${slug}/results`}>View results</Link></div></section>;
+  if (state === "active") return <section className="pro-success" aria-live="polite"><p className="eyebrow">Payment confirmed</p><h2>{name} is now Pro</h2><p>Your launch tools are ready. Pro does not change ranking, placement, moderation, or review treatment.</p><div className="button-row"><Link className="button button-primary" href={`/manage/${slug}?tab=launch-kit`}>Create launch image</Link><Link className="button button-secondary" href={`/manage/${slug}?tab=launch-kit#social-posts`}>Write launch post</Link><Link className="button button-secondary" href={`/manage/${slug}?tab=results`}>View results</Link></div></section>;
   if (state === "confirming") return <section className="pro-confirming" aria-live="polite"><span className="loading-dot" aria-hidden="true" /><h2>Confirming your payment</h2><p>This page activates Pro only after FounderTrail receives a verified payment confirmation. You can safely reload it.</p></section>;
   if (state === "refunded" || state === "suspended") return <section className="manager-notice"><h2>{state === "refunded" ? "Pro was refunded" : "Pro access is suspended"}</h2><p>{state === "refunded" ? "The free startup page and its history are unchanged." : "A payment dispute is being reviewed. Your free startup page remains live."}</p></section>;
 
   return <section className="pro-checkout-card">
-    <p className="eyebrow">One-time upgrade for this startup</p><div className="pro-price"><strong>${price / 100}</strong><span>one-time / per startup</span></div>
-    <ul><li>Editable launch graphics</li><li>Editable social posts</li><li>One seven-day results summary</li><li>Green Pro badge</li></ul>
+    <p className="eyebrow">Pro Launch · one-time upgrade for this startup</p><div className="pro-price"><strong>${price / 100}</strong><span>one-time / per startup</span></div>
+    <p className="pro-intro-line">{introPriceLine(introAvailable)}</p>
+    {introAvailable > 0 ? <p className="pro-availability"><strong>{introAvailable} of {PRO_INTRO_SLOTS} introductory upgrades available</strong></p> : null}
+    <PlanFeatureList features={PRO_PLAN_FEATURES} tone="pro" />
     <p className="form-hint">Applicable taxes, if any, are shown by Dodo Payments before you confirm. Pro does not buy placement or affect organic ranking.</p>
     {message ? <p className="form-error" role="alert">{message}</p> : null}
     {!configured ? <p className="manager-notice">Checkout is not available yet. Your listing and the preview remain available.</p> : <button className="button button-primary" type="button" disabled={state === "opening"} onClick={() => void checkout()}>{state === "opening" ? "Opening secure checkout…" : `Unlock Pro for $${price / 100}`}</button>}

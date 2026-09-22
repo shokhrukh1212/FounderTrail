@@ -18,6 +18,7 @@ const proLaunch = read("../pro-launch.ts");
 const checkout = read("../../app/api/owner/products/[slug]/pro/checkout/route.ts");
 const webhook = read("../../app/api/webhooks/dodo/route.ts");
 const studio = read("../../components/LaunchStudio.tsx");
+const graphic = read("../launch-graphic.ts");
 const report = read("../pro-results.ts");
 const badge = read("../../components/ProBadge.tsx");
 
@@ -104,12 +105,15 @@ test("launch drafts are deterministic, bounded, and reject arbitrary image sourc
 });
 
 test("Launch Studio exports the pixels it previews at both required sizes", () => {
-  assert.match(studio, /width: 1080, height: 1080/);
-  assert.match(studio, /width: 1200, height: 630/);
-  assert.match(studio, /await document\.fonts\?\.ready/);
+  assert.match(graphic, /width: 1080, height: 1080/);
+  assert.match(graphic, /width: 1200, height: 630/);
+  // Drawn at 2x for sharp posts, in the font the site actually renders with.
+  assert.match(graphic, /LAUNCH_EXPORT_SCALE = 2/);
+  assert.match(graphic, /getComputedStyle\(document\.body\)\.fontFamily/);
+  assert.match(graphic, /document\.fonts\.load/);
   assert.match(studio, /canvas\.current!\.toBlob\(resolve, "image\/png"\)/);
-  assert.match(studio, /fitText/);
-  assert.match(studio, /The headline is too long/);
+  assert.match(studio, /paintLaunchGraphic/);
+  assert.match(graphic, /The headline is too long/);
   assert.match(studio, /Private launch-kit image uploaded/);
   assert.match(studio, /never auto-posted/i);
 });

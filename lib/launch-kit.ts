@@ -49,7 +49,15 @@ function validDestination(value: unknown, fallback: string): string {
 
 function source(value: unknown, fallback = ""): string {
   const text = typeof value === "string" ? value : fallback;
-  return /^(?:media|asset):[0-9a-f-]{36}$/i.test(text) || text === "" ? text : fallback;
+  return /^(?:media|asset):[0-9a-f-]{36}$/i.test(text) || text === LISTING_LOGO_SOURCE || text === "" ? text : fallback;
+}
+
+/** The logo read from the startup's own website, for listings without an uploaded logo. */
+export const LISTING_LOGO_SOURCE = "listing:logo";
+
+/** The URL as printed on the graphic: no protocol, no trailing slash. */
+export function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
 export function generatedSocial(facts: LaunchFacts): Pick<LaunchSocialDraft, "short" | "linkedin" | "altText"> {
@@ -72,8 +80,9 @@ export function defaultLaunchKitDraft(facts: LaunchFacts, logoSource = "", scree
       template: "spotlight", format: "landscape", theme: "light", accent: LAUNCH_ACCENTS[0],
       name: facts.name.slice(0, 60), headline: facts.tagline.slice(0, 100),
       support: (facts.useCase || facts.audience || "Discover what we're building.").slice(0, 180),
-      cta: "See the launch", url: facts.founderTrailUrl.slice(0, 120), logoSource, screenshotSource,
-      fit: "cover", focalX: 50, focalY: 50,
+      cta: "See the launch", url: displayUrl(facts.founderTrailUrl).slice(0, 120), logoSource, screenshotSource,
+      // Website screenshots lead with their hero, so new drafts anchor to the top.
+      fit: "cover", focalX: 50, focalY: 0,
     },
     social: { ...social, destination: facts.founderTrailUrl },
   };

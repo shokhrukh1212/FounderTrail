@@ -43,6 +43,12 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
     const changed=await withTransaction(async client=>{const before=await client.query<{status:string}>(`SELECT p.status FROM products p WHERE p.id=$1::uuid AND p.status IN ('draft','rejected') AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) FOR UPDATE`,[owner.productId]);const status=before.rows[0]?.status;if(!status)return false;await client.query(`UPDATE products SET status='pending',updated_at=now() WHERE id=$1::uuid`,[owner.productId]);await client.query(`INSERT INTO product_moderation_events(product_id,from_status,to_status,internal_reason) VALUES($1::uuid,$2,'pending',$3)`,[owner.productId,status,status==="rejected"?"Owner submitted requested changes for another review.":"Owner submitted verified draft for review."]);return true});
     return changed ? NextResponse.json({ message: "Submitted for review.", status: "pending" }) : NextResponse.json({ error: "Verify product ownership before submitting the draft or requested changes for review." }, { status: 409 });
   }
+  // The Settings tab saves only the optional founder-news preference. Product saves no
+  // longer carry that checkbox, so saving a listing can never change email consent.
+  if (body?.action === "update_settings") {
+    const marketingPreference = await updateOwnerMarketingPreference(owner.productId, body.marketingOptIn === true || body.marketingOptIn === "on");
+    return NextResponse.json({ message: "Settings saved.", marketingPreference });
+  }
   // "Product name" edits the public short name. The originally submitted name and the
   // slug are never rewritten, so history and links stay intact.
   const submittedShortName = typeof body?.shortName === "string" ? body.shortName.trim() : "";
@@ -50,14 +56,12 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
   const shortName = clean(submittedShortName, 60), tagline = clean(body?.tagline, 160), founder = clean(body?.founderName, 120);
   const socialRaw = typeof body?.founderSocialHandle === "string" ? body.founderSocialHandle.trim().replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "") : "";
   const social = socialRaw ? `@${socialRaw}` : null;
-  const marketingOptIn = body?.marketingOptIn === true || body?.marketingOptIn === "on";
   if (!shortName || !tagline) return NextResponse.json({ error: "Product name and one-line description are required." }, { status: 400 });
   if (socialRaw && !/^[A-Za-z0-9_]{1,15}$/.test(socialRaw)) return NextResponse.json({ error: "Enter an X handle such as @alexsmith." }, { status: 400 });
   const categories = normalizeCategorySelection(body?.categories);
   if (!categories.ok) return NextResponse.json({ error: categories.error, field: "categories" }, { status: 400 });
   const pricing = parsePricingInput(body ?? {});
   if (!pricing.ok) return NextResponse.json({ error: pricing.error, field: pricing.field }, { status: 400 });
-  const openSource = body?.isOpenSource === true || body?.isOpenSource === "on";
   try {
     await withTransaction(async (client) => {
       await client.query(
@@ -65,7 +69,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
             SET short_name=$2,short_name_source='founder',short_name_updated_at=now(),short_name_updated_by=$3,
                 tagline=$4,founder_name=$5,founder_social_handle=$6,
                 pricing_model=$7,starting_price_minor=$8,pricing_currency=$9,pricing_basis=$10,pricing_unit=$11,
-                pricing_per_seat=$12,is_open_source=$13,
+                pricing_per_seat=$12,
                 pricing_source=CASE WHEN $7::text IS NULL THEN NULL ELSE 'founder' END,
                 pricing_confirmed_at=CASE WHEN $7::text IS NULL THEN NULL ELSE now() END,
                 pricing_confirmed_by=CASE WHEN $7::text IS NULL THEN NULL ELSE $3 END,
@@ -73,7 +77,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
           WHERE id=$1::uuid`,
         [owner.productId, shortName, owner.userId, tagline, founder, social,
          pricing.value.model, pricing.value.startingPriceMinor, pricing.value.currency,
-         pricing.value.basis, pricing.value.unit, pricing.value.perSeat, openSource],
+         pricing.value.basis, pricing.value.unit, pricing.value.perSeat],
       );
       await applyProductCategories(client, owner.productId, categories.slugs, "founder");
       await client.query(
@@ -86,6 +90,5 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
     if (error instanceof InvalidCategorySelection) return NextResponse.json({ error: error.message, field: "categories" }, { status: 400 });
     throw error;
   }
-  const marketingPreference = await updateOwnerMarketingPreference(owner.productId, marketingOptIn);
-  return NextResponse.json({ message: "Saved.", marketingPreference });
+  return NextResponse.json({ message: "Saved." });
 }

@@ -22,7 +22,6 @@ export type ProductSubmission = {
   useCase: string | null;
   intendedAudience: string | null;
   pricing: ProductPricing;
-  isOpenSource: boolean;
 };
 
 export type ValidationResult = { ok: true; value: ProductSubmission } | { ok: false; error: string; field?: string };
@@ -107,6 +106,6 @@ export function validateProductSubmission(form: FormData, options: { draft?: boo
     founderSocialHandle: social ? `@${social}` : null, categorySlugs: categories.slugs, launchDate, launchAt,
     consentVersion: "2026-08-27", metadataToken: text(form, "metadataToken", 8192) || null,
     useCase:text(form,"useCase",500)||null,intendedAudience:text(form,"intendedAudience",500)||null,
-    pricing: pricing.value, isOpenSource: form.get("isOpenSource") === "on",
+    pricing: pricing.value,
   } };
 }

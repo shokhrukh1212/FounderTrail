@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="logo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6366F1" stop-opacity=".28"/><stop offset="1" stop-color="#6366F1" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="#F6F7FB"/>
+  <!-- sidebar -->
+  <rect width="280" height="1000" fill="#FFFFFF"/>
+  <rect x="279" width="1" height="1000" fill="#E6E8EF"/>
+  <rect x="32" y="34" width="40" height="40" rx="11" fill="url(#logo)"/>
+  <circle cx="52" cy="54" r="9" fill="#fff"/>
+  <text x="86" y="62" font-size="22" font-weight="700" fill="#111827">Orbitly</text>
+  <rect x="24" y="118" width="232" height="46" rx="11" fill="#EEF0FF"/>
+  <circle cx="50" cy="141" r="7" fill="#6366F1"/>
+  <text x="68" y="147" font-size="17" font-weight="700" fill="#4338CA">Inbox</text>
+  <text x="228" y="147" font-size="14" font-weight="700" fill="#6366F1" text-anchor="end">128</text>
+  <g font-size="17" fill="#4B5563">
+    <circle cx="50" cy="197" r="7" fill="#CBD2E0"/><text x="68" y="203">Roadmap</text>
+    <circle cx="50" cy="249" r="7" fill="#CBD2E0"/><text x="68" y="255">Insights</text>
+    <circle cx="50" cy="301" r="7" fill="#CBD2E0"/><text x="68" y="307">Customers</text>
+    <circle cx="50" cy="353" r="7" fill="#CBD2E0"/><text x="68" y="359">Changelog</text>
+  </g>
+  <text x="32" y="430" font-size="13" font-weight="700" fill="#9CA3AF" letter-spacing="1.5">SEGMENTS</text>
+  <g font-size="16" fill="#4B5563">
+    <rect x="32" y="452" width="12" height="12" rx="3" fill="#F59E0B"/><text x="56" y="463">Enterprise</text>
+    <rect x="32" y="490" width="12" height="12" rx="3" fill="#10B981"/><text x="56" y="501">Trial users</text>
+    <rect x="32" y="528" width="12" height="12" rx="3" fill="#EC4899"/><text x="56" y="539">Churn risk</text>
+  </g>
+  <!-- top bar -->
+  <rect x="280" width="1320" height="88" fill="#FFFFFF"/>
+  <rect x="280" y="87" width="1320" height="1" fill="#E6E8EF"/>
+  <rect x="320" y="24" width="520" height="42" rx="12" fill="#F3F4F8"/>
+  <text x="350" y="51" font-size="16" fill="#9CA3AF">Search feedback, customers, themes…</text>
+  <rect x="1300" y="24" width="150" height="42" rx="12" fill="#6366F1"/>
+  <text x="1375" y="51" font-size="16" font-weight="700" fill="#fff" text-anchor="middle">New request</text>
+  <circle cx="1504" cy="45" r="21" fill="#FDE68A"/><circle cx="1540" cy="45" r="21" fill="#C7D2FE" stroke="#fff" stroke-width="3"/>
+  <!-- heading -->
+  <text x="320" y="150" font-size="34" font-weight="700" fill="#111827">Feedback inbox</text>
+  <text x="320" y="182" font-size="17" fill="#6B7280">Every request from chat, email and calls — grouped into themes automatically.</text>
+  <!-- KPI cards -->
+  <g>
+    <rect x="320" y="214" width="396" height="130" rx="18" fill="#fff" stroke="#E6E8EF"/>
+    <text x="348" y="254" font-size="15" fill="#6B7280">New requests this week</text>
+    <text x="348" y="310" font-size="44" font-weight="700" fill="#111827">128</text>
+    <rect x="452" y="282" width="78" height="30" rx="15" fill="#DCFCE7"/><text x="491" y="303" font-size="15" font-weight="700" fill="#15803D" text-anchor="middle">+12%</text>
+    <rect x="736" y="214" width="396" height="130" rx="18" fill="#fff" stroke="#E6E8EF"/>
+    <text x="764" y="254" font-size="15" fill="#6B7280">Active themes</text>
+    <text x="764" y="310" font-size="44" font-weight="700" fill="#111827">24</text>
+    <rect x="1152" y="214" width="408" height="130" rx="18" fill="#fff" stroke="#E6E8EF"/>
+    <text x="1180" y="254" font-size="15" fill="#6B7280">Shipped this month</text>
+    <text x="1180" y="310" font-size="44" font-weight="700" fill="#111827">9</text>
+    <rect x="1240" y="282" width="140" height="30" rx="15" fill="#EEF0FF"/><text x="1310" y="303" font-size="15" font-weight="700" fill="#4338CA" text-anchor="middle">3 announced</text>
+  </g>
+  <!-- chart -->
+  <rect x="320" y="364" width="796" height="300" rx="18" fill="#fff" stroke="#E6E8EF"/>
+  <text x="348" y="404" font-size="18" font-weight="700" fill="#111827">Requests by theme</text>
+  <text x="1088" y="404" font-size="15" fill="#6B7280" text-anchor="end">Last 30 days</text>
+  <g stroke="#EEF0F5"><line x1="348" y1="470" x2="1088" y2="470"/><line x1="348" y1="530" x2="1088" y2="530"/><line x1="348" y1="590" x2="1088" y2="590"/></g>
+  <path d="M348 610 C420 590 460 560 520 566 S620 520 680 500 S780 520 840 470 S950 440 1000 430 S1060 420 1088 410 L1088 640 L348 640 Z" fill="url(#area)"/>
+  <path d="M348 610 C420 590 460 560 520 566 S620 520 680 500 S780 520 840 470 S950 440 1000 430 S1060 420 1088 410" fill="none" stroke="#6366F1" stroke-width="4" stroke-linecap="round"/>
+  <path d="M348 628 C430 620 480 600 540 604 S650 590 710 575 S820 580 880 560 S980 548 1088 540" fill="none" stroke="#F59E0B" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+  <circle cx="1000" cy="430" r="8" fill="#fff" stroke="#6366F1" stroke-width="4"/>
+  <!-- themes -->
+  <rect x="1136" y="364" width="424" height="300" rx="18" fill="#fff" stroke="#E6E8EF"/>
+  <text x="1164" y="404" font-size="18" font-weight="700" fill="#111827">Top themes</text>
+  <g font-size="15" fill="#374151">
+    <text x="1164" y="448">Bulk export</text><rect x="1164" y="460" width="360" height="10" rx="5" fill="#EEF0FF"/><rect x="1164" y="460" width="300" height="10" rx="5" fill="#6366F1"/>
+    <text x="1164" y="508">SSO for teams</text><rect x="1164" y="520" width="360" height="10" rx="5" fill="#EEF0FF"/><rect x="1164" y="520" width="232" height="10" rx="5" fill="#8B5CF6"/>
+    <text x="1164" y="568">Slack alerts</text><rect x="1164" y="580" width="360" height="10" rx="5" fill="#EEF0FF"/><rect x="1164" y="580" width="176" height="10" rx="5" fill="#A78BFA"/>
+    <text x="1164" y="628">Dark mode</text><rect x="1164" y="640" width="360" height="10" rx="5" fill="#EEF0FF"/><rect x="1164" y="640" width="118" height="10" rx="5" fill="#C4B5FD"/>
+  </g>
+  <!-- list -->
+  <rect x="320" y="684" width="1240" height="290" rx="18" fill="#fff" stroke="#E6E8EF"/>
+  <g font-size="16">
+    <text x="348" y="730" font-weight="700" fill="#111827">“Can we export the full board to CSV?”</text>
+    <text x="348" y="756" fill="#6B7280">Maya · Enterprise · via Intercom</text>
+    <rect x="1236" y="712" width="120" height="30" rx="15" fill="#EEF0FF"/><text x="1296" y="733" font-size="14" font-weight="700" fill="#4338CA" text-anchor="middle">Bulk export</text>
+    <rect x="1380" y="708" width="150" height="40" rx="12" fill="#F3F4F8"/><text x="1455" y="734" font-size="15" font-weight="700" fill="#111827" text-anchor="middle">▲ 42 votes</text>
+    <rect x="348" y="780" width="1184" height="1" fill="#EEF0F5"/>
+    <text x="348" y="826" font-weight="700" fill="#111827">“We need SAML before rolling this out to 400 seats.”</text>
+    <text x="348" y="852" fill="#6B7280">Daniel · Enterprise · via sales call</text>
+    <rect x="1236" y="808" width="120" height="30" rx="15" fill="#F5F3FF"/><text x="1296" y="829" font-size="14" font-weight="700" fill="#6D28D9" text-anchor="middle">SSO</text>
+    <rect x="1380" y="804" width="150" height="40" rx="12" fill="#F3F4F8"/><text x="1455" y="830" font-size="15" font-weight="700" fill="#111827" text-anchor="middle">▲ 31 votes</text>
+    <rect x="348" y="876" width="1184" height="1" fill="#EEF0F5"/>
+    <text x="348" y="922" font-weight="700" fill="#111827">“Ping our #product channel when a theme spikes.”</text>
+    <text x="348" y="948" fill="#6B7280">Priya · Trial · via email</text>
+    <rect x="1236" y="904" width="120" height="30" rx="15" fill="#FDF4FF"/><text x="1296" y="925" font-size="14" font-weight="700" fill="#A21CAF" text-anchor="middle">Slack</text>
+    <rect x="1380" y="900" width="150" height="40" rx="12" fill="#F3F4F8"/><text x="1455" y="926" font-size="15" font-weight="700" fill="#111827" text-anchor="middle">▲ 19 votes</text>
+  </g>
+</svg>

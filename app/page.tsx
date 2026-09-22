@@ -33,7 +33,6 @@ function ProductList({ products, page, sort, weekly = false }: {
   return <div className="organic-list">{products.map((product, index) => <StartupRow
       key={product.id}
       product={product}
-      weekly={weekly}
       position={weekly || sort === "most_upvoted" ? (page - 1) * 24 + index + 1 : undefined}
     />)}</div>;
 }
