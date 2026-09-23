@@ -159,7 +159,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .submission-pro-price span { color: var(--muted); font-size: 12px; }
 .submission-pro-benefits { list-style: none; padding: 0; margin: 24px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
 .submission-pro-benefits li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
-.submission-pro-benefits li > span { color: #278265; font-size: 20px; line-height: 1; width: 18px; flex-shrink: 0; }
+.submission-pro-benefits li > span { color: #278265; line-height: 1; width: 20px; height: 20px; flex-shrink: 0; }
+.submission-pro-benefits li > span svg { display: block; width: 20px; height: 20px; }
 .submission-pro-benefits p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 .submission-pro-offer details { border-top: 1px solid #eadbd9; padding-top: 14px; margin-bottom: 20px; }
 .submission-pro-offer summary { cursor: pointer; color: #c63f35; font-weight: 650; font-size: 14px; overflow-wrap: anywhere; }
