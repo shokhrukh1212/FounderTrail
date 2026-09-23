@@ -20,6 +20,7 @@ import { publicPricingLabel } from "@/lib/product-pricing";
 import { categoryFilterHref } from "@/lib/categories";
 import { canonicalProductUrl, productShareImageUrl } from "@/lib/product-share";
 import { getProState } from "@/lib/pro-launch";
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -68,11 +69,37 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   return <main>
     <section className="product-masthead"><div className="app-shell product-masthead-inner">
       <ProductLogo productName={product.displayName} productUrl={product.websiteUrl} imageUrl={product.logoUrl} className="product-detail-logo" eager />
-      <div className="product-identity"><div className="product-title-line"><h1>{product.displayName}</h1>{pro.status === "active" ? <ProBadge /> : null}{community.ownershipState === "claimed" ? <span className="verified-product-badge" title="Control of this product has been verified.">✓ Ownership confirmed</span> : null}{product.isDemo ? <span className="demo-label">Demo data</span> : null}</div><p>{product.tagline}</p><div className="product-meta">{product.founderName ? <span>By {product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}{pricing ? <span>{pricing}</span> : null}{product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}</div></div>
-      <div className="product-primary-actions"><a className="button button-primary" href={`/go/${product.slug}?source=product_page`} target="_blank" rel="ugc noopener noreferrer">Visit website ↗</a><VoteButton slug={product.slug} initialCount={community.allTimeUpvotes} initialActive={community.upvoted} /><FollowButton slug={product.slug} initialActive={community.followed} initialCount={community.followerCount} />{community.isOwner ? <Link className="button button-secondary" href={`/manage/${product.slug}`}>Manage</Link> : null}<XShareLink siteUrl={config.siteUrl} slug={product.slug} productName={product.displayName} /></div>
+      <div className="product-identity"><div className={`product-title-line ${styles.titleLine}`}><h1>{product.displayName}</h1>{pro.status === "active" ? <ProBadge /> : null}{community.ownershipState === "claimed" ? <span className="verified-product-badge" title="Control of this product has been verified.">✓ Ownership confirmed</span> : null}{product.isDemo ? <span className="demo-label">Demo data</span> : null}</div><p>{product.tagline}</p><div className="product-meta">{product.founderName ? <span>By {product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}{pricing ? <span>{pricing}</span> : null}{product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}</div></div>
+      <div className={styles.headerActions}>
+        <div className={styles.primaryActions}>
+          <VoteButton slug={product.slug} productName={product.displayName} initialCount={community.allTimeUpvotes} initialActive={community.upvoted} showLabel />
+          <a className="button button-secondary" href={`/go/${product.slug}?source=product_page`} target="_blank" rel="ugc noopener noreferrer">Visit website ↗</a>
+        </div>
+        <div className={styles.socialActions}>
+          <FollowButton slug={product.slug} productName={product.displayName} initialActive={community.followed} initialCount={community.followerCount} />
+          <span className={styles.separator} aria-hidden="true" />
+          <XShareLink className={styles.shareLink} siteUrl={config.siteUrl} slug={product.slug} productName={product.displayName} />
+        </div>
+      </div>
     </div></section>
 
-    <nav className="product-subnav" aria-label="Product sections"><div className="app-shell"><a href="#overview">Overview</a>{product.updates.length ? <a href="#updates">Updates</a> : null}<a href="#discussion">Discussion</a>{community.ownershipState !== "claimed" ? <a href="#claim">Claim</a> : null}</div></nav>
+    <div className={styles.toolbar}>
+      <div className={`app-shell ${styles.toolbarInner}`}>
+        <nav className={styles.sectionLinks} aria-label="Product sections">
+          <a href="#overview">Overview</a>
+          {product.updates.length ? <a href="#updates">Updates</a> : null}
+          <a href="#discussion">Discussion</a>
+          {community.ownershipState !== "claimed" ? <a href="#claim">Claim</a> : null}
+        </nav>
+        {community.isOwner ? <div className={styles.ownerActions} role="group" aria-label="Owner tools">
+          <Link className="button button-secondary" href={`/manage/${product.slug}`}>Manage</Link>
+          <Link className="button button-secondary" href={`/manage/${product.slug}/launch`}>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="13" rx="2" /><path d="M6.5 2.5v4m7-4v4M3 9h14" /></svg>
+            {community.launch ? "Launch details" : "Schedule launch"}
+          </Link>
+        </div> : null}
+      </div>
+    </div>
 
     <div className="app-shell product-detail-layout"><article>
       <section id="overview" className="detail-section"><p className="eyebrow">About</p><h2>Overview</h2><p className="long-copy">{community.useCase || product.description || product.tagline}</p><dl className="product-facts">{community.intendedAudience ? <div><dt>Made for</dt><dd>{community.intendedAudience}</dd></div> : null}{product.founderName || founderHandle ? <div><dt>Founder</dt><dd>{product.founderName ? <span>{product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}</dd></div> : null}{pricing ? <div><dt>Pricing</dt><dd>{pricing}</dd></div> : null}{product.categories.length ? <div><dt>{product.categories.length === 1 ? "Category" : "Categories"}</dt><dd className="detail-category-list">{product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}</dd></div> : null}<div><dt>All-time upvotes</dt><dd>{community.allTimeUpvotes.toLocaleString()}</dd></div><div><dt>Outbound clicks</dt><dd>{community.outboundClicks.toLocaleString()} clicks on this startup&apos;s website link</dd></div><div><dt>Listed since</dt><dd><LocalTime value={product.launchAt.toISOString()} dateOnly /></dd></div><div><dt>Official website</dt><dd><a href={`/go/${product.slug}?source=product_page`} target="_blank" rel="ugc noopener noreferrer">{new URL(product.websiteUrl).hostname}</a></dd></div></dl>{product.description && product.description !== community.useCase ? <div className="product-description"><h3>About the product</h3><p className="long-copy">{product.description}</p></div> : null}</section>

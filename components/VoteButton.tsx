@@ -3,12 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export function VoteButton({ slug, initialCount, initialActive = false, productName }: {
+export function VoteButton({ slug, initialCount, initialActive = false, productName, showLabel = false }: {
   slug: string;
   initialCount: number;
   initialActive?: boolean;
   /** Read out instead of the slug, so the control names the product a person sees. */
   productName?: string;
+  showLabel?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,7 +77,7 @@ export function VoteButton({ slug, initialCount, initialActive = false, productN
       title={`${count.toLocaleString()} all-time upvote${count === 1 ? "" : "s"}`}
     >
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 4 5.5 7H12v5H8v-5H4.5L10 4Z" /></svg>
-      <span>{count}</span>
+      <span>{showLabel ? `${active ? "Upvoted" : "Upvote"} · ` : ""}{count}</span>
     </button>
   );
 }
