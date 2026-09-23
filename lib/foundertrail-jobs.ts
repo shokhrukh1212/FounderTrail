@@ -129,7 +129,12 @@ async function retryProRefunds(limit = 5) {
       if (!order || order.status === "refunded") { await query(`UPDATE notification_jobs SET state='sent',sent_at=now(),last_error=NULL WHERE id=$1::uuid`, [job.id]); sent += 1; continue; }
       if (!order.dodo_payment_id) throw new Error("payment id unavailable");
       await query(`UPDATE pro_launch_orders SET status='refund_pending',updated_at=now() WHERE id=$1::uuid`, [orderId]);
-      const refund = await getDodoClient().refunds.create({
+      const priorRefunds = await query<{ dodo_refund_id: string; status: string }>(`SELECT dodo_refund_id,status FROM pro_refunds WHERE order_id=$1::uuid ORDER BY created_at DESC LIMIT 1`, [orderId]);
+      const priorRefund = priorRefunds[0];
+      const knownRefund = priorRefund ? await getDodoClient().refunds.retrieve(priorRefund.dodo_refund_id) : null;
+      // Only a provider-confirmed failure permits a fresh refund attempt. Unknown
+      // outcomes reuse the original idempotency key; pending refunds are polled.
+      const refund = knownRefund && knownRefund.status !== "failed" ? knownRefund : await getDodoClient().refunds.create({
         payment_id: order.dodo_payment_id,
         reason: (job.payload.reason || "FounderTrail Pro payment conflict").slice(0, 1000),
         metadata: {
@@ -137,8 +142,8 @@ async function retryProRefunds(limit = 5) {
           foundertrail_order_type: "pro_launch",
           foundertrail_environment: config.dodoPayments.environment,
         },
-      }, { idempotencyKey: `foundertrail-pro-refund-${orderId}` });
-      await query(`INSERT INTO pro_refunds(order_id,dodo_refund_id,amount_minor,currency,status) SELECT id,$2,coalesce(paid_total_minor,quoted_price_minor),'USD',$3 FROM pro_launch_orders WHERE id=$1::uuid ON CONFLICT(dodo_refund_id) DO UPDATE SET status=excluded.status,updated_at=now()`, [orderId, refund.refund_id, refund.status === "succeeded" ? "succeeded" : refund.status === "failed" ? "failed" : "pending"]);
+      }, { idempotencyKey: `foundertrail-pro-refund-${orderId}${knownRefund?.status === "failed" ? `-after-${knownRefund.refund_id}` : ""}` });
+      await query(`INSERT INTO pro_refunds(order_id,dodo_refund_id,amount_minor,currency,status) SELECT id,$2,coalesce(paid_total_minor,quoted_price_minor),'USD',$3 FROM pro_launch_orders WHERE id=$1::uuid ON CONFLICT(dodo_refund_id) DO UPDATE SET status=CASE WHEN pro_refunds.status='succeeded' THEN 'succeeded' ELSE excluded.status END,updated_at=now()`, [orderId, refund.refund_id, refund.status === "succeeded" ? "succeeded" : refund.status === "failed" ? "failed" : "pending"]);
       if (refund.status === "succeeded") {
         await withTransaction((client) => processProDodoEvent(client, {
           type: "refund.succeeded",

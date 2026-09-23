@@ -9,6 +9,7 @@ import { reserveProOrder, productIdForProProduct } from "@/lib/pro-launch";
 import { isAcceptedProPrice } from "@/lib/pro-launch-policy";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { eventHash, requestOriginIsSameSite } from "@/lib/request-security";
+import { recordFunnelEvent } from "@/lib/analytics";
 
 export async function POST(request: Request, context: RouteContext<"/api/owner/products/[slug]/pro/checkout">) {
   if (!requestOriginIsSameSite(request)) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
@@ -16,14 +17,13 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!isProLaunchConfigured()) return NextResponse.json({ error: "Pro checkout is not available yet." }, { status: 503 });
   const { slug } = await context.params;
-  const body = await request.json().catch(() => null) as { acceptedPriceMinor?: unknown } | null;
+  const body = await request.json().catch(() => null) as { acceptedPriceMinor?: unknown; entryPoint?: unknown } | null;
   if (!isAcceptedProPrice(body?.acceptedPriceMinor)) return NextResponse.json({ error: "Confirm the displayed price before continuing." }, { status: 400 });
   const acceptedPriceMinor = body.acceptedPriceMinor;
   const products = await query<{ id: string }>(`SELECT id::text FROM products WHERE slug=$1 LIMIT 1`, [slug]);
   if (!products[0]) return NextResponse.json({ error: "Startup not found." }, { status: 404 });
 
   let order;
-  let providerSessionCreated = false;
   try {
     order = await withTransaction(async (client) => {
       const allowed = await consumeRateLimit(client, { action: "pro-checkout", keyHash: eventHash("pro-checkout:user", user.id), limit: 8, windowSeconds: 3600 });
@@ -31,12 +31,13 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
       return reserveProOrder(client, {
         productId: products[0].id, purchaserId: user.id,
         acceptedPriceMinor, environment: config.dodoPayments.environment,
+        entryPoint: body?.entryPoint === "submission" ? "submission" : "dashboard",
       });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.startsWith("PRICE_CHANGED:")) return NextResponse.json({ error: "The introductory allocation changed. Review and accept the current price.", currentPriceMinor: Number(message.split(":")[1]) }, { status: 409 });
-    if (message === "NOT_ELIGIBLE") return NextResponse.json({ error: "Only a confirmed owner of an approved startup can upgrade it." }, { status: 403 });
+    if (message === "NOT_ELIGIBLE") return NextResponse.json({ error: "Only an authorized submitter awaiting review or a confirmed owner of an approved startup can upgrade it." }, { status: 403 });
     if (message === "ALREADY_PRO") return NextResponse.json({ error: "This startup is already Pro.", redirectTo: `/manage/${encodeURIComponent(slug)}/launch-kit` }, { status: 409 });
     if (message === "PRO_SUSPENDED") return NextResponse.json({ error: "This startup's Pro access is suspended. Contact support before another purchase." }, { status: 409 });
     if (message === "ORDER_RECONCILING") return NextResponse.json({ error: "A previous checkout is still being confirmed. Please try again shortly." }, { status: 409 });
@@ -47,6 +48,7 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
 
   if (order.checkoutUrl) return NextResponse.json({ orderId: order.id, checkoutUrl: order.checkoutUrl, priceMinor: order.priceMinor, currency: "USD", reservationExpiresAt: order.reservationExpiresAt.toISOString(), reused: true });
   try {
+    await query(`UPDATE pro_launch_orders SET checkout_requested_at=coalesce(checkout_requested_at,now()) WHERE id=$1::uuid`, [order.id]);
     const providerProductId = productIdForProProduct(order.priceMinor);
     const session = await getDodoClient().checkoutSessions.create({
       product_cart: [{ product_id: providerProductId, quantity: 1 }],
@@ -61,7 +63,6 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
       feature_flags: { allow_currency_selection: false, allow_discount_code: false, redirect_immediately: true },
       customization: { show_order_details: true, theme: "light" },
     }, { idempotencyKey: `foundertrail-pro-${order.id}` });
-    providerSessionCreated = true;
     if (!session.checkout_url) throw new Error("CHECKOUT_URL_MISSING");
     await query(
       `UPDATE pro_launch_orders SET status='checkout_created',dodo_checkout_session_id=$2,
@@ -69,14 +70,14 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
        WHERE id=$1::uuid AND status IN ('held','checkout_created')`,
       [order.id, session.session_id, session.payment_id ?? null, session.checkout_url],
     );
+    await recordFunnelEvent({ name: "checkout_started", idempotencyKey: `pro-checkout:${order.id}`, eventData: { product: "pro_launch", entryPoint: body?.entryPoint === "submission" ? "submission" : "dashboard" } }).catch(() => {});
     return NextResponse.json({ orderId: order.id, checkoutUrl: session.checkout_url, priceMinor: order.priceMinor, currency: "USD", reservationExpiresAt: order.reservationExpiresAt.toISOString(), reused: false }, { status: 201 });
   } catch (error) {
     // Once Dodo has created a session, retain the reservation. A retry uses the same
     // idempotency key and can persist that session instead of releasing a potentially
     // payable intro allocation.
-    if (!providerSessionCreated) {
-      await query(`UPDATE pro_launch_orders SET status='failed',intro_slot=NULL,checkout_url=NULL,updated_at=now() WHERE id=$1::uuid AND status='held'`, [order.id]).catch(() => {});
-    }
+    // A timeout can occur after the provider creates the session. Keep the order
+    // and its idempotency key so retries cannot create a second payable checkout.
     reportServerError("pro.checkout.provider", error, { orderId: order.id });
     return NextResponse.json({ error: "The payment provider could not open checkout. No upgrade was activated." }, { status: 502 });
   }

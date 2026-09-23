@@ -16,12 +16,13 @@ export default async function ProPage({ params, searchParams }: PageProps<"/mana
   const [{ slug }, search] = await Promise.all([params, searchParams]);
   const user = await currentUserFromHeaders(await headers()).catch(() => null);
   if (!user) redirect(`/sign-in?returnTo=${encodeURIComponent(`/manage/${slug}/pro`)}`);
-  const rows = await query<{ id: string; name: string; short_name: string | null; tagline: string; website_url: string; status: string; logo_url: string | null; entitlement_status: string | null }>(
+  const rows = await query<{ id: string; name: string; short_name: string | null; tagline: string; website_url: string; status: string; logo_url: string | null; entitlement_status: string | null; ever_rejected: boolean }>(
     `SELECT p.id::text,p.name,p.short_name,p.tagline,p.website_url,p.status,
       (SELECT public_url FROM product_media WHERE product_id=p.id AND kind='logo' LIMIT 1) AS logo_url,
-      e.status AS entitlement_status
+      e.status AS entitlement_status,
+      EXISTS(SELECT 1 FROM product_moderation_events me WHERE me.product_id=p.id AND me.to_status='rejected') AS ever_rejected
      FROM products p LEFT JOIN pro_entitlements e ON e.product_id=p.id
-     WHERE p.slug=$1 AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2)`,
+     WHERE p.slug=$1 AND (p.created_by_user_id=$2 OR EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2))`,
     [slug, user.id],
   );
   const product = rows[0];
@@ -29,11 +30,12 @@ export default async function ProPage({ params, searchParams }: PageProps<"/mana
   if (product.entitlement_status === "active" && !search.order) redirect(`/manage/${slug}?tab=launch-kit`);
   const name = displayProductName(product.name, product.short_name);
   const availability = await getProAvailability();
-  const orderId = typeof search.order === "string" && /^[0-9a-f-]{36}$/i.test(search.order) ? search.order : null;
+  const latest = await query<{ id: string }>(`SELECT id::text FROM pro_launch_orders WHERE product_id=$1::uuid AND status IN ('held','checkout_created','processing','refund_pending') ORDER BY created_at DESC LIMIT 1`, [product.id]);
+  const orderId = typeof search.order === "string" && /^[0-9a-f-]{36}$/i.test(search.order) ? search.order : latest[0]?.id ?? null;
   return <main className="app-shell inner-page pro-upgrade-page">
     <header className="page-heading"><p className="eyebrow">FounderTrail Pro</p><h1>Give {name} a polished launch kit.</h1><p>One purchase upgrades this startup. Its listing, history, organic position, and normal launch eligibility stay exactly where they are.</p></header>
     <div className="pro-upgrade-grid"><section className="settings-card pro-startup-card"><ProductLogo productName={name} productUrl={product.website_url} imageUrl={product.logo_url} className="product-detail-logo" /><div><h2>{name}</h2><p>{product.tagline}</p><span className={`status-pill status-${product.status}`}>{product.status}</span></div></section>
-      {product.status !== "published" ? <section className="manager-notice"><h2>Approval required before purchase</h2><p>Finish review first. FounderTrail will not charge a pending, rejected, or private startup.</p></section> : <ProCheckout slug={slug} name={name} initialPriceMinor={availability.currentPriceMinor} introAvailable={availability.available} orderId={orderId} configured={isProLaunchConfigured()} />}
+      {(!["published", "pending"].includes(product.status) || (product.status === "pending" && product.ever_rejected)) && !orderId ? <section className="manager-notice"><h2>Pro purchase unavailable</h2><p>Rejected submissions cannot start another checkout. Your free submission and its review flow remain available.</p></section> : <ProCheckout slug={slug} name={name} initialPriceMinor={availability.currentPriceMinor} introAvailable={availability.available} orderId={orderId} configured={isProLaunchConfigured() && (product.status === "published" || (product.status === "pending" && !product.ever_rejected))} submission={product.status !== "published"} />}
     </div>
   </main>;
 }

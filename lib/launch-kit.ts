@@ -32,7 +32,7 @@ export type LaunchFacts = {
   audience: string | null;
   websiteUrl: string;
   founderTrailUrl: string;
-  launchState: "upcoming" | "live" | "listed";
+  launchState: "upcoming" | "live" | "listed" | "preview";
 };
 
 function limit(value: unknown, max: number, fallback: string): string {

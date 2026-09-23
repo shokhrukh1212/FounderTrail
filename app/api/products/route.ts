@@ -5,7 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { newBidIndexOwnerToken, hashBidIndexOwnerToken } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
-import { withTransaction } from "@/lib/db";
+import { query, withTransaction } from "@/lib/db";
 import { ensureFounderPreference } from "@/lib/email-preferences";
 import { validateProductSubmission } from "@/lib/product-validation";
 import { consumeRateLimit } from "@/lib/rate-limit";
@@ -39,6 +39,10 @@ export async function POST(request: Request) {
   const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "pending";
   const validated = validateProductSubmission(form, { draft: requestedStatus === "draft" });
   if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
+  const submissionKey = String(form.get("submissionKey") ?? "");
+  if (submissionKey && !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(submissionKey)) return NextResponse.json({ error: "Invalid submission key." }, { status: 400 });
+  const replay = submissionKey ? await query<{ slug: string; status: string }>(`SELECT slug,status FROM products WHERE created_by_user_id=$1 AND submission_key=$2::uuid`, [user.id, submissionKey]) : [];
+  if (replay[0]) return NextResponse.json({ product: replay[0], managementUrl: `${config.siteUrl}/manage/${replay[0].slug}` });
   // The same rule runs at step 1 of the form via /api/products/metadata, so the two
   // must share one implementation or the messages drift apart.
   const duplicate = await findDomainDuplicate(validated.value.normalizedDomain, user.id);
@@ -74,6 +78,11 @@ export async function POST(request: Request) {
   const claimChallengeHash = createHash("sha256").update(claimChallenge).digest("hex");
   try {
     const created = await withTransaction(async (client) => {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`submission:${validated.value.normalizedDomain}`]);
+      if (submissionKey) {
+        const existing = await client.query<{ id: string; slug: string; status: string }>(`SELECT id::text,slug,status FROM products WHERE created_by_user_id=$1 AND submission_key=$2::uuid`, [user.id, submissionKey]);
+        if (existing.rows[0]) return { ...existing.rows[0], replayed: true };
+      }
       const allowed = await consumeRateLimit(client, { action: "submission", keyHash: networkHash(request, "submission"), limit: 5, windowSeconds: 3600 });
       if (!allowed) throw new Error("RATE_LIMITED");
       const slug = await uniqueSlug(client, validated.value.name);
@@ -112,6 +121,7 @@ export async function POST(request: Request) {
          validated.value.name.length <= 60 ? validated.value.name : null],
       );
       const productId = product.rows[0].id;
+      await client.query(`UPDATE products SET submission_key=$2::uuid,submission_pro_selected=$3 WHERE id=$1::uuid`, [productId, submissionKey || null, form.get("proSelected") === "on"]);
       if (validated.value.categorySlugs.length) await applyProductCategories(client, productId, validated.value.categorySlugs, "founder");
       await client.query(`INSERT INTO product_owner_credentials (product_id, token_hash) VALUES ($1::uuid,$2)`, [productId, ownerHash]);
       await client.query(`INSERT INTO product_claims(product_id,requester_id,evidence_method,challenge_token_hash,challenge_expires_at,evidence) VALUES($1::uuid,$2,'domain_file',$3,now()+interval '7 days',jsonb_build_object('source','new_submission'))`,[productId,user.id,claimChallengeHash]);
@@ -133,13 +143,14 @@ export async function POST(request: Request) {
           [productId, image.kind, image.storageKey, image.publicUrl, image.mimeType, image.byteSize, image.width, image.height, image.position, image.altText ?? null],
         );
       }
-      return { id: productId, slug };
+      return { id: productId, slug, status: requestedStatus, replayed: false };
     });
+    if (created.replayed) await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const localManagementUrl = `${config.siteUrl}/manage/${created.slug}`;
     const response = NextResponse.json({
-      product: { slug: created.slug, status: requestedStatus },
+      product: { slug: created.slug, status: created.status },
       managementUrl: localManagementUrl,
-      ownershipVerification: { method: "domain_file", path: "/.well-known/foundertrail-claim.txt", value: claimChallenge },
+      ownershipVerification: created.replayed ? undefined : { method: "domain_file", path: "/.well-known/foundertrail-claim.txt", value: claimChallenge },
       message: requestedStatus === "draft" ? "Draft saved." : "Submission received for moderation.",
     }, { status: 201, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } });
     return response;

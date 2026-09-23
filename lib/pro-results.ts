@@ -64,6 +64,17 @@ async function calculate(client: PoolClient, productId: string, start: Date, end
 
 export async function getProReport(productId: string): Promise<ProReportData | null> {
   return withTransaction(async (client) => {
+    // A pre-approval purchase has no reporting window until its real launch exists.
+    await client.query(`INSERT INTO pro_result_windows(product_id,entitlement_order_id,anchor_kind,launch_id,starts_at,ends_at,coverage_starts_at,status)
+      SELECT e.product_id,e.source_order_id,'future_launch',pl.id,lw.starts_at,lw.starts_at+interval '7 days',c.starts_at,
+        CASE WHEN lw.starts_at>now() THEN 'scheduled' ELSE 'in_progress' END
+      FROM pro_entitlements e JOIN pro_launch_orders o ON o.id=e.source_order_id
+      JOIN products p ON p.id=e.product_id
+      JOIN product_launches pl ON pl.product_id=p.id JOIN launch_weeks lw ON lw.id=pl.launch_week_id
+      CROSS JOIN pro_reporting_coverage c
+      WHERE e.product_id=$1::uuid AND e.status='active' AND o.purchased_before_approval
+        AND p.status='published' AND pl.state IN ('scheduled','active','completed')
+      ORDER BY lw.starts_at LIMIT 1 ON CONFLICT(product_id) DO NOTHING`, [productId]);
     let rows = await client.query<{
       id: string; product_id: string; name: string; slug: string; anchor_kind: "activation" | "future_launch";
       launch_id: string | null; starts_at: Date; ends_at: Date; coverage_starts_at: Date;
@@ -76,6 +87,13 @@ export async function getProReport(productId: string): Promise<ProReportData | n
     );
     let window = rows.rows[0];
     if (!window) return null;
+    if (window.anchor_kind === "future_launch") {
+      const cancelled = await client.query(`SELECT 1 FROM pro_launch_orders o JOIN product_launches pl ON pl.id=$2::uuid WHERE o.id=(SELECT entitlement_order_id FROM pro_result_windows WHERE id=$1::uuid) AND o.purchased_before_approval AND pl.state='cancelled'`, [window.id, window.launch_id]);
+      if (cancelled.rows[0]) {
+        await client.query(`DELETE FROM pro_result_windows WHERE id=$1::uuid AND status<>'complete'`, [window.id]);
+        if (window.status !== "complete") return null;
+      }
+    }
     await synchronizeFutureAnchor(client, window);
     rows = await client.query<typeof window>(
       `SELECT w.id::text,w.product_id::text,p.name,p.slug,w.anchor_kind,w.launch_id::text,w.starts_at,w.ends_at,

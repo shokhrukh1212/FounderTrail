@@ -12,6 +12,7 @@ import { CategoryPicker } from "@/components/CategoryPicker";
 import { PricingFields } from "@/components/PricingFields";
 import { OWNER_TABS, ownerTabHref, type OwnerTab } from "@/lib/owner-tabs";
 import { suggestedShortName } from "@/lib/display-text";
+import { useRouter } from "next/navigation";
 
 /** A failed save, carrying the form field the server rejected when it names one. */
 class SaveError extends Error {
@@ -20,7 +21,7 @@ class SaveError extends Error {
 
 async function jsonRequest(url: string, init: RequestInit) {
   const response = await fetch(url, init);
-  const result = await response.json().catch(() => ({})) as { error?: string; message?: string; field?: string };
+  const result = await response.json().catch(() => ({})) as { error?: string; message?: string; field?: string; proSelected?: boolean };
   if (!response.ok) throw new SaveError(result.error || "Could not save changes.", result.field);
   return result;
 }
@@ -48,6 +49,7 @@ type WorkspaceUpdate = { id:string;type:string;title:string;body:string;linkUrl:
  * on the server and handed in as `children`, so they sit inside the same shell.
  */
 export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, growth, evidence, integration, siteUrl,initialReviewReason, proStatus, tab = "overview", children }: { product: ManagedProduct; workspaceUpdates:WorkspaceUpdate[]; outboundClicks: number; growth:{listingViews:number;outboundClicks:number;followers:number;comments:number;launchVotes:number}; evidence: Evidence[]; integration: IntegrationState; siteUrl: string;initialReviewReason:string|null; proStatus:string|null; tab?: OwnerTab; children?: ReactNode }) {
+  const router = useRouter();
   const [currentStatus, setCurrentStatus] = useState(product.status);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [reviewReason,setReviewReason]=useState(initialReviewReason??"");
@@ -112,7 +114,7 @@ export function OwnerDashboard({ product, workspaceUpdates, outboundClicks, grow
     } catch (caught) { failed(caught, "Could not save settings."); } finally { setBusy(""); }
   }
 
-  async function submitDraft(){start("submit-draft");try{await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"submit_for_review"})});setCurrentStatus("pending");setReviewReason("");setNotice("Submitted for review.")}catch(caught){failed(caught,"Verify ownership before submitting for review.")}finally{setBusy("")}}
+  async function submitDraft(){start("submit-draft");try{const result=await jsonRequest(`/api/owner/products/${encodeURIComponent(product.slug)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"submit_for_review"})});setCurrentStatus("pending");setReviewReason("");if(result.proSelected){router.push(`/manage/${encodeURIComponent(product.slug)}/pro`);return}setNotice("Submitted for review.")}catch(caught){failed(caught,"Verify ownership before submitting for review.")}finally{setBusy("")}}
 
   async function publishUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); start("update");

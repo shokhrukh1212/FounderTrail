@@ -2,7 +2,8 @@
 /* eslint-disable @next/next/no-img-element -- local object URLs and untrusted metadata previews cannot use next/image */
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { SubmissionProOffer } from "./SubmissionProOffer";
 import {
   isSubmissionField,
   logoFileError,
@@ -18,6 +19,7 @@ import { ProductLogo } from "./ProductLogo";
 import { CategoryPicker } from "./CategoryPicker";
 import { PricingFields } from "./PricingFields";
 import { EMPTY_PRICING } from "@/lib/product-pricing";
+import { readJsonResponse, shrinkImageForUpload } from "@/lib/client-image";
 
 type Metadata = {
   productName: string;
@@ -42,6 +44,30 @@ function fieldDescription(field: SubmissionField, errors: SubmissionFieldErrors,
 
 export function SubmissionForm({ accountName = "", accountEmail = "" }: { accountName?: string; accountEmail?: string }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const submitting = useRef(false);
+  const [submissionKey, setSubmissionKey] = useState("");
+  const [proSelected, setProSelected] = useState(false);
+  const [proPrice, setProPrice] = useState(500);
+  const [proConfigured, setProConfigured] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  useEffect(() => {
+    let key = crypto.randomUUID();
+    let restored = false;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(`submission-pro:${accountEmail}`) || "null");
+      if (saved?.key) key = saved.key;
+      restored = saved?.selected === true;
+    } catch { /* Storage can be disabled. Server replay protection still applies. */ }
+    queueMicrotask(() => { setSubmissionKey(key); setProSelected(restored); });
+    void fetch("/api/pro/availability", { cache: "no-store" }).then((response) => response.json()).then((data) => {
+      if (data.currentPriceMinor === 500 || data.currentPriceMinor === 900) setProPrice(data.currentPriceMinor);
+      setProConfigured(data.configured === true);
+    }).catch(() => {});
+  }, [accountEmail]);
+  useEffect(() => {
+    if (!submissionKey) return;
+    try { sessionStorage.setItem(`submission-pro:${accountEmail}`, JSON.stringify({ key: submissionKey, selected: proSelected })); } catch {}
+  }, [submissionKey, proSelected, accountEmail]);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const screenshotsInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<SubmissionStep>(1);
@@ -114,6 +140,22 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
     for (const [index, screenshot] of screenshots.entries()) {
       data.append("screenshots", screenshot, screenshot.name);
       data.append("screenshotAlt", screenshotAlts[index] ?? "");
+    }
+    return data;
+  }
+
+  /**
+   * Logo and screenshots travel in one request, and the platform rejects bodies over
+   * ~4.5 MB before the route runs. Shrink them so the whole submission stays under it.
+   */
+  async function compactUploads(data: FormData): Promise<FormData> {
+    const logoFile = data.get("logo");
+    if (logoFile instanceof File && logoFile.size > 0) data.set("logo", await shrinkImageForUpload(logoFile, { maxBytes: 700 * 1024, maxDimension: 1024, keepTransparency: true }));
+    const shots = data.getAll("screenshots").filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    if (shots.length) {
+      const compacted = await Promise.all(shots.map((file) => shrinkImageForUpload(file, { maxBytes: 800 * 1024, maxDimension: 2400 })));
+      data.delete("screenshots");
+      for (const file of compacted) data.append("screenshots", file, file.name);
     }
     return data;
   }
@@ -228,6 +270,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current || created) return;
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const data = submissionData(event.currentTarget, submitter);
     // A saved draft is allowed to be incomplete; submitting for review is not.
@@ -244,10 +287,11 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
       focusField(firstInvalid);
       return;
     }
+    submitting.current = true;
     setBusy(true);
     try {
-      const response = await fetch("/api/products", { method: "POST", body: data });
-      const result = await response.json() as { error?: string; field?: unknown; product?: { slug: string; status: "draft" | "pending" }; managementUrl?: string; ownershipVerification?: { path: string; value: string }; existingProduct?: { slug: string; name: string } | null };
+      const response = await fetch("/api/products", { method: "POST", body: await compactUploads(data) });
+      const result = await readJsonResponse<{ error?: string; field?: unknown; product?: { slug: string; status: "draft" | "pending" }; managementUrl?: string; ownershipVerification?: { path: string; value: string }; existingProduct?: { slug: string; name: string } | null }>(response);
       if (!response.ok || !result.product || !result.managementUrl) {
         const message = result.error || "Submission failed.";
         if (isSubmissionField(result.field)) {
@@ -260,16 +304,36 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
         throw new Error(message);
       }
       setCreated({ slug: result.product.slug, status: result.product.status, managementUrl: result.managementUrl, claimPath: result.ownershipVerification?.path, claimValue: result.ownershipVerification?.value });
+      try { sessionStorage.removeItem(`submission-pro:${accountEmail}`); } catch {}
+      if (!draft && proSelected && proConfigured) await openProCheckout(result.product.slug);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Submission failed. Please try again.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
+  }
+
+  async function openProCheckout(slug: string) {
+    setBusy(true); setCheckoutError("");
+    try {
+      const response = await fetch(`/api/owner/products/${encodeURIComponent(slug)}/pro/checkout`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ acceptedPriceMinor: proPrice, entryPoint: "submission" }) });
+      const result = await response.json();
+      if (result.currentPriceMinor === 500 || result.currentPriceMinor === 900) {
+        setProPrice(result.currentPriceMinor);
+        throw new Error(`The price is now $${result.currentPriceMinor / 100}. Review the new amount, then choose Retry Pro checkout to confirm.`);
+      }
+      if (result.redirectTo) { window.location.assign(result.redirectTo); return; }
+      if (!response.ok || !result.checkoutUrl) throw new Error(result.error || "Checkout couldn’t open. Please retry when ready.");
+      window.location.assign(result.checkoutUrl);
+    } catch (caught) { setCheckoutError(caught instanceof Error ? caught.message : "Checkout couldn’t open."); }
+    finally { setBusy(false); }
   }
 
   if (created) return <section className="submission-success" aria-live="polite">
     <span className="verified-mark">✓</span>
     <h2>{created.status === "draft" ? "Your draft is saved." : "Your startup is submitted."}</h2>
+    {created.status === "pending" && proSelected ? <div className="manager-notice"><p>Your startup was submitted for review. Pro hasn’t been activated yet.</p>{checkoutError ? <p role="alert">{checkoutError}</p> : null}<div className="button-row"><button type="button" className="button button-primary" disabled={busy || !proConfigured} onClick={() => void openProCheckout(created.slug)}>{busy ? "Opening checkout…" : `Retry Pro checkout · $${proPrice / 100} once`}</button><Link className="button button-secondary" href={`/manage/${created.slug}`}>Continue free</Link><Link href={`/manage/${created.slug}/pro`}>Check payment status</Link></div></div> : null}
     <p>{created.status === "draft"
       ? "Verify the domain, finish any details, then submit it for review from My products."
       : "We’ll review the listing before it appears publicly. Once it’s approved you can schedule its launch week and publish updates."} The draft stays attached to your signed-in account.</p>
@@ -278,7 +342,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
       <Link className="button button-primary" href={`/claim/${created.slug}`}>Verify ownership</Link>
       <Link className="button button-secondary" href="/my-products">My products</Link>
     </div>
-    <p className="form-hint">Promotion is a separate, optional product. It becomes available from your dashboard once this listing is approved and you own it — it never affects review, ranking or launch position.</p>
+    <p className="form-hint">Pro is optional and never affects review, ranking, or launch position. You can upgrade later from your dashboard.</p>
   </section>;
 
   return <>
@@ -300,6 +364,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
 
     <form ref={formRef} className="submission-form submission-form-compact" onSubmit={submit} onInput={handleFormInput} encType="multipart/form-data" noValidate aria-busy={busy || fetching}>
       <input type="hidden" name="metadataToken" value={metadataToken} />
+      <input type="hidden" name="submissionKey" value={submissionKey} />
 
       <fieldset hidden={step !== 1}>
         <legend>Your startup’s website</legend>
@@ -421,6 +486,8 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
           </div>
         </div>
 
+        <SubmissionProOffer name={name} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoPreview} selected={proSelected} onSelect={setProSelected} price={proPrice} configured={proConfigured} visible={step === 3} submissionKey={submissionKey} />
+
         <div className="consent-field">
           <label className="consent-row" htmlFor="submission-ownershipConsent"><input id="submission-ownershipConsent" name="ownershipConsent" type="checkbox" required aria-invalid={Boolean(fieldErrors.ownershipConsent)} aria-describedby={fieldDescription("ownershipConsent", fieldErrors)} /> <span>I built this startup or am authorized to submit it, and the information above is accurate. See the <Link href="/about#submission-guidelines">submission guidelines</Link>.</span></label>
           <FieldError field="ownershipConsent" errors={fieldErrors} />
@@ -428,11 +495,13 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         {existingProduct ? <p><Link className="button button-secondary" href={`/product/${existingProduct.slug}#claim`}>Claim {existingProduct.name}</Link></p> : null}
+        <div className="submission-plan-summary" aria-live="polite"><strong>{proSelected && proConfigured ? `Pro Launch · $${proPrice / 100} one-time` : "Free submission"}</strong><p>{proSelected && proConfigured ? "Any applicable taxes appear at checkout." : "You can upgrade later."}</p></div>
         <div className="button-row submit-final-button">
           <button className="button button-secondary" type="button" onClick={() => goToStep(2)}>Back</button>
           <button name="submissionStatus" value="draft" className="button button-secondary" disabled={busy} type="submit">Save draft</button>
-          <button name="submissionStatus" value="pending" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : "Submit for review"}</button>
+          <button name="submissionStatus" value="pending" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : proSelected && proConfigured ? "Submit & go to checkout" : "Submit for review"}</button>
         </div>
+        <p className="form-hint">{proSelected && proConfigured ? "We’ll save your submission before opening secure checkout. All startups are reviewed." : "Your startup will be reviewed before it appears publicly."}</p>
       </fieldset>
     </form>
   </>;

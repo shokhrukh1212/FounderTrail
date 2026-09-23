@@ -3,6 +3,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { config } from "./config";
 import { query } from "./db";
+import { insertFunnelEvent } from "./analytics";
 import {
   PRO_CURRENCY,
   PRO_INTRO_LIMIT,
@@ -103,7 +104,7 @@ export type ReservedProOrder = {
 
 export async function reserveProOrder(
   client: PoolClient,
-  input: { productId: string; purchaserId: string; acceptedPriceMinor: 500 | 900; environment: ProEnvironment },
+  input: { productId: string; purchaserId: string; acceptedPriceMinor: 500 | 900; environment: ProEnvironment; entryPoint?: "submission" | "dashboard" },
 ): Promise<ReservedProOrder> {
   await client.query("SELECT pg_advisory_xact_lock($1)", [PRO_INVENTORY_LOCK]);
 
@@ -112,14 +113,16 @@ export async function reserveProOrder(
   await client.query(
     `UPDATE pro_launch_orders SET status='cancelled',intro_slot=NULL,updated_at=now()
       WHERE provider_environment=$1 AND status='held' AND reservation_expires_at<=now()
-        AND dodo_checkout_session_id IS NULL`,
+        AND dodo_checkout_session_id IS NULL AND checkout_requested_at IS NULL`,
     [input.environment],
   );
 
-  const products = await client.query<{ id: string; slug: string; name: string }>(
-    `SELECT p.id::text,p.slug,p.name FROM products p
-      WHERE p.id=$1::uuid AND p.status='published'
-        AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2)
+  const products = await client.query<{ id: string; slug: string; name: string; status: string }>(
+    `SELECT p.id::text,p.slug,p.name,p.status FROM products p
+      WHERE p.id=$1::uuid AND (
+        (p.status='published' AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2))
+        OR (p.status='pending' AND p.approved_at IS NULL AND p.created_by_user_id=$2
+          AND NOT EXISTS(SELECT 1 FROM product_moderation_events me WHERE me.product_id=p.id AND me.to_status='rejected')))
       FOR UPDATE`,
     [input.productId, input.purchaserId],
   );
@@ -135,9 +138,9 @@ export async function reserveProOrder(
 
   const existing = await client.query<{
     id: string; quoted_price_minor: number; intro_slot: number | null; reservation_expires_at: Date;
-    dodo_checkout_session_id: string | null; checkout_url: string | null;
+    dodo_checkout_session_id: string | null; checkout_url: string | null; status: string; purchaser_id: string;
   }>(
-    `SELECT id::text,quoted_price_minor,intro_slot,reservation_expires_at,dodo_checkout_session_id,checkout_url
+    `SELECT id::text,quoted_price_minor,intro_slot,reservation_expires_at,dodo_checkout_session_id,checkout_url,status,purchaser_id
        FROM pro_launch_orders
       WHERE product_id=$1::uuid AND status IN ('held','checkout_created','processing')
       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
@@ -145,6 +148,7 @@ export async function reserveProOrder(
   );
   if (existing.rows[0]) {
     const order = existing.rows[0];
+    if (order.status === "processing" || order.purchaser_id !== input.purchaserId) throw new Error("ORDER_RECONCILING");
     if (new Date(order.reservation_expires_at).getTime() <= Date.now() && order.dodo_checkout_session_id) {
       throw new Error("ORDER_RECONCILING");
     }
@@ -180,9 +184,9 @@ export async function reserveProOrder(
   if (input.acceptedPriceMinor !== currentPrice) throw new Error(`PRICE_CHANGED:${currentPrice}`);
   const expires = new Date(Date.now() + PRO_RESERVATION_HOURS * 60 * 60 * 1000);
   const inserted = await client.query<{ id: string }>(
-    `INSERT INTO pro_launch_orders(product_id,purchaser_id,provider_environment,quoted_price_minor,currency,intro_slot,reservation_expires_at)
-     VALUES($1::uuid,$2,$3,$4,$5,$6,$7) RETURNING id::text`,
-    [product.id, input.purchaserId, input.environment, currentPrice, PRO_CURRENCY, slot, expires],
+    `INSERT INTO pro_launch_orders(product_id,purchaser_id,provider_environment,quoted_price_minor,currency,intro_slot,reservation_expires_at,entry_point,purchased_before_approval)
+     VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id::text`,
+    [product.id, input.purchaserId, input.environment, currentPrice, PRO_CURRENCY, slot, expires, input.entryPoint ?? "dashboard", product.status === "pending"],
   );
   return {
     id: inserted.rows[0].id, productId: product.id, slug: product.slug, name: product.name,
@@ -192,6 +196,11 @@ export async function reserveProOrder(
 }
 
 async function createResultWindow(client: PoolClient, productId: string, orderId: string | null, activatedAt: Date) {
+  // Pre-approval purchases wait for their actual launch, even after approval.
+  if (orderId) {
+    const orders = await client.query<{ purchased_before_approval: boolean }>(`SELECT purchased_before_approval FROM pro_launch_orders WHERE id=$1::uuid`, [orderId]);
+    if (orders.rows[0]?.purchased_before_approval) return;
+  }
   const launches = await client.query<{ id: string; starts_at: Date }>(
     `SELECT pl.id::text,lw.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
       WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active') AND lw.state IN ('scheduled','active')
@@ -312,14 +321,18 @@ export async function processProDodoEvent(client: PoolClient, event: ProWebhookE
   if (event.business_id !== config.dodoPayments.businessId) throw new Error("DODO_BUSINESS_MISMATCH");
   const orderId = await proOrderForEvent(client, event);
   if (!orderId) return "ignored";
+  // All payment transitions use the same inventory -> product -> order lock order.
+  // Moderation locks the product first, making rejection and delayed payment atomic.
+  await client.query("SELECT pg_advisory_xact_lock($1)", [PRO_INVENTORY_LOCK]);
+  await client.query(`SELECT p.id FROM products p JOIN pro_launch_orders o ON o.product_id=p.id WHERE o.id=$1::uuid FOR UPDATE OF p`, [orderId]);
   const result = await client.query<{
     id: string; product_id: string; provider_environment: ProEnvironment; quoted_price_minor: number;
     intro_slot: number | null; reservation_expires_at: Date | null; status: string;
     dodo_checkout_session_id: string | null; dodo_payment_id: string | null;
-    paid_total_minor: number | null; refunded_total_minor: number;
+    paid_total_minor: number | null; refunded_total_minor: number; rejection_refund_required: boolean; entry_point: string;
   }>(
     `SELECT id::text,product_id::text,provider_environment,quoted_price_minor,intro_slot,reservation_expires_at,status,
-            dodo_checkout_session_id,dodo_payment_id,paid_total_minor,refunded_total_minor
+            dodo_checkout_session_id,dodo_payment_id,paid_total_minor,refunded_total_minor,rejection_refund_required,entry_point
        FROM pro_launch_orders WHERE id=$1::uuid FOR UPDATE`,
     [orderId],
   );
@@ -377,6 +390,11 @@ export async function processProDodoEvent(client: PoolClient, event: ProWebhookE
           paid_at=coalesce(paid_at,now()),reservation_expires_at=NULL,checkout_url=NULL,updated_at=now() WHERE id=$1::uuid`,
         [order.id, paymentId, total, tax],
       );
+      await insertFunnelEvent(client, { name: "purchase_completed", idempotencyKey: `pro-purchase:${order.id}`, eventData: { product: "pro_launch", entryPoint: order.entry_point, priceCents: order.quoted_price_minor, environment: order.provider_environment } });
+      if (order.rejection_refund_required) {
+        await queueRejectedProRefunds(client, order.product_id);
+        return "processed";
+      }
       await activatePurchasedPro(client, order.product_id, order.id);
       return "processed";
     }
@@ -400,7 +418,7 @@ export async function processProDodoEvent(client: PoolClient, event: ProWebhookE
     await client.query(
       `INSERT INTO pro_refunds(order_id,dodo_refund_id,amount_minor,currency,status)
        VALUES($1::uuid,$2,$3,'USD',$4)
-       ON CONFLICT(dodo_refund_id) DO UPDATE SET status=excluded.status,updated_at=now()`,
+       ON CONFLICT(dodo_refund_id) DO UPDATE SET status=CASE WHEN pro_refunds.status='succeeded' THEN 'succeeded' ELSE excluded.status END,updated_at=now()`,
       [order.id, refundId, amount, event.type === "refund.succeeded" ? "succeeded" : "failed"],
     );
     if (event.type === "refund.succeeded") {
@@ -417,6 +435,7 @@ export async function processProDodoEvent(client: PoolClient, event: ProWebhookE
   }
 
   if (event.type.startsWith("dispute.")) {
+    if (order.rejection_refund_required) return "processed";
     const currentEntitlement = await client.query<{ status: ProEntitlementStatus }>(`SELECT status FROM pro_entitlements WHERE product_id=$1::uuid FOR UPDATE`, [order.product_id]);
     const transition = disputeTransition({ orderStatus: order.status, entitlementStatus: currentEntitlement.rows[0]?.status ?? null, disputeState: null }, event.type);
     await client.query(`UPDATE pro_launch_orders SET status=$2,dispute_state=$3,updated_at=now() WHERE id=$1::uuid`, [order.id, transition.orderStatus, transition.disputeState]);
@@ -427,6 +446,17 @@ export async function processProDodoEvent(client: PoolClient, event: ProWebhookE
     return "processed";
   }
   return "ignored";
+}
+
+/** Called in the moderation transaction and again after delayed trusted payment. */
+export async function queueRejectedProRefunds(client: PoolClient, productId: string) {
+  await client.query(`UPDATE pro_launch_orders SET rejection_refund_required=true,updated_at=now() WHERE product_id=$1::uuid AND purchased_before_approval`, [productId]);
+  await client.query(`INSERT INTO notification_jobs(job_type,dedupe_key,payload)
+    SELECT 'pro_refund','pro-refund:'||dodo_payment_id,jsonb_build_object('orderId',id::text,'reason','Initial startup submission rejected')
+    FROM pro_launch_orders WHERE product_id=$1::uuid AND rejection_refund_required AND paid_at IS NOT NULL AND status<>'refunded'
+    ON CONFLICT(dedupe_key) DO NOTHING`, [productId]);
+  await client.query(`UPDATE pro_launch_orders SET status='refund_pending',updated_at=now() WHERE product_id=$1::uuid AND rejection_refund_required AND paid_at IS NOT NULL AND status<>'refunded'`, [productId]);
+  await client.query(`UPDATE pro_entitlements SET status='revoked',revoked_at=now(),updated_at=now() WHERE product_id=$1::uuid AND source_order_id IN (SELECT id FROM pro_launch_orders WHERE product_id=$1::uuid AND rejection_refund_required)`, [productId]);
 }
 
 export function productIdForProProduct(priceMinor: number): string {

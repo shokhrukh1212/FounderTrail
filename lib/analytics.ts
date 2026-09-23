@@ -11,6 +11,9 @@ export const FUNNEL_EVENTS = [
   "checkout_started",
   "purchase_completed",
   "live_product_clicked",
+  "pro_offer_viewed",
+  "pro_preview_opened",
+  "pro_selected",
 ] as const;
 
 export type FunnelEventName = (typeof FUNNEL_EVENTS)[number];

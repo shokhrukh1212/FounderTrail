@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  if (body.event !== "buyer_landing_viewed") {
+  if (body.event !== "buyer_landing_viewed" && body.event !== "pro_offer_viewed" && body.event !== "pro_preview_opened" && body.event !== "pro_selected") {
     return NextResponse.json({ error: "Unsupported event." }, { status: 400 });
   }
   const suppliedId = String(body.eventId ?? "").trim();
@@ -22,10 +22,10 @@ export async function POST(request: Request) {
   const visitor = ensureVisitorId(request);
   const attribution = sanitizeAttribution(body.attribution);
   await recordFunnelEvent({
-    name: "buyer_landing_viewed",
+    name: body.event,
     idempotencyKey: suppliedId,
     visitorId: visitor.id,
-    eventData: { ...attribution, ...requestAnalyticsContext(request) },
+    eventData: body.event === "buyer_landing_viewed" ? { ...attribution, ...requestAnalyticsContext(request) } : { entryPoint: "submission" },
   });
   const response = NextResponse.json({ ok: true });
   if (visitor.isNew) response.cookies.set(VISITOR_COOKIE, visitor.id, visitorCookieOptions);

@@ -8,6 +8,7 @@ import { requestOriginIsSameSite } from "@/lib/request-security";
 import { canonicalProductUrl } from "@/lib/product-share";
 import { normalizeCategorySelection } from "@/lib/categories";
 import { applyProductCategories, InvalidCategorySelection } from "@/lib/product-categories";
+import { queueRejectedProRefunds } from "@/lib/pro-launch";
 
 function text(value: unknown, max: number) {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null;
@@ -78,7 +79,10 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
          VALUES($1::uuid,COALESCE($2::timestamptz,now())+interval '36 hours')
          ON CONFLICT(product_id) DO NOTHING`, [product.id,updated.rows[0].approved_at],
       );
-      if (body.status === "rejected") return { rejected: true };
+      if (body.status === "rejected") {
+        if (!product.approved_at) await queueRejectedProRefunds(client, product.id);
+        return { rejected: true };
+      }
       return { id: product.id, slug: updated.rows[0].slug, name: updated.rows[0].name, approvedAt: new Date(updated.rows[0].approved_at!), newlyPublished: true };
     });
 

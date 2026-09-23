@@ -18,7 +18,7 @@ export async function ProResultsPanel({ slug, productId, entitlementStatus }: {
     </section>;
   }
   const report = await getProReport(productId);
-  if (!report) return <section className="settings-card"><h2>Results are being prepared</h2><p>Reload shortly. Your launch tools are already available.</p></section>;
+  if (!report) return <section className="settings-card"><h2>Your report starts with your launch</h2><p>After approval, schedule your launch to begin the seven-day report. Your private launch tools are already available.</p></section>;
   const start = new Date(report.startsAt), end = new Date(report.endsAt);
   const activityMax = Math.max(1, ...report.days.map((day) => day.views + day.clicks + Math.max(0, day.upvotes) + Math.max(0, day.followers) + day.comments));
   return <section className="results-page results-tab" aria-labelledby="results-heading">

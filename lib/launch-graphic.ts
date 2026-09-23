@@ -21,7 +21,7 @@ export type LaunchGraphicImages = {
 };
 
 export type LaunchGraphicContext = {
-  launchState: "upcoming" | "live" | "listed";
+  launchState: "upcoming" | "live" | "listed" | "preview";
   fontFamily: string;
   /** Shown in the browser frame's address bar. */
   hostname: string;
@@ -48,6 +48,7 @@ export function launchDimensions(format: LaunchImageDraft["format"]) {
 }
 
 export function launchStatusText(state: LaunchGraphicContext["launchState"]): string {
+  if (state === "preview") return "Preview · FounderTrail launch kit";
   return state === "live" ? "Launching this week on FounderTrail"
     : state === "upcoming" ? "Launching soon on FounderTrail"
     : "Now on FounderTrail";
