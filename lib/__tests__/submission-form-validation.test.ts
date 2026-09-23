@@ -146,9 +146,11 @@ test("the founder's contact email is prefilled but still described as private", 
   assert.match(submissionFormSource, /defaultValue=\{accountEmail\}/);
   assert.match(submissionFormSource, /defaultValue=\{accountName\}/);
   assert.match(submissionFormSource, /Never displayed publicly/);
-  // Marketing consent is its own unchecked box, separate from the attestation.
+  // Founder updates are on by default in their own box, separate from the attestation;
+  // unticking it is the founder's choice and is never required.
   const marketing = submissionFormSource.match(/name="marketingOptIn"[^>]*>/)?.[0] ?? "";
-  assert.doesNotMatch(marketing, /checked|required/);
+  assert.match(marketing, /defaultChecked/);
+  assert.doesNotMatch(marketing, /required/);
 });
 
 test("a duplicate keeps the founder on step 1 without losing what was fetched", () => {

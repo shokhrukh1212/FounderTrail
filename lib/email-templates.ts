@@ -4,6 +4,7 @@ export type MessageClass="transactional"|"marketing";
 export const PERSONALIZATION_TOKENS=["founder_name","product_name","product_url","claim_url","share_x_url","visitor_count","product_views","product_upvotes","product_rank","referred_visitors","verification_url"] as const;
 export type PersonalizationToken=typeof PERSONALIZATION_TOKENS[number];
 export type PersonalizationValues=Record<PersonalizationToken,string>;
+export const PERSONALIZATION_TOKEN_LABELS:Record<PersonalizationToken,string>={founder_name:"Founder name",product_name:"Product name",product_url:"Product page link",claim_url:"Claim listing link",share_x_url:"Share on X link",visitor_count:"FounderTrail total visitors (whole site)",product_views:"This product's page views",product_upvotes:"This product's upvotes",product_rank:"This product's rank",referred_visitors:"Visitors this product referred",verification_url:"Owner management link"};
 export type CampaignTemplate={key:CampaignTemplateKey;label:string;messageClass:MessageClass;productSpecific:boolean;subject:string;previewText:string;heading:string;body:string;includeProductLogo:boolean;primaryButtonLabel:string;primaryButtonUrl:string;secondaryButtonLabel:string;secondaryButtonUrl:string};
 
 export const CAMPAIGN_TEMPLATES:Record<CampaignTemplateKey,CampaignTemplate>={

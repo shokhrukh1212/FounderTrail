@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AudienceReview } from "@/lib/founder-email-audience";
-import { PERSONALIZATION_TOKENS, type CampaignTemplateKey } from "@/lib/email-templates";
+import { PERSONALIZATION_TOKEN_LABELS, PERSONALIZATION_TOKENS, type CampaignTemplateKey } from "@/lib/email-templates";
 import type { CampaignDraft } from "@/lib/founder-email-campaigns";
 
 type Product = { id: string; name: string; founderName: string | null; status: string };
-type Props = { campaignId?: string; initial: CampaignDraft; templates: Array<{ key: CampaignTemplateKey; label: string; draft: CampaignDraft }>; products: Product[] };
+type Props = { campaignId?: string; initial: CampaignDraft; templates: Array<{ key: CampaignTemplateKey; label: string; draft: CampaignDraft }>; products: Product[]; foundertrailLaunchAt?: string | null };
 type EditableKey = "subject" | "previewText" | "heading" | "body" | "primaryButtonLabel" | "primaryButtonUrl" | "secondaryButtonLabel" | "secondaryButtonUrl";
 type Preview = { html: string; previewRecipient: { kind: "selected" | "example"; label: string; email: string | null; eligible: boolean } };
 
 const messageTypeLabel = (value: CampaignDraft["messageClass"]) => value === "marketing" ? "Marketing/growth" : "Product/owner update";
 
-export function FounderEmailComposer({ campaignId, initial, templates, products }: Props) {
+export function FounderEmailComposer({ campaignId, initial, templates, products, foundertrailLaunchAt = null }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState(initial);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -63,6 +63,8 @@ export function FounderEmailComposer({ campaignId, initial, templates, products 
   }
 
   const statusValue = (draft.audience.statuses ?? ["published"]).join(",");
+  const launchDate = foundertrailLaunchAt ? new Date(foundertrailLaunchAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+  const exclusionReasons = Object.entries((reviewData?.exclusions ?? []).flatMap(item => item.reasons).reduce<Record<string, number>>((counts, reason) => ({ ...counts, [reason]: (counts[reason] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
   const customTemplate = draft.templateKey === "custom_announcement";
   return <div className="email-composer-layout">
     <section className="email-composer">
@@ -73,10 +75,14 @@ export function FounderEmailComposer({ campaignId, initial, templates, products 
           <label>Status<select value={statusValue} onChange={event => audience({ statuses: event.target.value.split(",") as CampaignDraft["audience"]["statuses"] })}><option value="published">Published</option><option value="pending">Pending</option><option value="published,pending">Published and pending</option><option value="rejected">Rejected</option><option value="archived">Archived</option><option value="draft,pending,published,rejected,archived">All statuses</option></select></label>
           <label>Verification<select value={draft.audience.verification ?? "all"} onChange={event => audience({ verification: event.target.value as CampaignDraft["audience"]["verification"] })}><option value="all">Any verification</option><option value="verified">Verified</option><option value="not_verified">Not verified</option><option value="domain_badge_missing">Domain verified, badge missing</option></select></label>
         </div>
-        <label>Share activity<select value={draft.audience.shareIntent ?? "all"} onChange={event => audience({ shareIntent: event.target.value as CampaignDraft["audience"]["shareIntent"] })}><option value="all">Any activity</option><option value="has">Has share-intent activity</option><option value="none">No share-intent activity</option></select></label>
+        <div className="form-grid">
+          <label>Founder group<select value={draft.audience.founderGroup ?? "all"} onChange={event => audience({ founderGroup: event.target.value as CampaignDraft["audience"]["founderGroup"] })}><option value="all">All founders</option><option value="biddex">Biddex founders{launchDate ? ` (submitted before ${launchDate})` : ""}</option><option value="foundertrail">FounderTrail founders{launchDate ? ` (submitted ${launchDate} or later)` : ""}</option></select></label>
+          <label>Share activity<select value={draft.audience.shareIntent ?? "all"} onChange={event => audience({ shareIntent: event.target.value as CampaignDraft["audience"]["shareIntent"] })}><option value="all">Any activity</option><option value="has">Has share-intent activity</option><option value="none">No share-intent activity</option></select></label>
+        </div>
         <label className="checkbox-row"><input type="checkbox" checked={draft.audience.selectAll === true} onChange={event => audience({ selectAll: event.target.checked, productIds: event.target.checked ? [] : draft.audience.productIds })}/> Select all eligible founders matching these filters</label>
         {!draft.audience.selectAll ? <div className="campaign-product-picker">{products.map(product => <label key={product.id}><input type="checkbox" checked={selected.has(product.id)} onChange={event => { const ids = new Set(selected); if (event.target.checked) ids.add(product.id); else ids.delete(product.id); audience({ productIds: [...ids] }); }}/><span><strong>{product.name}</strong><small>{product.founderName || "Founder not provided"} · {product.status}</small></span></label>)}</div> : null}
         <div className="recipient-summary-grid"><span><strong>{reviewData?.selectedCount ?? "—"}</strong><small>Founders selected</small></span><span><strong>{reviewData?.eligibleCount ?? "—"}</strong><small>Eligible</small></span><span><strong>{reviewData?.excludedCount ?? "—"}</strong><small>Excluded</small></span></div>
+        {exclusionReasons.length ? <p className="field-help">Excluded because: {exclusionReasons.map(([reason, count]) => `${reason} (${count})`).join(" · ")}. The full list is in step 3.</p> : null}
         {draft.messageClass === "marketing" ? <p className="marketing-consent-summary"><strong>{reviewData?.marketingAudience.eligible ?? "—"} of {reviewData?.marketingAudience.total ?? "—"} founders</strong> can receive growth emails. Founders who explicitly unsubscribed, or whose address has a delivery suppression, are always excluded.</p> : <p className="manager-notice">Product/owner updates do not require marketing consent. Bounce, complaint, provider, and manual delivery suppressions still apply.</p>}
       </section>
 
@@ -88,7 +94,7 @@ export function FounderEmailComposer({ campaignId, initial, templates, products 
           <label>Internal campaign name<input value={draft.internalName} onChange={event => field("internalName", event.target.value)}/></label>
           <label>Send now or schedule<input type="datetime-local" value={draft.scheduledAt?.slice(0, 16) ?? ""} onChange={event => field("scheduledAt", event.target.value ? new Date(event.target.value).toISOString() : null)}/></label>
         </div>
-        <div className="token-insert"><label>Insert value<select aria-label="Insert value" value="" onChange={event => { if (event.target.value) insertToken(event.target.value); }}><option value="">Choose a value…</option>{PERSONALIZATION_TOKENS.map(token => <option key={token} value={token}>{`{${token}}`}</option>)}</select></label><small>Click in a field first; the value is inserted at the cursor.</small></div>
+        <div className="token-insert"><label>Insert value<select aria-label="Insert value" value="" onChange={event => { if (event.target.value) insertToken(event.target.value); }}><option value="">Choose a value…</option>{PERSONALIZATION_TOKENS.map(token => <option key={token} value={token}>{`${PERSONALIZATION_TOKEN_LABELS[token]} — {${token}}`}</option>)}</select></label><small>Click in a field first; the value is inserted at the cursor.</small></div>
         <div className="form-grid"><label>Subject<input {...editorProps("subject")} value={draft.subject} onChange={event => field("subject", event.target.value)}/></label><label>Preview text<input {...editorProps("previewText")} value={draft.previewText} onChange={event => field("previewText", event.target.value)}/></label></div>
         <label>Heading<input {...editorProps("heading")} value={draft.heading} onChange={event => field("heading", event.target.value)}/></label>
         <label>Body<textarea {...editorProps("body")} rows={14} value={draft.body} onChange={event => field("body", event.target.value)}/></label>

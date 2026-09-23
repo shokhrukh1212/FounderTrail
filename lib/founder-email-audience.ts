@@ -5,7 +5,7 @@ export type AudienceCandidate = {
   marketing_opt_in_at:Date|null;marketing_unsubscribed_at:Date|null;suppression_reasons:string[];
   slug:string;name:string;founder_name:string|null;status:string;submitted_at:Date;approved_at:Date|null;
   token_version:number;logo_url:string|null;verified:boolean;domain_verified:boolean;badge_active:boolean;
-  claimed:boolean;
+  claimed:boolean;biddex_founder:boolean;
   share_intent:boolean;product_views:number;product_upvotes:number;referred_visitors:number;product_rank:number;
 };
 

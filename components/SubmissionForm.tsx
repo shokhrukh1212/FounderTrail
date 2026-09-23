@@ -475,7 +475,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
           </div>
         </div>
         <p className="form-hint">Optional founder details are displayed on your startup page if provided. Your name and email are prefilled from your Google account and can be changed.</p>
-        <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" /> <span>Send me optional FounderTrail product and audience updates. You can unsubscribe at any time.</span></label>
+        <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" defaultChecked /> <span>Send me optional FounderTrail product and audience updates. You can unsubscribe at any time.</span></label>
 
         <div className="listing-preview" aria-label="Listing preview">
           <ProductLogo productName={name || "Startup"} productUrl={websiteUrl || null} imageUrl={logoPreview} className="listing-logo-preview" />
