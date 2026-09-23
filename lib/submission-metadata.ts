@@ -165,7 +165,7 @@ async function pinnedRequest(url: URL, accept: string, maxBytes: number): Promis
       port: url.port || (url.protocol === "https:" ? 443 : 80),
       path: `${url.pathname}${url.search}`,
       method: "GET",
-      headers: { accept, "accept-encoding": "identity", "user-agent": `BidIndex-Metadata/1.0 (+${config.siteUrl}/about)` },
+      headers: { accept, "accept-encoding": "identity", "user-agent": `FounderTrail-Metadata/1.0 (+${config.siteUrl}/about)` },
       lookup: pinnedLookup(pinned),
     }, (response) => {
       const declared = Number(response.headers["content-length"] ?? 0);

@@ -2,7 +2,7 @@
 
 ## Production configuration
 
-Set `RESEND_WEBHOOK_SECRET`, `ADMIN_AUDIT_ACTOR`, and (optionally) `ADMIN_NOTIFICATION_EMAIL`. `EMAIL_FROM` must use a verified Resend domain and `EMAIL_REPLY_TO` should be a monitored inbox.
+Set `RESEND_WEBHOOK_SECRET`, `ADMIN_AUDIT_ACTOR`, and (optionally) `ADMIN_NOTIFICATION_EMAIL`. `EMAIL_FROM` must use a verified Resend domain and `EMAIL_REPLY_TO` should be a monitored inbox. FounderTrail keeps the configured mailbox but always normalizes the public sender display name, so an older deployment value such as `BidIndex <notifications@bidindex.dev>` is sent as `FounderTrail <notifications@bidindex.dev>`.
 
 In Resend, send the bounce, complaint, delivered, failed, and suppressed events to:
 

@@ -21,7 +21,7 @@ declare global {
 }
 
 /** The one thing every preserved promotion conversion is for. Constant, and not personal data. */
-export const PLACEMENT_CONTENT_NAME = "BidIndex promotion placement";
+export const PLACEMENT_CONTENT_NAME = "FounderTrail promotion placement";
 
 export type MetaEventName = "PageView" | "ViewContent" | "InitiateCheckout" | "Purchase";
 

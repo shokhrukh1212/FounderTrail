@@ -1,6 +1,6 @@
 # Future payment-processor connectors
 
-BidIndex currently supports generic authenticated partner events. Their metrics are **Partner connected**, not processor verified. `Processor verified` is reserved for a real first-party connection to Stripe, Lemon Squeezy, Paddle, or an equivalent provider.
+FounderTrail currently supports generic authenticated partner events. Their metrics are **Partner connected**, not processor verified. `Processor verified` is reserved for a real first-party connection to Stripe, Lemon Squeezy, Paddle, or an equivalent provider.
 
 A future connector must:
 
@@ -15,4 +15,4 @@ A future connector must:
 - separate imported historical totals from live webhook events and label their periods clearly;
 - support revocation, credential expiry, degraded state, and last-success timestamps.
 
-Only data successfully received and authenticated through such a connector may use **Processor verified**. The existing BidIndex Lemon Squeezy merchant integration is preserved payment infrastructure for BidIndex itself; it is not a founder payment-provider connector and must not be presented as one.
+Only data successfully received and authenticated through such a connector may use **Processor verified**. The existing FounderTrail Lemon Squeezy merchant integration is preserved payment infrastructure for FounderTrail itself; it is not a founder payment-provider connector and must not be presented as one.

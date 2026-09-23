@@ -4,7 +4,7 @@
 
 FounderTrail helps people find useful startups and follow what their founders build next. It is a discovery and progress platform, not an auction, click marketplace, or paid leaderboard. A startup may be free, paid, pre-revenue, or established; revenue and traffic are supporting context, never proof of quality.
 
-Existing BidIndex products remain legitimate listings. Their IDs, slugs, media, owner evidence, support totals, redirects, transactions, and audit history are preserved. Historical support and bidding details are labelled as history and never enter a FounderTrail weekly launch score.
+Existing pre-rebrand products remain legitimate listings. Their IDs, slugs, media, owner evidence, support totals, redirects, transactions, and audit history are preserved. Historical support and bidding details are labelled as history and never enter a FounderTrail weekly launch score.
 
 ## Public experience
 

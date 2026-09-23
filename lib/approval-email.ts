@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { approvalAccessToken, approvalManagementUrl } from "./approval-access";
 import { config } from "./config";
 import { query, withTransaction } from "./db";
+import { formatEmailFrom } from "./email-sender";
 import { canonicalProductUrl, trackedXShareUrl } from "./product-share";
 
 const APPROVAL_EMAIL_SIGNER = "Shokhrukh Karimov";
@@ -96,7 +97,7 @@ export async function sendApprovalEmail(productId: string, options: { allowSkipp
   try {
     const resend = new Resend(config.email.resendApiKey);
     const { data, error } = await resend.emails.send({
-      from: config.email.from,
+      from: formatEmailFrom(config.email.from),
       to: product.contact_email,
       subject: `${product.name} is now live on FounderTrail 🚀`,
       html: content.html,

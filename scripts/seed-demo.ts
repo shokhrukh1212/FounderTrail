@@ -1,4 +1,4 @@
-/** Repeatable BidIndex demo data. It never touches real products or legacy payment rows. */
+/** Repeatable FounderTrail demo data. It never touches real products or legacy payment rows. */
 import { createHash } from "node:crypto";
 import { getPool, query } from "../lib/db";
 
@@ -116,7 +116,7 @@ async function main() {
     );
   }
 
-  console.log(`seeded ${DEMO.length} clearly labelled BidIndex demo products`);
+  console.log(`seeded ${DEMO.length} clearly labelled FounderTrail demo products`);
   await getPool().end();
 }
 

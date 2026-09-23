@@ -1,10 +1,10 @@
-# BidIndex architecture
+# FounderTrail architecture
 
 ## Existing application and preserved payments
 
-BidIndex remains the existing Next.js 16.3.2 App Router, React 19, strict TypeScript, Tailwind 4, and PostgreSQL/raw `pg` application. Server Components read through server-only modules; Route Handlers implement mutations, embeds, webhooks, and redirects. The local architecture and component system were extended rather than replaced.
+FounderTrail remains the existing Next.js App Router, React 19, strict TypeScript, Tailwind 4, and PostgreSQL/raw `pg` application. Server Components read through server-only modules; Route Handlers implement mutations, embeds, webhooks, and redirects. The local architecture and component system were extended rather than replaced.
 
-The legacy Lemon Squeezy checkout, server-calculated amounts, webhook signature validation, provider-order idempotency, advisory-lock settlement, transaction tables, and environment variables remain intact. They are absent from BidIndex organic ranking and owner verification. Promotions remain disabled.
+The legacy Lemon Squeezy checkout, server-calculated amounts, webhook signature validation, provider-order idempotency, advisory-lock settlement, transaction tables, and environment variables remain intact. They are absent from FounderTrail organic ranking and owner verification. Promotions remain disabled.
 
 ## Core data model
 
@@ -16,7 +16,7 @@ The legacy Lemon Squeezy checkout, server-calculated amounts, webhook signature 
 - `product_metric_events`: idempotent authenticated event ledger using integer minor currency units.
 - `product_metric_aggregates`: metric/source/currency totals, measurement period, source state, and update/receipt times.
 - `product_public_evidence`: pending, accepted, rejected, stale, or archived administrator-reviewed public sources.
-- `product_outbound_click_events` and `product_badge_referral_events`: separate BidIndex outbound and badge-referral accounting.
+- `product_outbound_click_events` and `product_badge_referral_events`: separate FounderTrail outbound and badge-referral accounting.
 
 Migration `005_verification_metric_trust.up.sql` is additive. It preserves existing integrations and metric history, maps old source names to the explicit trust model, makes revenue secrets optional, and adds verification/traffic/source-state columns and indexes. Normal operation is forward-only; the down migration exists for disposable local recovery, not routine production rollback.
 
@@ -27,13 +27,13 @@ Migration `005_verification_metric_trust.up.sql` is additive. It preserves exist
 - `POST /api/owner/products/[slug]/check-badge` — checks the stored approved page for the configured badge script and project ID.
 - `POST /api/events/visitor` — origin-bound badge pageview/impression events.
 - `POST /api/partner/v1/events` — authenticated, versioned server events. The legacy integration endpoint remains as a compatibility adapter.
-- `/go/[slug]` — resolves only the approved product URL and records eligible BidIndex outbound clicks.
+- `/go/[slug]` — resolves only the approved product URL and records eligible FounderTrail outbound clicks.
 - `POST /api/admin/products/[slug]/owner-link` — admin-only, same-origin rotation for a lost owner link; returns the replacement once and stores only its hash.
 - `PUT /api/admin/products/[slug]/status` — idempotently commits publication, then attempts the private approval email without rolling back publication on provider failure.
 - `POST /api/admin/products/[slug]/approval-email` — admin-only safe retry for a failed/not-sent approval email.
 - `POST /api/admin/approval-emails` — admin-confirmed, idempotent catch-up delivery for published non-demo products whose approval email was never sent.
 - `GET /api/owner/products/[slug]` — authenticated, uncached owner status used for manual and 30-second pending polling; it returns no private contact data.
-- `/from/[publicId]` — records badge clicks separately and routes to the BidIndex product page.
+- `/from/[publicId]` — records badge clicks separately and routes to the FounderTrail product page.
 - `/admin` and `/api/admin/evidence/[id]` — submission and public-evidence moderation.
 
 All generated badge, verification, and endpoint URLs use `SITE_URL`. No production domain is compiled into the implementation.
@@ -73,4 +73,4 @@ Owner mutations require the product-scoped owner credential and same-origin requ
 
 ## Ranking and production visibility
 
-All public product queries require `published`; production additionally requires `NOT is_demo`. Verified discovery uses `product_verified_at`. Trending remains weekly unique votes with eligible BidIndex clicks as tie-breaker. Revenue/visitor/click leaderboards exclude unavailable and founder-reported numbers, preserve original currencies, and show source labels. Payment tables are not read by organic ranking SQL.
+All public product queries require `published`; production additionally requires `NOT is_demo`. Verified discovery uses `product_verified_at`. Trending remains weekly unique votes with eligible FounderTrail clicks as tie-breaker. Revenue/visitor/click leaderboards exclude unavailable and founder-reported numbers, preserve original currencies, and show source labels. Payment tables are not read by organic ranking SQL.

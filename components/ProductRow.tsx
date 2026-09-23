@@ -21,7 +21,7 @@ export function ProductRow({ product, position, voted = false, showPosition = tr
           <h2>{product.name}</h2>
           {product.isDemo ? <span className="demo-label">Demo</span> : null}
           {product.isVerified
-            ? <span className="verified-mark" title="BidIndex confirmed this product’s domain and badge installation. Metrics have separate source labels.">✓</span>
+            ? <span className="verified-mark" title="FounderTrail confirmed this product’s domain and badge installation. Metrics have separate source labels.">✓</span>
             : null}
         </div>
         <p className="product-tagline">{product.tagline}</p>

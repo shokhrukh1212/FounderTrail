@@ -44,7 +44,7 @@ export async function createCheckout(input: CheckoutInput): Promise<string> {
             },
           },
           product_options: {
-            name: `BidIndex promotion placement`,
+            name: `FounderTrail promotion placement`,
             description,
             redirect_url: successUrl,
             receipt_button_text: "See the leaderboard",

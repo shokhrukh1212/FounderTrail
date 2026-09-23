@@ -1,4 +1,4 @@
-# BidIndex implementation plan
+# FounderTrail implementation plan
 
 ## Phase 1 — Foundation and discovery
 
@@ -37,7 +37,7 @@ Dependencies: Phase 2 ownership and approved products.
 - [x] Replace three badge snippets with preview, style selector, one copyable snippet, installation detection, and collapsed help.
 - [x] Make traffic privacy-conscious and ephemeral; retain origin validation, bot/rate controls, daily approximate uniques, and separate badge/outbound click accounting.
 - [x] Add `/api/partner/v1/events` with optional one-time secret creation/rotation, authenticated/idempotent integer-money events, refund handling, currency separation, and compatibility routing.
-- [x] Standardize Measured by BidIndex, Processor verified, Partner connected, Publicly sourced, Founder reported, and Unavailable terminology.
+- [x] Standardize Measured by FounderTrail, Processor verified, Partner connected, Publicly sourced, Founder reported, and Unavailable terminology.
 - [x] Add owner-submitted public evidence with pending/accepted/rejected moderation separate from live verification.
 - [x] Add S3-compatible production media storage while retaining local development storage and magic-byte/dimension validation.
 - [x] Add metadata SSRF defenses, redirect revalidation, DNS pinning, time/size/type limits, security headers, and product sharing metadata.

@@ -5,12 +5,13 @@ import { config, isDodoProviderConfigured } from "./config";
 import { query, withTransaction } from "./db";
 import { digestUnsubscribeToken } from "./digest";
 import { getDodoClient } from "./dodo";
+import { formatEmailFrom } from "./email-sender";
 import { processDodoEvent } from "./sponsorship";
 import { processProDodoEvent, proOrderForEvent } from "./pro-launch";
 import { finalizeDueProReports } from "./pro-results";
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character); }
-function emailFrom() { const raw = config.email.from.trim(); if (!raw) return ""; const email = raw.match(/<([^>]+)>/)?.[1] ?? raw; return `${brand.displayName} <${email}>`; }
+function emailFrom() { return formatEmailFrom(config.email.from); }
 
 async function maintainBookingStates() {
   const expired = await query(`UPDATE sponsor_bookings SET booking_status='expired_hold',payment_status='cancelled',updated_at=now() WHERE booking_status='held' AND payment_status IN ('pending','processing') AND hold_expires_at<=now() RETURNING id`);

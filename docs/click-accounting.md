@@ -12,4 +12,4 @@ The redirect still works when an attempt is excluded. Every attempt stores a dia
 
 `campaigns.verified_clicks` is the public canonical counter. During migration it is backfilled from the previously verified `total_clicks_delivered`, preserving all historical totals. New eligible visits increment it only after the visitor/product uniqueness insert succeeds.
 
-Owner exclusion is best-effort. An owner on a new browser and network cannot be identified reliably without invasive tracking, which BidIndex does not use.
+Owner exclusion is best-effort. An owner on a new browser and network cannot be identified reliably without invasive tracking, which FounderTrail does not use.
