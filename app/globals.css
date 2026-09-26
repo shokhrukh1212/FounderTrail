@@ -761,7 +761,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-listing-editor h3{margin:0 0 12px;font-size:14px}
 .admin-listing-editor .field-help{color:var(--muted);font-size:10px;line-height:1.5}
 .admin-listing-editor .text-button{color:#c83930;font-weight:700}
-.admin-product-toolbar{grid-template-columns:minmax(200px,1fr) repeat(4,minmax(130px,.3fr))}
+.admin-product-toolbar{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.admin-product-toolbar>label:first-child{grid-column:span 2}
+@media(max-width:700px){.admin-product-toolbar>label:first-child{grid-column:auto}}
+.admin-product-table td>small.admin-invalid-note{color:#b42318;font-weight:700}
+.admin-status.is-claimed{background:#eaf7f0;color:var(--success)}.admin-status.is-disputed{background:#fff1f0;color:#b42318}
 .admin-product-name small{display:block;margin-top:2px;color:#9a3412;font-size:9px;font-weight:700}
 
 /* Native selects: one chevron with real breathing room on the right, everywhere.

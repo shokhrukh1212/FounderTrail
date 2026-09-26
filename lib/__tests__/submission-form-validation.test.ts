@@ -42,6 +42,10 @@ test("optional founder handle is validated without making it required", () => {
   assert.equal(validateSubmissionForm(optional).founderSocialHandle, undefined);
   optional.set("founderSocialHandle", "not a valid handle!");
   assert.match(validateSubmissionForm(optional).founderSocialHandle ?? "", /X handle/i);
+  optional.set("founderSocialHandle", "alexsmith");
+  assert.match(validateSubmissionForm(optional).founderSocialHandle ?? "", /starting with @/i);
+  optional.set("founderSocialHandle", "@alexsmith");
+  assert.equal(validateSubmissionForm(optional).founderSocialHandle, undefined);
 });
 
 test("logo and screenshot uploads report useful type, size, and count errors", () => {

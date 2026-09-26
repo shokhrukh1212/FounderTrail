@@ -9,6 +9,7 @@ import { requestOriginIsSameSite } from "@/lib/request-security";
 import { normalizeCategorySelection } from "@/lib/categories";
 import { applyProductCategories, InvalidCategorySelection } from "@/lib/product-categories";
 import { parsePricingInput } from "@/lib/product-pricing";
+import { parseXHandleInput } from "@/lib/x-handle";
 
 function clean(value: unknown, max: number): string | null { return typeof value === "string" && value.trim() && value.trim().length <= max ? value.trim() : null; }
 
@@ -54,10 +55,10 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
   const submittedShortName = typeof body?.shortName === "string" ? body.shortName.trim() : "";
   if (submittedShortName.length > 60) return NextResponse.json({ error: "Use 60 characters or fewer for the product name, and put the rest in the one-line description.", field: "shortName" }, { status: 400 });
   const shortName = clean(submittedShortName, 60), tagline = clean(body?.tagline, 160), founder = clean(body?.founderName, 120);
-  const socialRaw = typeof body?.founderSocialHandle === "string" ? body.founderSocialHandle.trim().replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "") : "";
-  const social = socialRaw ? `@${socialRaw}` : null;
+  const socialHandle = parseXHandleInput(body?.founderSocialHandle);
   if (!shortName || !tagline) return NextResponse.json({ error: "Product name and one-line description are required." }, { status: 400 });
-  if (socialRaw && !/^[A-Za-z0-9_]{1,15}$/.test(socialRaw)) return NextResponse.json({ error: "Enter an X handle such as @alexsmith." }, { status: 400 });
+  if (!socialHandle.ok) return NextResponse.json({ error: socialHandle.error, field: "founderSocialHandle" }, { status: 400 });
+  const social = socialHandle.handle;
   const categories = normalizeCategorySelection(body?.categories);
   if (!categories.ok) return NextResponse.json({ error: categories.error, field: "categories" }, { status: 400 });
   const pricing = parsePricingInput(body ?? {});

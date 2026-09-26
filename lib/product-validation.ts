@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { normalizeCategorySelection } from "./categories";
 import { parsePricingInput, type ProductPricing } from "./product-pricing";
+import { parseXHandleInput } from "./x-handle";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PRIVATE_HOSTS = new Set(["localhost", "0.0.0.0", "::", "::1"]);
@@ -87,8 +88,8 @@ export function validateProductSubmission(form: FormData, options: { draft?: boo
   const launchAt = new Date(`${launchDate}T12:00:00.000Z`);
   if (form.get("ownershipConsent") !== "on") return { ok: false, error: "Confirm that you are authorized to submit this product.", field: "ownershipConsent" };
   const founderName = text(form, "founderName", 120);
-  const social = text(form, "founderSocialHandle", 120).replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "");
-  if (social && !/^[A-Za-z0-9_]{1,15}$/.test(social)) return { ok: false, error: "Enter an X handle such as @founder.", field: "founderSocialHandle" };
+  const social = parseXHandleInput(text(form, "founderSocialHandle", 120));
+  if (!social.ok) return { ok: false, error: social.error, field: "founderSocialHandle" };
   // Pricing is optional. Nothing here infers a price from the website.
   const pricing = parsePricingInput({
     pricingModel: text(form, "pricingModel", 20),
@@ -103,7 +104,7 @@ export function validateProductSubmission(form: FormData, options: { draft?: boo
     websiteUrl: website.url, normalizedDomain: website.domain,
     name: values.name, tagline: values.tagline,
     founderName: founderName || null, contactEmail: values.contactEmail.toLowerCase(),
-    founderSocialHandle: social ? `@${social}` : null, categorySlugs: categories.slugs, launchDate, launchAt,
+    founderSocialHandle: social.handle, categorySlugs: categories.slugs, launchDate, launchAt,
     consentVersion: "2026-08-27", metadataToken: text(form, "metadataToken", 8192) || null,
     useCase:text(form,"useCase",500)||null,intendedAudience:text(form,"intendedAudience",500)||null,
     pricing: pricing.value,

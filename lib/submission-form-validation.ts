@@ -1,5 +1,6 @@
 import { normalizeCategorySelection } from "./categories";
 import { parsePricingInput } from "./product-pricing";
+import { parseXHandleInput } from "./x-handle";
 
 export const SUBMISSION_FIELDS = [
   "websiteUrl",
@@ -100,8 +101,8 @@ export function validateSubmissionForm(form: FormData, options: { draft?: boolea
 
   const email = value(form, "contactEmail");
   if (!EMAIL.test(email) || email.length > 320) errors.contactEmail = "Enter a valid private contact email.";
-  const social = value(form, "founderSocialHandle").replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "").replace(/^@/, "").replace(/\/$/, "");
-  if (social && !/^[A-Za-z0-9_]{1,15}$/.test(social)) errors.founderSocialHandle = "Use an X handle such as @alexsmith (letters, numbers and underscores only).";
+  const social = parseXHandleInput(value(form, "founderSocialHandle"));
+  if (!social.ok) errors.founderSocialHandle = social.error;
 
   const logos = form.getAll("logo").filter((entry): entry is File => entry instanceof File && entry.size > 0);
   if (logos.length > 1) errors.logo = "Choose one logo only.";

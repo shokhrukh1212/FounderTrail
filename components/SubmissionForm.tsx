@@ -469,8 +469,9 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
             <input id="submission-founderName" name="founderName" maxLength={120} defaultValue={accountName} placeholder="e.g. Alex Smith" />
           </div>
           <div className="form-field">
-            <label htmlFor="submission-founderSocialHandle">Founder X/social handle <small>Optional</small></label>
-            <input id="submission-founderSocialHandle" name="founderSocialHandle" maxLength={120} placeholder="e.g. @alexsmith" aria-invalid={Boolean(fieldErrors.founderSocialHandle)} aria-describedby={fieldDescription("founderSocialHandle", fieldErrors)} />
+            <label htmlFor="submission-founderSocialHandle">Founder X handle <small>Optional</small></label>
+            <input id="submission-founderSocialHandle" name="founderSocialHandle" maxLength={120} placeholder="@yourhandle" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={Boolean(fieldErrors.founderSocialHandle)} aria-describedby={fieldDescription("founderSocialHandle", fieldErrors, "submission-founderSocialHandle-help")} />
+            <small id="submission-founderSocialHandle-help" className="field-help">Your X username starting with @, or your x.com profile link. Not your name.</small>
             <FieldError field="founderSocialHandle" errors={fieldErrors} />
           </div>
         </div>
