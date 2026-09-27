@@ -24,6 +24,8 @@ export async function authenticateOwner(request: Request, slug: string): Promise
   if (!product) return null;
   const user = await currentUserFromHeaders(request.headers).catch(() => null);
   if (user) {
+    // Admins can open every product's workspace, as its founder would.
+    if (user.role === "admin") return { productId: product.id, slug: product.slug, tokenHash: product.token_hash, userId: user.id };
     const ownership = await query<{ allowed: boolean }>(
       `SELECT EXISTS(SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2)
            OR EXISTS(SELECT 1 FROM products WHERE id=$1::uuid AND created_by_user_id=$2) AS allowed`,

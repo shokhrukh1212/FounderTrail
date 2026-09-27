@@ -921,3 +921,7 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 .product-title-line .pro-badge{--pro-badge-size:clamp(26px,3.4vw,34px)}
 .owner-summary .pro-badge{--pro-badge-size:26px}
 .account-product-list .pro-badge{--pro-badge-size:20px}
+/* An admin inside a founder's workspace is told plainly whose data they are editing. */
+.admin-view-notice{margin-top:20px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412}
+.admin-view-notice h2{margin:0 0 4px;font-size:14px}
+.admin-view-notice p{margin:0;color:#7c2d12;font-size:12px;line-height:1.55}

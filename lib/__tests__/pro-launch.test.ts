@@ -137,3 +137,13 @@ test("the Pro badge is explicit and is never presented as verification", () => {
   assert.match(badge, /<svg className="pro-badge-icon"/);
   assert.doesNotMatch(badge, />\s*Pro\s*</);
 });
+
+test("admins can open every product's workspace and launch kit, with a notice", () => {
+  const ownerAuth = read("../owner-auth.ts");
+  const managePage = read("../../app/manage/[slug]/page.tsx");
+  const adminTable = read("../../components/AdminProductTable.tsx");
+  assert.match(ownerAuth, /user\.role === "admin"/);
+  assert.match(managePage, /adminView = !accountOwner && user\?\.role === "admin"/);
+  assert.match(managePage, /Admin view/);
+  assert.match(adminTable, /\/manage\/\$\{encodeURIComponent\(item\.slug\)\}\?tab=launch-kit/);
+});
