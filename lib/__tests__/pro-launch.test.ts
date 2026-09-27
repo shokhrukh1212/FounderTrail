@@ -133,4 +133,7 @@ test("the Pro badge is explicit and is never presented as verification", () => {
   assert.match(badge, /Pro plan/);
   assert.match(badge, /Not identity or revenue verification/);
   assert.doesNotMatch(badge, /Verified/);
+  // An icon seal, not a text pill: the only "Pro" text is in the accessible label.
+  assert.match(badge, /<svg className="pro-badge-icon"/);
+  assert.doesNotMatch(badge, />\s*Pro\s*</);
 });
