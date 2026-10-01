@@ -19,7 +19,7 @@ test("the final submission step keeps Pro explicit and free submission available
 });
 
 test("pending checkout trusts the submitter and rejection queues a durable refund", () => {
-  assert.match(pro, /p\.status='pending'.*p\.created_by_user_id=\$2/s);
+  assert.match(pro, /p\.status='pending'[\s\S]*p\.created_by_user_id=\$2/);
   assert.match(pro, /NOT EXISTS\(SELECT 1 FROM product_moderation_events/);
   assert.match(moderation, /queueRejectedProRefunds/);
   assert.match(pro, /rejection_refund_required/);
