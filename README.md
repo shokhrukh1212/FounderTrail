@@ -25,6 +25,19 @@ Production never returns demo records even if they exist in the database. Migrat
 
 Google is the only public sign-in provider. Set `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` as documented in the [exact setup guide](docs/foundertrail/GOOGLE_AND_ADMIN_SETUP.md). Resend remains separate and is used only for transactional email, invitations, digests, and optional founder campaigns; missing email configuration does not disable Google sign-in or public discovery.
 
+## Local test database
+
+`npm run dev:test` requires `TEST_DATABASE_URL`. It always uses that database, even when `DATABASE_URL` is also set. Copy `.env.example` to `.env.local` if you do not already have a local environment file, then fill in `TEST_DATABASE_URL` with the connection URL for your isolated PostgreSQL test database. Use the same file for your local authentication settings and `SITE_URL=http://localhost:3000`.
+
+```bash
+npm run migrate:test
+npm run dev:test
+```
+
+Startup checks the connection and instant-launch schema before starting Next.js. If it reports missing configuration, an unreachable database, or migration `020`, follow the terminal instructions. Startup does not create a database or apply migrations automatically. An empty `TEST_DATABASE_URL` causes the “USE_TEST_DATABASE=true but TEST_DATABASE_URL is not set” error in older versions of this command.
+
+To use another port, run `npm run dev:test -- --port 3001` and match `SITE_URL` and the Google OAuth redirect origin to that port. If Next.js reports another dev server is already running, stop that server in its terminal before restarting.
+
 ## Verification
 
 ```bash

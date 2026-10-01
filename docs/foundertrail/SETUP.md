@@ -13,6 +13,8 @@ Copy `.env.example` into a private environment file and supply real values throu
 - `RESEND_API_KEY` and `EMAIL_FROM`: optional for sign-in; required only for invitations, digests, and transactional email. Verify the sending domain first.
 - production S3-compatible upload settings; local upload storage is refused in production.
 
+For local rehearsal, set `TEST_DATABASE_URL` in `.env.local` to an isolated PostgreSQL database, run `npm run migrate:test`, then `npm run dev:test`. The development command checks connectivity and migration `020` before starting Next.js. It never falls back to `DATABASE_URL` or applies migrations automatically. See [local test setup](../../README.md#local-test-database).
+
 After the first administrator has signed in, grant the role explicitly:
 
 ```bash
