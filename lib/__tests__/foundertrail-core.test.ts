@@ -74,7 +74,8 @@ test("admin operations expose required ownership, launch, activity, and Pro cont
   assert.match(adminOperations,/proIncome/);
   assert.match(adminOperations,/proAvailability/);
   assert.match(adminOperations,/proOrders/);
-  assert.match(ownerRoute,/p\.status IN \('draft','rejected'\)/);
+  assert.match(ownerRoute,/p\.status='rejected'/);
+  assert.match(ownerRoute,/action === "publish_draft"/);
   assert.match(ownerRoute,/Owner submitted requested changes/);
 });
 

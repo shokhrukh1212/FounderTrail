@@ -18,12 +18,13 @@ export async function LaunchKitPanel({ slug, productId, entitlementStatus }: {
 }) {
   const rows = await query<{
     name: string; short_name: string | null; tagline: string; use_case: string | null; intended_audience: string | null;
-    website_url: string; launch_state: string | null;
+    website_url: string; launch_date: Date | null; launch_state: string | null;
   }>(
     `SELECT p.name,p.short_name,p.tagline,p.use_case,p.intended_audience,p.website_url,
-      (SELECT CASE WHEN lw.starts_at>now() THEN 'upcoming' WHEN now()<lw.ends_at THEN 'live' ELSE 'listed' END
+      (SELECT starts_at FROM product_launches WHERE product_id=p.id AND state<>'cancelled' LIMIT 1) AS launch_date,
+      (SELECT CASE WHEN pl.starts_at>now() THEN 'upcoming' WHEN now()<lw.ends_at THEN 'live' ELSE 'listed' END
        FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
-       WHERE pl.product_id=p.id AND pl.state IN ('scheduled','active','completed') ORDER BY lw.starts_at DESC LIMIT 1) AS launch_state
+       WHERE pl.product_id=p.id AND pl.state IN ('scheduled','active','completed') ORDER BY pl.starts_at DESC LIMIT 1) AS launch_state
      FROM products p WHERE p.id=$1::uuid`, [productId],
   );
   const product = rows[0];
@@ -32,7 +33,7 @@ export async function LaunchKitPanel({ slug, productId, entitlementStatus }: {
   // cannot fit the layout, and an owner without Pro cannot shorten them. Saved drafts keep
   // whatever name the founder saved.
   const displayName = displayProductName(product.name, product.short_name);
-  const facts: LaunchFacts = { name: displayName.length > 60 ? suggestedShortName(product.name) ?? displayName : displayName, tagline: product.tagline, useCase: product.use_case, audience: product.intended_audience, websiteUrl: product.website_url, founderTrailUrl: sharedProductUrl(config.siteUrl, slug), launchState: product.launch_state === "upcoming" || product.launch_state === "live" ? product.launch_state : "listed" };
+  const facts: LaunchFacts = { launchDate: product.launch_date ? new Date(product.launch_date).toLocaleDateString("en",{timeZone:"UTC",dateStyle:"medium"}) + " UTC" : null, name: displayName.length > 60 ? suggestedShortName(product.name) ?? displayName : displayName, tagline: product.tagline, useCase: product.use_case, audience: product.intended_audience, websiteUrl: product.website_url, founderTrailUrl: sharedProductUrl(config.siteUrl, slug), launchState: product.launch_state === "upcoming" || product.launch_state === "live" ? product.launch_state : "listed" };
   const [draftRows, media, assets] = await Promise.all([
     query<{ version: number; image_draft: Record<string, unknown>; social_draft: Record<string, unknown> }>(`SELECT version,image_draft,social_draft FROM pro_launch_kit_drafts WHERE product_id=$1::uuid`, [productId]),
     query<{ id: string; kind: "logo" | "screenshot"; position: number }>(`SELECT id::text,kind,position FROM product_media WHERE product_id=$1::uuid AND kind IN ('logo','screenshot') ORDER BY kind,position`, [productId]),

@@ -82,7 +82,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <Script id="owner-fragment-scrubber" strategy="beforeInteractive">
-          {`try{if(location.pathname.startsWith('/manage/')&&/^#(?:token|approval)=/.test(location.hash)){sessionStorage.setItem('bidindex-owner-fragment',location.hash);history.replaceState(null,'',location.pathname+location.search)}}catch{}`}
+          {`try{if(/^#access=/.test(location.hash)){const h=location.hash;const p=location.pathname.startsWith('/activate/')?location.pathname:new URLSearchParams(location.search).get('returnTo');history.replaceState(null,'',location.pathname+location.search);try{if(p&&p.startsWith('/activate/'))sessionStorage.setItem('foundertrail-access:'+p.split(/[?#]/)[0],decodeURIComponent(h.slice(8)))}catch{}}if(location.pathname.startsWith('/manage/')&&/^#(?:token|approval)=/.test(location.hash)){const h=location.hash;history.replaceState(null,'',location.pathname+location.search);try{sessionStorage.setItem('bidindex-owner-fragment',h)}catch{}}}catch{}`}
         </Script>
         {vemetricToken ? <VemetricScript token={vemetricToken} /> : null}
         {config.metaPixel.id ? (

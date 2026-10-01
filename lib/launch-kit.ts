@@ -1,3 +1,4 @@
+import { activationPost, postLength } from "./launch-policy";
 export const LAUNCH_ACCENTS = ["#FF6154", "#2563EB", "#7C3AED", "#047857", "#D97706"] as const;
 
 export type LaunchImageDraft = {
@@ -32,6 +33,7 @@ export type LaunchFacts = {
   audience: string | null;
   websiteUrl: string;
   founderTrailUrl: string;
+  launchDate?: string | null;
   launchState: "upcoming" | "live" | "listed" | "preview";
 };
 
@@ -63,12 +65,13 @@ export function displayUrl(url: string): string {
 
 export function generatedSocial(facts: LaunchFacts): Pick<LaunchSocialDraft, "short" | "linkedin" | "altText"> {
   const state = facts.launchState === "upcoming"
-    ? `${facts.name} is preparing to launch.`
+    ? `${facts.name} is launching${facts.launchDate ? ` on ${facts.launchDate}` : " soon"}.`
     : facts.launchState === "live" ? `${facts.name} has launched.` : `Meet ${facts.name}.`;
   const purpose = facts.useCase || facts.tagline;
   const audience = facts.audience ? ` Built for ${facts.audience}.` : "";
+  const rich = `${state} ${purpose}${audience} Take a look and share your feedback: ${facts.founderTrailUrl}`;
   return {
-    short: `${state} ${purpose}${audience} Take a look and share your feedback: ${facts.founderTrailUrl}`.slice(0, 280),
+    short: postLength(rich) <= 280 ? rich : activationPost(facts.name, facts.founderTrailUrl, facts.launchState === "upcoming" ? "scheduled" : facts.launchState === "live" ? "live" : "listed", facts.launchDate ?? "soon"),
     linkedin: `${state}\n\n${purpose}${audience}\n\nWe'd value thoughtful feedback from the FounderTrail community.\n\n${facts.founderTrailUrl}`.slice(0, 3000),
     altText: `${facts.name} launch announcement graphic: ${facts.tagline}`.slice(0, 300),
   };
@@ -80,7 +83,7 @@ export function defaultLaunchKitDraft(facts: LaunchFacts, logoSource = "", scree
     image: {
       template: "spotlight", format: "landscape", theme: "light", accent: LAUNCH_ACCENTS[0],
       name: facts.name.slice(0, 60), headline: facts.tagline.slice(0, 100),
-      support: (facts.useCase || facts.audience || "Discover what we're building.").slice(0, 180),
+      support: (facts.launchState === "upcoming" && facts.launchDate ? `Launching ${facts.launchDate}` : facts.useCase || facts.audience || "Discover what we're building.").slice(0, 180),
       cta: "See the launch", url: displayUrl(facts.founderTrailUrl).slice(0, 120), logoSource, screenshotSource,
       // Website screenshots lead with their hero, so new drafts anchor to the top.
       fit: "cover", focalX: 50, focalY: 0,

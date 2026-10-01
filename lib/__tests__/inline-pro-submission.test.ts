@@ -12,8 +12,8 @@ const migration = read("../../migrations/018_inline_pro_submission.up.sql");
 
 test("the final submission step keeps Pro explicit and free submission available", () => {
   assert.match(offer, /type="checkbox" checked=\{selected\}/);
-  assert.match(form, /Submit & go to checkout/);
-  assert.match(form, /Free submission/);
+  assert.match(form, /Publish & launch now/);
+  assert.match(form, /Free publication/);
   assert.match(form, /submissionStatus" value="draft"/);
   assert.match(form, /submissionKey/);
 });

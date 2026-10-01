@@ -2,9 +2,32 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { ActivationWorkspace } from "@/components/ActivationWorkspace";
 import { LaunchScheduler } from "@/components/LaunchScheduler";
+import { LaunchKitPanel } from "@/components/LaunchKitPanel";
 import { currentUserFromHeaders } from "@/lib/auth";
+import { authenticateOwner } from "@/lib/owner-auth";
 import { query } from "@/lib/db";
+import { config } from "@/lib/config";
+import { getProAvailability } from "@/lib/pro-launch";
+import { canonicalProductUrl } from "@/lib/product-share";
 import { displayProductName } from "@/lib/display-text";
-export const dynamic="force-dynamic";export const metadata:Metadata={title:"Schedule launch",robots:{index:false,follow:false}};
-export default async function LaunchPage({params}:PageProps<"/manage/[slug]/launch">){const{slug}=await params;const user=await currentUserFromHeaders(await headers()).catch(()=>null);if(!user)redirect(`/sign-in?returnTo=${encodeURIComponent(`/manage/${slug}/launch`)}`);const rows=await query<{id:string;name:string;short_name:string|null;status:string;launch_id:string|null;starts_at:Date|null;ends_at:Date|null;launch_state:string|null;final_rank:number|null;final_vote_count:number|null}>(`SELECT p.id::text,p.name,p.short_name,p.status,pl.id::text AS launch_id,lw.starts_at,lw.ends_at,pl.state AS launch_state,pl.final_rank,pl.final_vote_count FROM products p JOIN product_owners po ON po.product_id=p.id AND po.user_id=$2 LEFT JOIN product_launches pl ON pl.product_id=p.id LEFT JOIN launch_weeks lw ON lw.id=pl.launch_week_id WHERE p.slug=$1`,[slug,user.id]);const product=rows[0];if(!product)notFound();const name=displayProductName(product.name,product.short_name);return <main className="app-shell inner-page account-page launch-page"><Link className="text-link back-link" href={`/manage/${slug}`}>← Back to {name}</Link><header className="page-heading"><p className="eyebrow">Launch · {name}</p><h1>Your first FounderTrail launch</h1><p>A first-time upvote cast during the live week counts in both the permanent total and this week&apos;s score. Earlier support stays permanent but does not inflate the weekly score. Paid placement never affects rank.</p></header><section className="settings-card">{product.launch_id?<><h2>{product.launch_state}</h2><p>{product.starts_at?.toLocaleString("en",{timeZone:"UTC"})} → {product.ends_at?.toLocaleString("en",{timeZone:"UTC"})} UTC</p>{product.final_rank?<p>Final result: #{product.final_rank} with {product.final_vote_count} votes.</p>:null}</>:product.status==="published"?<><h2>Choose your launch week</h2><LaunchScheduler slug={slug}/></>:<p>Your product must be approved and public before scheduling a launch.</p>}</section></main>}
+import type { LaunchChoice } from "@/lib/launch-policy";
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Your launch workspace", robots: { index: false, follow: false } };
+export default async function LaunchPage({params, searchParams}: PageProps<"/manage/[slug]/launch">) {
+  const {slug} = await params; const requestHeaders = await headers();
+  const user = await currentUserFromHeaders(requestHeaders);
+  if (!user) redirect(`/sign-in?returnTo=${encodeURIComponent(`/manage/${slug}/launch`)}`);
+  const owner = await authenticateOwner(new Request(config.siteUrl,{headers:requestHeaders}),slug);
+  if (!owner) redirect(`/activate/${slug}`);
+  const rows = await query<{id:string;name:string;short_name:string|null;tagline:string;status:string;logo:string|null;starts_at:Date|null;ends_at:Date|null;launch_state:string|null;post_draft:string|null;share_state:string|null;composer_opened_at:Date|null;pro_status:string|null;launch_choice:LaunchChoice;requested_launch_at:Date|null}>(`SELECT p.id::text,p.name,p.short_name,p.tagline,p.status,p.launch_choice,p.requested_launch_at,(SELECT public_url FROM product_media WHERE product_id=p.id AND kind='logo' LIMIT 1) AS logo,pl.starts_at,lw.ends_at,pl.state AS launch_state,a.post_draft,a.share_state,a.composer_opened_at,e.status AS pro_status FROM products p LEFT JOIN product_launches pl ON pl.product_id=p.id AND pl.state<>'cancelled' LEFT JOIN launch_weeks lw ON lw.id=pl.launch_week_id LEFT JOIN product_activation a ON a.product_id=p.id LEFT JOIN pro_entitlements e ON e.product_id=p.id WHERE p.id=$1::uuid`,[owner.productId]);
+  const product = rows[0]; if (!product) notFound();
+  if (product.status !== "published") return <main className="app-shell inner-page account-page"><Link href={`/manage/${slug}`}>← Back to dashboard</Link><h1>{product.status === "draft" ? "Your draft is saved." : "This page is not public."}</h1>{product.status === "draft" ? <><p>Finish the details in your dashboard, then choose your launch. Your saved choice is shown below.</p><LaunchScheduler slug={slug} publishDraft initialChoice={product.launch_choice} initialDate={product.requested_launch_at ? new Date(product.requested_launch_at).toISOString() : ""}/></> : <p>Check the moderation status in your dashboard before publishing.</p>}</main>;
+  const availability = await getProAvailability();
+  const now = new Date().getTime();
+  const state = !product.starts_at ? "listed" : new Date(product.starts_at).getTime()>now ? "scheduled" : product.ends_at && new Date(product.ends_at).getTime()<=now ? "past" : "live";
+  const search = await searchParams;
+  const adminView = user.role === "admin" && !(await query(`SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2`, [product.id,user.id])).length;
+  return <main className="app-shell inner-page activation-page"><Link className="text-link back-link" href="/my-products">← My startups</Link>{adminView ? <section className="manager-notice admin-view-notice"><h2>Admin view</h2><p>Changes here apply to the founder’s real listing and launch workspace.</p></section> : null}<ActivationWorkspace data={{slug,name:displayProductName(product.name,product.short_name),tagline:product.tagline,logo:product.logo,publicUrl:canonicalProductUrl(config.siteUrl,slug),state,startsAt:product.starts_at?.toISOString()??null,endsAt:product.ends_at?.toISOString()??null,post:product.post_draft,shareState:product.share_state??"todo",composerOpened:Boolean(product.composer_opened_at),isPro:product.pro_status==='active',price:availability.currentPriceMinor,available:availability.available,checkoutStatus:typeof search.checkout === 'string' ? search.checkout : undefined,checkoutOrder:typeof search.order === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search.order) ? search.order : undefined}} kit={product.pro_status === 'active' ? <LaunchKitPanel slug={slug} productId={product.id} entitlementStatus={product.pro_status}/> : null}/></main>;
+}

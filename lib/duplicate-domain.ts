@@ -1,4 +1,5 @@
 import "server-only";
+import { productIdentity } from "./launch-policy";
 import { query } from "./db";
 
 /**
@@ -16,19 +17,19 @@ export type DomainDuplicate = {
 };
 
 const MESSAGES = {
-  published: "A startup from this domain is already listed. Claim it, or confirm this is a distinct product on the same domain.",
+  published: "This startup is already listed. Open its management access page to continue.",
   own_draft: "You already have a draft or submission for this domain. Continue it from My products.",
   under_review: "A submission for this domain is already under review.",
 } as const;
 
-export async function findDomainDuplicate(normalizedDomain: string, userId: string | null): Promise<DomainDuplicate | null> {
-  const rows = await query<{ slug: string; name: string; status: string; created_by_user_id: string | null }>(
-    `SELECT slug,name,status,created_by_user_id FROM products
+export async function findDomainDuplicate(normalizedDomain: string, userId: string | null, websiteUrl?: string): Promise<DomainDuplicate | null> {
+  const rows = await query<{ slug: string; name: string; status: string; created_by_user_id: string | null; website_url: string }>(
+    `SELECT slug,name,status,created_by_user_id,website_url FROM products
       WHERE normalized_domain=$1 AND status IN ('draft','pending','published')
-      ORDER BY CASE status WHEN 'published' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,created_at LIMIT 1`,
+      ORDER BY CASE status WHEN 'published' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,created_at`,
     [normalizedDomain],
   );
-  const duplicate = rows[0];
+  const duplicate = websiteUrl ? rows.find(row => productIdentity(row.website_url) === productIdentity(websiteUrl)) : rows[0];
   if (!duplicate) return null;
   if (duplicate.status === "published") {
     return { kind: "published", slug: duplicate.slug, name: duplicate.name, message: MESSAGES.published };

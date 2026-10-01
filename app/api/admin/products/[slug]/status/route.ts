@@ -1,3 +1,5 @@
+import { revalidatePath } from "next/cache";
+import { currentUserFromHeaders } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 import { validAdminRequest } from "@/lib/admin-auth";
@@ -24,6 +26,23 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
     status?: unknown; name?: unknown; tagline?: unknown; categories?: unknown;
     reason?: unknown; overrideDuplicate?: unknown;
   } | null;
+  if (body?.status === "archived" || body?.status === "restore") {
+    const reason=text(body.reason,1000);
+    if(!reason) return NextResponse.json({error:"Add a moderation reason."},{status:400});
+    const actor=await currentUserFromHeaders(request.headers);
+    const changed=await withTransaction(async client=>{
+      const rows=await client.query<{id:string;status:string}>(`SELECT id::text,status FROM products WHERE slug=$1 FOR UPDATE`,[slug]);
+      const product=rows.rows[0];if(!product)return false;
+      const status=body.status === "archived" ? "archived" : "published";
+      if(status === "published" && product.status !== "archived")return false;
+      await client.query(`UPDATE products SET status=$2,published_at=CASE WHEN $2='published' THEN coalesce(published_at,now()) ELSE published_at END,approved_at=CASE WHEN $2='published' THEN coalesce(approved_at,now()) ELSE approved_at END,updated_at=now() WHERE id=$1::uuid`,[product.id,status]);
+      await client.query(`INSERT INTO product_moderation_events(product_id,from_status,to_status,internal_reason) VALUES($1::uuid,$2,$3,$4)`,[product.id,product.status,status,reason]);
+      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'admin',$2,$3::uuid,jsonb_build_object('reason',$4::text))`,[actor?.id??null,status === "archived" ? "listing.hidden" : "listing.restored",product.id,reason]);
+      return true;
+    });
+    revalidatePath('/');revalidatePath(`/product/${slug}`);
+    return changed?NextResponse.json({status:body.status === "archived" ? "archived" : "published"}):NextResponse.json({error:"Listing not found or cannot be restored."},{status:404});
+  }
   if (body?.status !== "published" && body?.status !== "rejected") return NextResponse.json({ error: "Invalid moderation status." }, { status: 400 });
   const name = text(body.name, 80);
   const tagline = text(body.tagline, 160);
@@ -87,6 +106,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pr
     });
 
     if (!changed) return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    revalidatePath("/"); revalidatePath(`/product/${slug}`);
     if ("rejected" in changed) return NextResponse.json({ status: "rejected" });
 
     let email: ApprovalEmailResult;

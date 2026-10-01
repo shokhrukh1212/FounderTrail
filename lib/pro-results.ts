@@ -20,7 +20,7 @@ export type ProReportData = {
 async function synchronizeFutureAnchor(client: PoolClient, window: { id: string; product_id: string; anchor_kind: string; launch_id: string | null; starts_at: Date }) {
   if (window.anchor_kind !== "future_launch" || new Date(window.starts_at).getTime() <= Date.now() || !window.launch_id) return;
   const bound = await client.query<{ state: string; starts_at: Date }>(
-    `SELECT pl.state,lw.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id WHERE pl.id=$1::uuid`, [window.launch_id],
+    `SELECT pl.state,pl.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id WHERE pl.id=$1::uuid`, [window.launch_id],
   );
   const launch = bound.rows[0];
   if (launch && launch.state !== "cancelled") {
@@ -28,8 +28,8 @@ async function synchronizeFutureAnchor(client: PoolClient, window: { id: string;
     return;
   }
   const replacement = await client.query<{ id: string; starts_at: Date }>(
-    `SELECT pl.id::text,lw.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
-      WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active') AND lw.starts_at>now() ORDER BY lw.starts_at LIMIT 1`, [window.product_id],
+    `SELECT pl.id::text,pl.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
+      WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active') AND pl.starts_at>now() ORDER BY pl.starts_at LIMIT 1`, [window.product_id],
   );
   if (replacement.rows[0]) await client.query(`UPDATE pro_result_windows SET launch_id=$2::uuid,starts_at=$3,ends_at=$3+interval '7 days',updated_at=now() WHERE id=$1::uuid`, [window.id, replacement.rows[0].id, replacement.rows[0].starts_at]);
   else await client.query(`UPDATE pro_result_windows SET anchor_kind='activation',launch_id=NULL,starts_at=now(),ends_at=now()+interval '7 days',status='in_progress',updated_at=now() WHERE id=$1::uuid`, [window.id]);
@@ -66,15 +66,15 @@ export async function getProReport(productId: string): Promise<ProReportData | n
   return withTransaction(async (client) => {
     // A pre-approval purchase has no reporting window until its real launch exists.
     await client.query(`INSERT INTO pro_result_windows(product_id,entitlement_order_id,anchor_kind,launch_id,starts_at,ends_at,coverage_starts_at,status)
-      SELECT e.product_id,e.source_order_id,'future_launch',pl.id,lw.starts_at,lw.starts_at+interval '7 days',c.starts_at,
-        CASE WHEN lw.starts_at>now() THEN 'scheduled' ELSE 'in_progress' END
+      SELECT e.product_id,e.source_order_id,'future_launch',pl.id,pl.starts_at,pl.starts_at+interval '7 days',c.starts_at,
+        CASE WHEN pl.starts_at>now() THEN 'scheduled' ELSE 'in_progress' END
       FROM pro_entitlements e JOIN pro_launch_orders o ON o.id=e.source_order_id
       JOIN products p ON p.id=e.product_id
       JOIN product_launches pl ON pl.product_id=p.id JOIN launch_weeks lw ON lw.id=pl.launch_week_id
       CROSS JOIN pro_reporting_coverage c
       WHERE e.product_id=$1::uuid AND e.status='active' AND o.purchased_before_approval
         AND p.status='published' AND pl.state IN ('scheduled','active','completed')
-      ORDER BY lw.starts_at LIMIT 1 ON CONFLICT(product_id) DO NOTHING`, [productId]);
+      ORDER BY pl.starts_at LIMIT 1 ON CONFLICT(product_id) DO NOTHING`, [productId]);
     let rows = await client.query<{
       id: string; product_id: string; name: string; slug: string; anchor_kind: "activation" | "future_launch";
       launch_id: string | null; starts_at: Date; ends_at: Date; coverage_starts_at: Date;

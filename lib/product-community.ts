@@ -17,6 +17,7 @@ export type ProductCommunityState = {
   outboundClicks: number;
   upvoted: boolean;
   isOwner: boolean;
+  domainOwnershipVerified: boolean;
   ownershipState: "claimed" | "pending" | "disputed" | "unclaimed";
   launch: null | {
     id: string;
@@ -68,6 +69,7 @@ export async function getProductCommunityState(productId: string, userId: string
     outbound_clicks: number;
     upvoted: boolean;
     is_owner: boolean;
+    domain_ownership_verified: boolean;
     ownership_state: "claimed" | "pending" | "disputed" | "unclaimed";
     launch_id: string | null;
     launch_votes: number;
@@ -97,18 +99,19 @@ export async function getProductCommunityState(productId: string, userId: string
                  WHEN EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) THEN 'claimed'
                  WHEN EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='pending') THEN 'pending'
                  ELSE 'unclaimed' END AS ownership_state,
+            EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.verification_method IN ('domain_meta','domain_file','dns')) AS domain_ownership_verified,
             pl.id::text AS launch_id,
             CASE WHEN pl.id IS NULL THEN 0 ELSE (SELECT count(*)::int FROM launch_votes lv WHERE lv.launch_id=pl.id AND lv.active) END AS launch_votes,
             CASE WHEN pl.id IS NULL OR $2::text IS NULL THEN false ELSE EXISTS(
               SELECT 1 FROM launch_votes lv WHERE lv.launch_id=pl.id AND lv.user_id=$2 AND lv.active
             ) END AS launch_voted,
-            lw.starts_at,lw.ends_at,
-            CASE WHEN lw.id IS NULL THEN false ELSE lw.starts_at<=now() AND now()<lw.ends_at AND pl.state IN ('scheduled','active') END AS launch_active
+            pl.starts_at,lw.ends_at,
+            CASE WHEN lw.id IS NULL THEN false ELSE pl.starts_at<=now() AND now()<lw.ends_at AND pl.state IN ('scheduled','active') END AS launch_active
        FROM products p
        LEFT JOIN product_launches pl ON pl.product_id=p.id AND pl.state IN ('scheduled','active','completed')
        LEFT JOIN launch_weeks lw ON lw.id=pl.launch_week_id
       WHERE p.id=$1::uuid
-      ORDER BY lw.starts_at DESC NULLS LAST LIMIT 1`,
+      ORDER BY pl.starts_at DESC NULLS LAST LIMIT 1`,
     [productId, userId],
   );
   const row = rows[0];
@@ -132,6 +135,7 @@ export async function getProductCommunityState(productId: string, userId: string
     outboundClicks: Number(row.outbound_clicks),
     upvoted: row.upvoted,
     isOwner: row.is_owner,
+    domainOwnershipVerified: row.domain_ownership_verified,
     ownershipState: row.ownership_state,
     launch: row.launch_id && row.starts_at && row.ends_at ? {
       id: row.launch_id,

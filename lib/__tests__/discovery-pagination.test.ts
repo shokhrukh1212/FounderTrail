@@ -22,12 +22,12 @@ test("discovery exposes the three product views and stable pagination",()=>{
 test("an empty launch week visibly falls back to the existing directory",()=>{
   assert.match(homepage,/No launches this week yet/);
   assert.match(homepage,/Community favourites/);
-  assert.match(homepage,/Schedule your launch/);
+  assert.match(homepage,/Launch your startup/);
   assert.match(homepage,/Browse and filter all/);
 });
 
 test("weekly launch order is isolated from legacy support and paid placement",()=>{
-  assert.match(data,/launch_votes DESC,pl\.approved_at,p\.id/);
+  assert.match(data,/launch_votes DESC,pl\.starts_at,p\.id/);
   assert.match(data,/JOIN product_launches/);
   assert.match(data,/all_time_upvotes/);
   assert.match(launchVote,/status: 410/);

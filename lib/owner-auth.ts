@@ -1,7 +1,8 @@
 import "server-only";
 import { approvalAccessMatches } from "./approval-access";
 import { config } from "./config";
-import { query } from "./db";
+import { query, withTransaction } from "./db";
+import { associateOriginalSubmitter } from "./management-access";
 import { tokenHashMatches } from "./bidindex-owner";
 import { currentUserFromHeaders } from "./auth";
 
@@ -27,11 +28,15 @@ export async function authenticateOwner(request: Request, slug: string): Promise
     // Admins can open every product's workspace, as its founder would.
     if (user.role === "admin") return { productId: product.id, slug: product.slug, tokenHash: product.token_hash, userId: user.id };
     const ownership = await query<{ allowed: boolean }>(
-      `SELECT EXISTS(SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2)
-           OR EXISTS(SELECT 1 FROM products WHERE id=$1::uuid AND created_by_user_id=$2) AS allowed`,
+      `SELECT EXISTS(SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2) AS allowed`,
       [product.id, user.id],
     );
     if (ownership[0]?.allowed) return { productId: product.id, slug: product.slug, tokenHash: product.token_hash, userId: user.id };
+    const associated = await withTransaction(async client => {
+      await client.query(`SELECT id FROM products WHERE id=$1::uuid FOR UPDATE`, [product.id]);
+      return associateOriginalSubmitter(client, product.id, user.id);
+    });
+    if (associated) return { productId: product.id, slug: product.slug, tokenHash: product.token_hash, userId: user.id };
   }
   return null;
 }

@@ -5,6 +5,7 @@ import { query } from "./db";
 import { trackXConversion } from "./x-ads";
 
 export const FUNNEL_EVENTS = [
+  "publication_completed", "launch_now_completed", "launch_scheduled", "launch_rescheduled", "launch_cancelled", "scheduled_launch_activated", "activation_workspace_viewed", "public_link_copied", "x_composer_opened", "share_self_reported", "launch_image_downloaded",
   "buyer_landing_viewed",
   "product_url_submitted",
   "claim_opened",

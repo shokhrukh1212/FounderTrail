@@ -1,10 +1,16 @@
+import { revalidatePath } from "next/cache";
+import { validateProductSubmission } from "@/lib/product-validation";
+import { saveLaunch } from "@/lib/launch-service";
+import { insertFunnelEvent } from "@/lib/analytics";
 import { NextResponse } from "next/server";
 
 import { config } from "@/lib/config";
 import { query,withTransaction } from "@/lib/db";
 import { updateOwnerMarketingPreference } from "@/lib/email-preferences";
 import { authenticateOwner } from "@/lib/owner-auth";
-import { canonicalProductUrl, xLaunchIntent } from "@/lib/product-share";
+import { canonicalProductUrl } from "@/lib/product-share";
+import { activationPost } from "@/lib/launch-policy";
+import { displayProductName } from "@/lib/display-text";
 import { requestOriginIsSameSite } from "@/lib/request-security";
 import { normalizeCategorySelection } from "@/lib/categories";
 import { applyProductCategories, InvalidCategorySelection } from "@/lib/product-categories";
@@ -17,8 +23,8 @@ export async function GET(request: Request, context: RouteContext<"/api/owner/pr
   const { slug } = await context.params;
   const owner = await authenticateOwner(request, slug);
   if (!owner) return NextResponse.json({ error: "Owner access required." }, { status: 401 });
-  const rows = await query<{ status: string; approved_at: Date | null; name: string; tagline: string; review_reason:string|null }>(
-    `SELECT p.status,p.approved_at,p.name,p.tagline,
+  const rows = await query<{ status: string; approved_at: Date | null; name: string; short_name:string|null; starts_at:Date|null; review_reason:string|null }>(
+    `SELECT p.status,p.approved_at,p.name,p.short_name,(SELECT starts_at FROM product_launches WHERE product_id=p.id AND state<>'cancelled') AS starts_at,
       (SELECT me.internal_reason FROM product_moderation_events me WHERE me.product_id=p.id AND me.to_status='rejected' ORDER BY me.created_at DESC LIMIT 1) AS review_reason
       FROM products p WHERE p.id=$1::uuid LIMIT 1`, [owner.productId],
   );
@@ -29,7 +35,7 @@ export async function GET(request: Request, context: RouteContext<"/api/owner/pr
     status: product.status,
     approvedAt: product.approved_at?.toISOString() ?? null,
     publicUrl,
-    shareUrl: publicUrl ? xLaunchIntent({ siteUrl: config.siteUrl, slug, productName: product.name, description: product.tagline }) : null,
+    shareUrl: publicUrl ? `https://x.com/intent/tweet?${new URLSearchParams({text:activationPost(displayProductName(product.name,product.short_name),publicUrl,!product.starts_at ? "listed" : product.starts_at>new Date() ? "scheduled" : "live",product.starts_at?.toLocaleDateString("en",{timeZone:"UTC",month:"short",day:"numeric",year:"numeric"}))})}` : null,
     reviewReason:product.status==="rejected"?product.review_reason:null,
   }, { headers: { "cache-control": "no-store" } });
 }
@@ -40,9 +46,28 @@ export async function PATCH(request: Request, context: RouteContext<"/api/owner/
   const owner = await authenticateOwner(request, slug);
   if (!owner) return NextResponse.json({ error: "Owner access required." }, { status: 401 });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (body?.action === "publish_draft") {
+    try {
+      await withTransaction(async client => {
+        const rows = await client.query<Record<string, unknown>>(`SELECT p.*,(SELECT string_agg(c.slug,',') FROM product_categories pc JOIN categories c ON c.id=pc.category_id WHERE pc.product_id=p.id) AS categories FROM products p WHERE p.id=$1::uuid FOR UPDATE`, [owner.productId]);
+        const product=rows.rows[0];
+        if (product?.status === "published") return;
+        if (!product || product.status !== "draft") throw new Error("Only a saved draft can be published here.");
+        const form=new FormData();
+        for (const [key,value] of Object.entries({websiteUrl:product.website_url,name:product.short_name||product.name,tagline:product.tagline,contactEmail:product.contact_email,categories:product.categories,ownershipConsent:product.submission_consent_at ? 'on' : ''})) form.set(key,String(value??''));
+        const valid=validateProductSubmission(form);
+        if(!valid.ok) throw new Error(valid.error);
+        await client.query(`UPDATE products SET status='published',published_at=now(),approved_at=coalesce(approved_at,now()),updated_at=now() WHERE id=$1::uuid`,[owner.productId]);
+        await saveLaunch(client,owner.productId,owner.userId,body.choice,body.startsAt);
+        await insertFunnelEvent(client,{name:"publication_completed",idempotencyKey:owner.productId,eventData:{productId:owner.productId}});
+      });
+      revalidatePath('/');revalidatePath(`/product/${slug}`);
+      return NextResponse.json({status:"published"});
+    } catch(error) { return NextResponse.json({error:error instanceof Error && !(error as {code?:string}).code ? error.message : "Could not publish. Check the saved details and try again."},{status:400}); }
+  }
   if (body?.action === "submit_for_review") {
-    const changed=await withTransaction(async client=>{const before=await client.query<{status:string;submission_pro_selected:boolean}>(`SELECT p.status,p.submission_pro_selected FROM products p WHERE p.id=$1::uuid AND p.status IN ('draft','rejected') AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) FOR UPDATE`,[owner.productId]);const product=before.rows[0];if(!product)return null;await client.query(`UPDATE products SET status='pending',updated_at=now() WHERE id=$1::uuid`,[owner.productId]);await client.query(`INSERT INTO product_moderation_events(product_id,from_status,to_status,internal_reason) VALUES($1::uuid,$2,'pending',$3)`,[owner.productId,product.status,product.status==="rejected"?"Owner submitted requested changes for another review.":"Owner submitted verified draft for review."]);return {proSelected:product.submission_pro_selected,wasRejected:product.status==="rejected"}});
-    return changed ? NextResponse.json({ message: "Submitted for review.", status: "pending", proSelected: changed.proSelected && !changed.wasRejected }) : NextResponse.json({ error: "Verify product ownership before submitting the draft or requested changes for review." }, { status: 409 });
+    const changed=await withTransaction(async client=>{const before=await client.query<{status:string}>(`SELECT p.status FROM products p WHERE p.id=$1::uuid AND p.status='rejected' FOR UPDATE`,[owner.productId]);const product=before.rows[0];if(!product)return null;await client.query(`UPDATE products SET status='pending',updated_at=now() WHERE id=$1::uuid`,[owner.productId]);await client.query(`INSERT INTO product_moderation_events(product_id,from_status,to_status,internal_reason) VALUES($1::uuid,'rejected','pending','Owner submitted requested changes for another review.')`,[owner.productId]);return true;});
+    return changed ? NextResponse.json({ message: "Submitted for review.", status: "pending", proSelected: false }) : NextResponse.json({ error: "This action is for a rejected listing. Publish saved drafts from the launch workspace." }, { status: 409 });
   }
   // The Settings tab saves only the optional founder-news preference. Product saves no
   // longer carry that checkbox, so saving a listing can never change email consent.

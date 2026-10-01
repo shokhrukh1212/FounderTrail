@@ -3,6 +3,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { LaunchChoice } from "./LaunchChoice";
+import { parseLaunchChoice, type LaunchChoice as Choice } from "@/lib/launch-policy";
 import { SubmissionProOffer } from "./SubmissionProOffer";
 import {
   isSubmissionField,
@@ -18,6 +20,7 @@ import {
 import { ProductLogo } from "./ProductLogo";
 import { CategoryPicker } from "./CategoryPicker";
 import { PricingFields } from "./PricingFields";
+import { categoryName } from "@/lib/categories";
 import { EMPTY_PRICING } from "@/lib/product-pricing";
 import { readJsonResponse, shrinkImageForUpload } from "@/lib/client-image";
 
@@ -31,7 +34,7 @@ type Metadata = {
 
 type Duplicate = { kind: "published" | "own_draft" | "under_review"; slug: string | null; name: string | null; message: string };
 
-const STEP_LABELS: Record<SubmissionStep, string> = { 1: "Website", 2: "Startup details", 3: "Founder and review" };
+const STEP_LABELS: Record<SubmissionStep, string> = { 1: "Website", 2: "Startup details", 3: "Review & launch" };
 
 function FieldError({ field, errors }: { field: SubmissionField; errors: SubmissionFieldErrors }) {
   const message = errors[field];
@@ -46,6 +49,8 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
   const formRef = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [submissionKey, setSubmissionKey] = useState("");
+  const [launchChoice, setLaunchChoice] = useState<Choice>("now");
+  const [launchDate, setLaunchDate] = useState("");
   const [proSelected, setProSelected] = useState(false);
   const [proPrice, setProPrice] = useState(500);
   const [proConfigured, setProConfigured] = useState(false);
@@ -56,6 +61,8 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
     try {
       const saved = JSON.parse(sessionStorage.getItem(`submission-pro:${accountEmail}`) || "null");
       if (saved?.key) key = saved.key;
+      if (["now", "scheduled", "none"].includes(saved?.launchChoice)) queueMicrotask(() => setLaunchChoice(saved.launchChoice));
+      if (typeof saved?.launchDate === "string") queueMicrotask(() => setLaunchDate(saved.launchDate));
       restored = saved?.selected === true;
     } catch { /* Storage can be disabled. Server replay protection still applies. */ }
     queueMicrotask(() => { setSubmissionKey(key); setProSelected(restored); });
@@ -66,13 +73,14 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
   }, [accountEmail]);
   useEffect(() => {
     if (!submissionKey) return;
-    try { sessionStorage.setItem(`submission-pro:${accountEmail}`, JSON.stringify({ key: submissionKey, selected: proSelected })); } catch {}
-  }, [submissionKey, proSelected, accountEmail]);
+    try { sessionStorage.setItem(`submission-pro:${accountEmail}`, JSON.stringify({ key: submissionKey, selected: proSelected, launchChoice, launchDate })); } catch {}
+  }, [submissionKey, proSelected, accountEmail, launchChoice, launchDate]);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const screenshotsInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<SubmissionStep>(1);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [name, setName] = useState("");
+  const [reviewCategories, setReviewCategories] = useState<string[]>([]);
   const [tagline, setTagline] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [screenshots, setScreenshots] = useState<File[]>([]);
@@ -87,7 +95,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
   const [fieldErrors, setFieldErrors] = useState<SubmissionFieldErrors>({});
   const [fetchMessage, setFetchMessage] = useState("");
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
-  const [created, setCreated] = useState<{ slug: string; status: "draft" | "pending"; managementUrl: string; claimPath?: string; claimValue?: string } | null>(null);
+  const [created, setCreated] = useState<{ slug: string; status: "draft" | "published"; managementUrl: string; claimPath?: string; claimValue?: string } | null>(null);
   const [existingProduct, setExistingProduct] = useState<{ slug: string; name: string } | null>(null);
   // A field the founder has typed in is never replaced by a later fetch.
   const edited = useRef<Set<"name" | "tagline">>(new Set());
@@ -265,6 +273,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
     setFieldErrors((current) => ({ ...current, ...stepErrors }));
     const firstInvalid = Object.keys(stepErrors).find(isSubmissionField);
     if (firstInvalid) { focusField(firstInvalid); return; }
+    setReviewCategories(String(data.get("categories")||"").split(",").filter(Boolean));
     setStep(next);
   }
 
@@ -287,12 +296,15 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
       focusField(firstInvalid);
       return;
     }
+    try { if (!draft) parseLaunchChoice(launchChoice, data.get("launchStartsAt")); }
+    catch (caught) { setError((caught as Error).message); return; }
     submitting.current = true;
     setBusy(true);
     try {
       const response = await fetch("/api/products", { method: "POST", body: await compactUploads(data) });
-      const result = await readJsonResponse<{ error?: string; field?: unknown; product?: { slug: string; status: "draft" | "pending" }; managementUrl?: string; ownershipVerification?: { path: string; value: string }; existingProduct?: { slug: string; name: string } | null }>(response);
+      const result = await readJsonResponse<{ error?: string; field?: unknown; product?: { slug: string; status: "draft" | "published" }; managementUrl?: string; ownershipVerification?: { path: string; value: string }; accessUrl?: string; existingProduct?: { slug: string; name: string } | null }>(response);
       if (!response.ok || !result.product || !result.managementUrl) {
+        if (result.accessUrl) { window.location.assign(result.accessUrl); return; }
         const message = result.error || "Submission failed.";
         if (isSubmissionField(result.field)) {
           const field = result.field;
@@ -306,6 +318,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
       setCreated({ slug: result.product.slug, status: result.product.status, managementUrl: result.managementUrl, claimPath: result.ownershipVerification?.path, claimValue: result.ownershipVerification?.value });
       try { sessionStorage.removeItem(`submission-pro:${accountEmail}`); } catch {}
       if (!draft && proSelected && proConfigured) await openProCheckout(result.product.slug);
+      else window.location.assign(result.managementUrl);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Submission failed. Please try again.");
     } finally {
@@ -331,18 +344,10 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
   }
 
   if (created) return <section className="submission-success" aria-live="polite">
-    <span className="verified-mark">✓</span>
-    <h2>{created.status === "draft" ? "Your draft is saved." : "Your startup is submitted."}</h2>
-    {created.status === "pending" && proSelected ? <div className="manager-notice"><p>Your startup was submitted for review. Pro hasn’t been activated yet.</p>{checkoutError ? <p role="alert">{checkoutError}</p> : null}<div className="button-row"><button type="button" className="button button-primary" disabled={busy || !proConfigured} onClick={() => void openProCheckout(created.slug)}>{busy ? "Opening checkout…" : `Retry Pro checkout · $${proPrice / 100} once`}</button><Link className="button button-secondary" href={`/manage/${created.slug}`}>Continue free</Link><Link href={`/manage/${created.slug}/pro`}>Check payment status</Link></div></div> : null}
-    <p>{created.status === "draft"
-      ? "Verify the domain, finish any details, then submit it for review from My products."
-      : "We’ll review the listing before it appears publicly. Once it’s approved you can schedule its launch week and publish updates."} The draft stays attached to your signed-in account.</p>
-    {created.claimPath && created.claimValue ? <div className="private-link-box"><strong>Verify the startup’s domain</strong><p>Publish a plain-text file at <code>{created.claimPath}</code> containing this exact value, then verify it from My products.</p><code>{created.claimValue}</code></div> : null}
-    <div className="button-row">
-      <Link className="button button-primary" href={`/claim/${created.slug}`}>Verify ownership</Link>
-      <Link className="button button-secondary" href="/my-products">My products</Link>
-    </div>
-    <p className="form-hint">Pro is optional and never affects review, ranking, or launch position. You can upgrade later from your dashboard.</p>
+    <span className="verified-mark">✓</span><h2>{created.status === "draft" ? "Your draft is saved." : "Your startup is live."}</h2>
+    <p>{created.status === "draft" ? "Your details and launch choice are saved to your account." : "Your public page and selected launch are saved. Pro is optional."}</p>
+    {checkoutError ? <p className="form-error" role="alert">{checkoutError} Your page is already published.</p> : null}
+    <div className="button-row"><Link className="button button-primary" href={created.managementUrl}>{created.status === "draft" ? "Continue your draft" : "Open launch workspace"}</Link>{checkoutError ? <button className="button button-secondary" disabled={busy} onClick={() => void openProCheckout(created.slug)}>Retry Pro checkout · ${proPrice / 100}</button> : null}</div>
   </section>;
 
   return <>
@@ -383,7 +388,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
         {duplicate ? <div className="duplicate-notice" role="status">
           <strong>This domain is already on FounderTrail.</strong>
           <p>{duplicate.message}</p>
-          {duplicate.kind === "published" && duplicate.slug ? <Link className="button button-primary" href={`/product/${duplicate.slug}#claim`}>Claim {duplicate.name}</Link> : null}
+          {duplicate.kind === "published" && duplicate.slug ? <Link className="button button-primary" href={`/activate/${duplicate.slug}`}>Manage {duplicate.name}</Link> : null}
           {duplicate.kind === "own_draft" ? <Link className="button button-secondary" href="/my-products">Continue in My products</Link> : null}
           <label className="consent-row" htmlFor="submission-distinctProduct">
             <input id="submission-distinctProduct" name="distinctProduct" type="checkbox" />
@@ -456,11 +461,21 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
       </fieldset>
 
       <fieldset hidden={step !== 3}>
-        <legend>Founder and review</legend>
+        <legend>Review & launch</legend>
+        <div className="listing-preview" aria-label="Listing preview">
+          <ProductLogo productName={name || "Startup"} productUrl={websiteUrl || null} imageUrl={logoPreview} className="listing-logo-preview" />
+          <div>
+            <strong>{name || "Your startup"}</strong>
+            <p>{tagline || "Your one-line description will appear here."}</p>
+            <div className="category-tags">{reviewCategories.map(slug=><span key={slug}>{categoryName(slug)}</span>)}</div>
+            <small>{websiteUrl || "your website"}{screenshots.length ? ` · ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}` : ""}</small>
+          </div>
+        </div>
+
         <div className="form-field">
           <label htmlFor="submission-contactEmail">Contact email</label>
           <input id="submission-contactEmail" name="contactEmail" type="email" required maxLength={320} defaultValue={accountEmail} placeholder="founder@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldDescription("contactEmail", fieldErrors, "submission-contactEmail-help")} />
-          <small id="submission-contactEmail-help" className="field-help">Private. Used only for approval, managing your listing and verification. Never displayed publicly.</small>
+          <small id="submission-contactEmail-help" className="field-help">Private. Used for managing your listing and account recovery. Never displayed publicly.</small>
           <FieldError field="contactEmail" errors={fieldErrors} />
         </div>
         <div className="form-grid">
@@ -478,16 +493,10 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
         <p className="form-hint">Optional founder details are displayed on your startup page if provided. Your name and email are prefilled from your Google account and can be changed.</p>
         <label className="consent-row optional-marketing" htmlFor="submission-marketingOptIn"><input id="submission-marketingOptIn" name="marketingOptIn" type="checkbox" defaultChecked /> <span>Send me optional FounderTrail product and audience updates. You can unsubscribe at any time.</span></label>
 
-        <div className="listing-preview" aria-label="Listing preview">
-          <ProductLogo productName={name || "Startup"} productUrl={websiteUrl || null} imageUrl={logoPreview} className="listing-logo-preview" />
-          <div>
-            <strong>{name || "Your startup"}</strong>
-            <p>{tagline || "Your one-line description will appear here."}</p>
-            <small>{websiteUrl || "your website"}{screenshots.length ? ` · ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}` : ""}</small>
-          </div>
-        </div>
 
-        <SubmissionProOffer name={name} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoPreview} selected={proSelected} onSelect={setProSelected} price={proPrice} configured={proConfigured} visible={step === 3} submissionKey={submissionKey} />
+        <LaunchChoice choice={launchChoice} onChange={setLaunchChoice} localDate={launchDate} onDateChange={setLaunchDate} />
+
+        <details className="submission-pro-disclosure"><summary>Optional: prepare a Pro launch kit · ${proPrice / 100} one time</summary><SubmissionProOffer name={name} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoPreview} selected={proSelected} onSelect={setProSelected} price={proPrice} configured={proConfigured} visible={step === 3} submissionKey={submissionKey} /></details>
 
         <div className="consent-field">
           <label className="consent-row" htmlFor="submission-ownershipConsent"><input id="submission-ownershipConsent" name="ownershipConsent" type="checkbox" required aria-invalid={Boolean(fieldErrors.ownershipConsent)} aria-describedby={fieldDescription("ownershipConsent", fieldErrors)} /> <span>I built this startup or am authorized to submit it, and the information above is accurate. See the <Link href="/about#submission-guidelines">submission guidelines</Link>.</span></label>
@@ -495,14 +504,14 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
         </div>
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}
-        {existingProduct ? <p><Link className="button button-secondary" href={`/product/${existingProduct.slug}#claim`}>Claim {existingProduct.name}</Link></p> : null}
-        <div className="submission-plan-summary" aria-live="polite"><strong>{proSelected && proConfigured ? `Pro Launch · $${proPrice / 100} one-time` : "Free submission"}</strong><p>{proSelected && proConfigured ? "Any applicable taxes appear at checkout." : "You can upgrade later."}</p></div>
+        {existingProduct ? <p><Link className="button button-secondary" href={`/activate/${existingProduct.slug}`}>Manage {existingProduct.name}</Link></p> : null}
+        <div className="submission-plan-summary" aria-live="polite"><strong>{proSelected && proConfigured ? `Pro Launch · $${proPrice / 100} one-time` : "Free publication"}</strong><p>{proSelected && proConfigured ? "Any applicable taxes appear at checkout." : "You can upgrade later."}</p></div>
         <div className="button-row submit-final-button">
           <button className="button button-secondary" type="button" onClick={() => goToStep(2)}>Back</button>
           <button name="submissionStatus" value="draft" className="button button-secondary" disabled={busy} type="submit">Save draft</button>
-          <button name="submissionStatus" value="pending" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : proSelected && proConfigured ? "Submit & go to checkout" : "Submit for review"}</button>
+          <button name="submissionStatus" value="published" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : launchChoice === "now" ? "Publish & launch now" : launchChoice === "scheduled" ? "Publish & schedule launch" : "Publish startup"}</button>
         </div>
-        <p className="form-hint">{proSelected && proConfigured ? "We’ll save your submission before opening secure checkout. All startups are reviewed." : "Your startup will be reviewed before it appears publicly."}</p>
+        <p className="form-hint">{proSelected && proConfigured ? "Your page and launch are saved before optional Pro checkout opens." : "Your public page goes live immediately. You can edit it any time."}</p>
       </fieldset>
     </form>
   </>;

@@ -1,0 +1,63 @@
+{
+  "mode": "apply",
+  "published": [
+    "8076aa8f-b7c3-4103-b862-69d8b96f11f5"
+  ],
+  "associated": [
+    "8076aa8f-b7c3-4103-b862-69d8b96f11f5",
+    "23a91638-b692-4d46-b310-a2db365fcedf",
+    "6341025b-51fa-4b48-9394-865c77f20d45",
+    "5701e6b8-8a59-4d3c-97e5-16b68b424b49"
+  ],
+  "exceptions": [
+    {
+      "id": "23a91638-b692-4d46-b310-a2db365fcedf",
+      "reason": "Automatic validation: ownershipConsent"
+    },
+    {
+      "id": "e1ed1e37-10f4-43a0-9fab-796615d314cf",
+      "reason": "Conflicting ownership or unresolved dispute"
+    },
+    {
+      "id": "1e89882c-7c6e-4f4e-a456-cb182a226d4a",
+      "reason": "Conflicting ownership or unresolved dispute"
+    }
+  ],
+  "reconciliation": {
+    "preserved": true,
+    "before": {
+      "product_votes": "2a4db2468a0b58b711390414a3ccfb3c",
+      "launch_votes": "6a4426aada0528f5c22300566f644133",
+      "product_comments": "ff9714e875c4fe3414c7e83242ea1ed3",
+      "product_follows": "442109be44aabe1fb6bde78b76477fc9",
+      "product_outbound_click_events": "a14296a4270b033362c8c41dbf7190aa",
+      "product_listing_view_events": "d5e50c947f97cbc20897430a257e7c82",
+      "product_media": "d41d8cd98f00b204e9800998ecf8427e",
+      "product_launches": "af3257872d6f6f280d8707503507f7e8",
+      "pro_launch_orders": "f4fda01b46db6c42591fdac392189717",
+      "pro_entitlements": "887da2c5b12b54266cfea923993d19af",
+      "product_categories": "fd28750dc846f8c5a50f87cca0fad14c",
+      "product_updates": "d41d8cd98f00b204e9800998ecf8427e",
+      "product_owner_credentials": "20ba99de25dbf0c27b34465d201d1fd5",
+      "product_submission_metadata": "d41d8cd98f00b204e9800998ecf8427e",
+      "products": "8261cc6bf26c05861bc57f4ee1e245d6"
+    },
+    "after": {
+      "product_votes": "2a4db2468a0b58b711390414a3ccfb3c",
+      "launch_votes": "6a4426aada0528f5c22300566f644133",
+      "product_comments": "ff9714e875c4fe3414c7e83242ea1ed3",
+      "product_follows": "442109be44aabe1fb6bde78b76477fc9",
+      "product_outbound_click_events": "a14296a4270b033362c8c41dbf7190aa",
+      "product_listing_view_events": "d5e50c947f97cbc20897430a257e7c82",
+      "product_media": "d41d8cd98f00b204e9800998ecf8427e",
+      "product_launches": "af3257872d6f6f280d8707503507f7e8",
+      "pro_launch_orders": "f4fda01b46db6c42591fdac392189717",
+      "pro_entitlements": "887da2c5b12b54266cfea923993d19af",
+      "product_categories": "fd28750dc846f8c5a50f87cca0fad14c",
+      "product_updates": "d41d8cd98f00b204e9800998ecf8427e",
+      "product_owner_credentials": "20ba99de25dbf0c27b34465d201d1fd5",
+      "product_submission_metadata": "d41d8cd98f00b204e9800998ecf8427e",
+      "products": "8261cc6bf26c05861bc57f4ee1e245d6"
+    }
+  }
+}

@@ -60,11 +60,11 @@ export async function PUT(request: Request, context: RouteContext<"/api/products
         [product.id, user.id],
       );
       const liveLaunch = await client.query<{ id: string; starts_at: Date; ends_at: Date }>(
-        `SELECT pl.id::text,lw.starts_at,lw.ends_at FROM product_launches pl
+        `SELECT pl.id::text,pl.starts_at,lw.ends_at FROM product_launches pl
           JOIN launch_weeks lw ON lw.id=pl.launch_week_id
          WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active')
-           AND lw.state IN ('scheduled','active') AND lw.starts_at<=now() AND now()<lw.ends_at
-         ORDER BY lw.starts_at DESC LIMIT 1 FOR UPDATE OF pl,lw`,
+           AND lw.state IN ('scheduled','active') AND pl.starts_at<=now() AND now()<lw.ends_at
+         ORDER BY pl.starts_at DESC LIMIT 1 FOR UPDATE OF pl,lw`,
         [product.id],
       );
       const launch = liveLaunch.rows[0];

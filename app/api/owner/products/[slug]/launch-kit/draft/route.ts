@@ -1,3 +1,4 @@
+import { displayProductName } from "@/lib/display-text";
 import { NextResponse } from "next/server";
 import { authenticateProOwner } from "@/lib/pro-access";
 import { defaultLaunchKitDraft, normalizeLaunchKitDraft, type LaunchFacts } from "@/lib/launch-kit";
@@ -7,15 +8,15 @@ import { requestOriginIsSameSite } from "@/lib/request-security";
 import { sharedProductUrl } from "@/lib/product-share";
 
 async function facts(productId: string): Promise<LaunchFacts | null> {
-  const rows = await query<{ name: string; tagline: string; use_case: string | null; intended_audience: string | null; website_url: string; slug: string; launch_state: string | null }>(
-    `SELECT p.name,p.tagline,p.use_case,p.intended_audience,p.website_url,p.slug,
-      (SELECT CASE WHEN lw.starts_at>now() THEN 'upcoming' WHEN now()<lw.ends_at THEN 'live' ELSE 'listed' END
+  const rows = await query<{ name: string; short_name: string | null; launch_date: Date | null; tagline: string; use_case: string | null; intended_audience: string | null; website_url: string; slug: string; launch_state: string | null }>(
+    `SELECT p.name,p.short_name,(SELECT starts_at FROM product_launches WHERE product_id=p.id AND state<>'cancelled' LIMIT 1) AS launch_date,p.tagline,p.use_case,p.intended_audience,p.website_url,p.slug,
+      (SELECT CASE WHEN pl.starts_at>now() THEN 'upcoming' WHEN now()<lw.ends_at THEN 'live' ELSE 'listed' END
        FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
-       WHERE pl.product_id=p.id AND pl.state IN ('scheduled','active','completed') ORDER BY lw.starts_at DESC LIMIT 1) AS launch_state
+       WHERE pl.product_id=p.id AND pl.state IN ('scheduled','active','completed') ORDER BY pl.starts_at DESC LIMIT 1) AS launch_state
      FROM products p WHERE p.id=$1::uuid`, [productId],
   );
   const row = rows[0];
-  return row ? { name: row.name, tagline: row.tagline, useCase: row.use_case, audience: row.intended_audience, websiteUrl: row.website_url, founderTrailUrl: sharedProductUrl(config.siteUrl, row.slug), launchState: row.launch_state === "upcoming" || row.launch_state === "live" ? row.launch_state : "listed" } : null;
+  return row ? { launchDate: row.launch_date ? new Date(row.launch_date).toLocaleDateString("en",{timeZone:"UTC",dateStyle:"medium"})+" UTC" : null, name: displayProductName(row.name,row.short_name), tagline: row.tagline, useCase: row.use_case, audience: row.intended_audience, websiteUrl: row.website_url, founderTrailUrl: sharedProductUrl(config.siteUrl, row.slug), launchState: row.launch_state === "upcoming" || row.launch_state === "live" ? row.launch_state : "listed" } : null;
 }
 
 export async function GET(request: Request, context: RouteContext<"/api/owner/products/[slug]/launch-kit/draft">) {

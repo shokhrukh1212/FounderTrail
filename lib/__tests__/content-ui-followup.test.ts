@@ -161,7 +161,7 @@ test("product-page sharing drafts exactly one sentence and one canonical link", 
   delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   // The founder's own launch draft is untouched by the product-page draft.
   assert.match(shareRoute, /source==="owner"\|\|source==="email"/);
-  assert.match(shareRoute, /xLaunchIntent/);
+  assert.match(shareRoute, /activationPost/);
   assert.match(shareRoute, /xProductShareIntent/);
 });
 
@@ -242,7 +242,7 @@ test("historical totals and the sign-in rules behind them are unchanged", () => 
   assert.match(discovery, /FROM product_votes pv WHERE pv\.product_id=p\.id AND pv\.active AND \(p\.is_demo OR NOT pv\.is_demo\)\) AS all_time_upvotes/);
   assert.match(community, /FROM product_outbound_click_events oce WHERE oce\.product_id=p\.id AND oce\.outcome='counted'\) AS outbound_clicks/);
   assert.match(discovery, /all_time_upvotes DESC,p\.created_at,p\.id/);
-  assert.match(discovery, /launch_votes DESC,pl\.approved_at,p\.id/);
+  assert.match(discovery, /launch_votes DESC,pl\.starts_at,p\.id/);
   // Voting, following and posting still require a signed-in account; reading does not.
   assert.match(read("../../components/VoteButton.tsx"), /response\.status === 401/);
   assert.match(read("../../components/FollowButton.tsx"), /response\.status === 401/);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  LAUNCH_ACCENTS, LISTING_LOGO_SOURCE, generatedSocial, type LaunchFacts, type LaunchImageDraft,
+  LAUNCH_ACCENTS, LISTING_LOGO_SOURCE, defaultLaunchKitDraft, generatedSocial, type LaunchFacts, type LaunchImageDraft,
   type LaunchKitDraft,
 } from "@/lib/launch-kit";
 import { launchFontFamily, paintLaunchGraphic } from "@/lib/launch-graphic";
@@ -183,8 +183,8 @@ export function LaunchStudio({ slug, facts, initialDraft, initialVersion, source
   }
 
   function resetAll() {
-    if (!canEdit || !window.confirm("Reset the launch kit to its original startup details? Your current edits will be replaced.")) return;
-    setDraft(initialDraft); setNotice("Launch kit reset.");
+    if (!canEdit || !window.confirm("Refresh the launch kit using your current details and launch date? Your current edits will be replaced.")) return;
+    setDraft(defaultLaunchKitDraft(facts, draft.image.logoSource, draft.image.screenshotSource)); setNotice("Refreshed from current startup and launch details. Save to keep this version.");
   }
 
   if (previewOnly) return <div className="launch-preview-only"><canvas ref={canvas} aria-label="Example FounderTrail launch graphic" /><p>Sample startup. With Pro, you edit every word, switch layouts, formats and colours, and download a sharp 2× PNG.</p></div>;
@@ -216,7 +216,7 @@ export function LaunchStudio({ slug, facts, initialDraft, initialVersion, source
       <div className="launch-actions">
         {!canEdit && upgradeHref ? <a className="button button-primary" href={upgradeHref}>Upgrade to Pro</a> : null}
         <button className={`button ${canEdit ? "button-primary" : "button-secondary"}`} type="button" onClick={() => void downloadPng()} disabled={!canEdit || downloading || loadingImages || Boolean(renderError)} title={canEdit ? undefined : "Available with Pro"}>{downloading ? "Downloading…" : "Download PNG"}</button>
-        <button className="button button-secondary" type="button" onClick={resetAll} disabled={!canEdit} title={canEdit ? undefined : "Available with Pro"}>Reset</button>
+        <button className="button button-secondary" type="button" onClick={resetAll} disabled={!canEdit} title={canEdit ? undefined : "Available with Pro"}>Refresh defaults</button>
         <span className={`save-state is-${saveState}`} role="status">{!canEdit ? "Preview only" : saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save error — edits remain here" : "Ready"}</span>
       </div>
       {notice ? <p className="manager-notice" role="status">{notice}</p> : null}

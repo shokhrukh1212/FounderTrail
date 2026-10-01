@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     // the end. The viewer is only used to recognise their own draft.
     const website = publicHttpUrl(body.url);
     const user = await currentUserFromHeaders(request.headers).catch(() => null);
-    const duplicate = website.ok ? await findDomainDuplicate(website.domain, user?.id ?? null) : null;
+    const duplicate = website.ok ? await findDomainDuplicate(website.domain, user?.id ?? null, website.url) : null;
 
     return NextResponse.json({ metadata, token: signMetadata(metadata), duplicate });
   } catch {

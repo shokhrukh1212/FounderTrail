@@ -14,7 +14,7 @@ export async function GET(request: Request, context: RouteContext<"/api/owner/pr
        FROM pro_launch_orders o JOIN products p ON p.id=o.product_id
        LEFT JOIN pro_entitlements e ON e.product_id=p.id
       WHERE o.id=$1::uuid AND p.slug=$2
-        AND (p.created_by_user_id=$3 OR EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$3)
+        AND (o.purchaser_id=$3 OR EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$3)
           OR EXISTS(SELECT 1 FROM app_users u WHERE u.id=$3 AND u.role='admin'))`,
     [orderId, slug, user.id],
   ).catch(() => []);

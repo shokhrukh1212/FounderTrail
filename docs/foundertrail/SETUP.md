@@ -36,6 +36,6 @@ Call `GET /api/cron/tick` with `Authorization: Bearer <CRON_SECRET>`. Daily Verc
 - `/admin`: product moderation and private contact table.
 - `/admin/foundertrail`: ownership claims, content reports, launch scheduling, Pro grants/revocation/refunds, allocation, income, report states, and provider/job health.
 - `/admin/founder-emails`: consent-aware founder campaign operations.
-- Review new listings separately from ownership. A Pro purchaser must already be a confirmed owner of an approved listing.
+- Valid new submissions publish and gain listing management immediately. Moderate abuse after publication; Pro purchases require authorized management access. Follow [INSTANT_LAUNCH_RUNBOOK.md](INSTANT_LAUNCH_RUNBOOK.md) for legacy access/status migration.
 - Manual claim decisions, content moderation, launch scheduling, Pro entitlement actions, and refund requests create audit records.
 - Founder contacts, claim evidence, credentials, payment IDs, provider payloads, and audit detail are private and must not appear in public pages or exports.

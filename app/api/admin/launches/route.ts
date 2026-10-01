@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       const product = await client.query<{ id: string }>(`SELECT id::text FROM products WHERE id=$1::uuid AND status='published' FOR UPDATE`, [productId]);
       if (!product.rows[0]) throw new Error("NOT_PUBLISHED");
       const week = await client.query<{ id: string }>(`INSERT INTO launch_weeks(starts_at,ends_at,state) VALUES($1,$2,CASE WHEN $1<=now() AND now()<$2 THEN 'active' ELSE 'scheduled' END) ON CONFLICT(starts_at) DO UPDATE SET ends_at=excluded.ends_at RETURNING id::text`, [start, end]);
-      const saved = await client.query<{ id: string }>(`INSERT INTO product_launches(product_id,launch_week_id,state,approved_at) VALUES($1::uuid,$2::uuid,CASE WHEN $3<=now() AND now()<$4 THEN 'active' ELSE 'scheduled' END,now()) RETURNING id::text`, [productId, week.rows[0].id, start, end]);
+      const saved = await client.query<{ id: string }>(`INSERT INTO product_launches(product_id,launch_week_id,state,approved_at,starts_at) VALUES($1::uuid,$2::uuid,CASE WHEN $3<=now() AND now()<$4 THEN 'active' ELSE 'scheduled' END,now(),GREATEST($3,now())) RETURNING id::text`, [productId, week.rows[0].id, start, end]);
       await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id,details) VALUES($1,'admin','launch.scheduled',$2::uuid,jsonb_build_object('startsAt',$3::text,'endsAt',$4::text))`, [actor?.id ?? null, productId, start.toISOString(), end.toISOString()]);
       return saved.rows[0].id;
     });

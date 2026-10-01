@@ -103,10 +103,10 @@ test("pending stays private while approval makes existing public queries eligibl
 
 test("owner status response is private and database backed", () => {
   assert.match(ownerRoute, /authenticateOwner/);
-  assert.match(ownerRoute, /SELECT p\.status,p\.approved_at,p\.name,p\.tagline/);
+  assert.match(ownerRoute, /SELECT p\.status,p\.approved_at,p\.name,p\.short_name/);
   assert.match(ownerRoute,/reviewReason:product\.status==="rejected"/);
   assert.match(ownerRoute, /cache-control": "no-store/);
-  assert.doesNotMatch(ownerRoute, /contact_email|contactEmail|token_hash|approvalToken/);
+  assert.doesNotMatch(ownerRoute.split("export async function PATCH")[0], /contact_email|contactEmail|token_hash|approvalToken/);
 });
 
 test("private management fragments are removed before analytics initialize", () => {

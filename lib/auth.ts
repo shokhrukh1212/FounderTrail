@@ -18,6 +18,8 @@ export const auth = betterAuth({
     modelName: "app_users",
     fields: { emailVerified: "email_verified", createdAt: "created_at", updatedAt: "updated_at" },
     additionalFields: {
+      googleAuthorityEmail: { type: "string", required: false, input: false, fieldName: "google_authority_email" },
+      googleAuthorityAt: { type: "string", required: false, input: false, fieldName: "google_authority_at" },
       role: { type: "string", required: false, defaultValue: "member", input: false },
     },
   },
@@ -38,9 +40,9 @@ export const auth = betterAuth({
       accessTokenExpiresAt: "access_token_expires_at", refreshTokenExpiresAt: "refresh_token_expires_at",
       createdAt: "created_at", updatedAt: "updated_at",
     },
-    // Google is the sole public provider. Linking is limited to Google's verified
-    // identity/email signal; different-email and arbitrary-provider linking stay off.
-    accountLinking: { enabled: true, trustedProviders: ["google"], allowDifferentEmails: false },
+    // Google is the sole provider. Account access follows its stable subject.
+    // Email reuse by a different Google subject must not merge existing accounts.
+    accountLinking: { enabled: false, allowDifferentEmails: false },
     encryptOAuthTokens: true,
   },
   verification: {
@@ -53,6 +55,11 @@ export const auth = betterAuth({
       clientSecret: config.auth.googleClientSecret,
       scope: ["openid", "email", "profile"],
       requireEmailVerification: true,
+      overrideUserInfoOnSignIn: true,
+      mapProfileToUser: (profile) => ({
+        googleAuthorityEmail: profile.email_verified && (profile.email?.toLowerCase().endsWith("@gmail.com") || profile.hd) ? profile.email.toLowerCase() : "",
+        googleAuthorityAt: new Date().toISOString(),
+      }),
     },
   } : {},
   rateLimit: {

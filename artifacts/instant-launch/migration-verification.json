@@ -1,0 +1,37 @@
+{
+  "environment": "Synthetic legacy fixtures in disposable localhost PostgreSQL/PGlite; no production records",
+  "fixtures": 6,
+  "dryRun": {
+    "published": 1,
+    "associated": 4,
+    "exceptions": 3
+  },
+  "applied": {
+    "published": 1,
+    "associated": 4,
+    "exceptions": 3
+  },
+  "rerun": {
+    "published": 0,
+    "associated": 0,
+    "exceptions": 3
+  },
+  "preserved": true,
+  "nonemptyHistory": [
+    "lifetime votes",
+    "launch votes/history",
+    "comments",
+    "follows",
+    "clicks",
+    "listing views",
+    "paid test orders",
+    "Pro entitlements"
+  ],
+  "exceptions": [
+    "Missing authorization consent",
+    "Conflicting manager",
+    "Unresolved dispute"
+  ],
+  "historicalListingsAutomaticallyLaunched": 0,
+  "rollbackRefused": true
+}

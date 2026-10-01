@@ -4,7 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { ProductLogo } from "@/components/ProductLogo";
 import { ProCheckout } from "@/components/ProCheckout";
 import { currentUserFromHeaders } from "@/lib/auth";
-import { isProLaunchConfigured } from "@/lib/config";
+import { config, isProLaunchConfigured } from "@/lib/config";
+import { authenticateOwner } from "@/lib/owner-auth";
 import { query } from "@/lib/db";
 import { getProAvailability } from "@/lib/pro-launch";
 import { displayProductName } from "@/lib/display-text";
@@ -14,16 +15,19 @@ export const metadata: Metadata = { title: "Upgrade to Pro", robots: { index: fa
 
 export default async function ProPage({ params, searchParams }: PageProps<"/manage/[slug]/pro"> & { searchParams: Promise<{ order?: string }> }) {
   const [{ slug }, search] = await Promise.all([params, searchParams]);
-  const user = await currentUserFromHeaders(await headers()).catch(() => null);
+  const requestHeaders = await headers();
+  const user = await currentUserFromHeaders(requestHeaders).catch(() => null);
   if (!user) redirect(`/sign-in?returnTo=${encodeURIComponent(`/manage/${slug}/pro`)}`);
+  const access = await authenticateOwner(new Request(config.siteUrl, {headers:requestHeaders}), slug);
+  if (!access) redirect(`/activate/${slug}`);
   const rows = await query<{ id: string; name: string; short_name: string | null; tagline: string; website_url: string; status: string; logo_url: string | null; entitlement_status: string | null; ever_rejected: boolean }>(
     `SELECT p.id::text,p.name,p.short_name,p.tagline,p.website_url,p.status,
       (SELECT public_url FROM product_media WHERE product_id=p.id AND kind='logo' LIMIT 1) AS logo_url,
       e.status AS entitlement_status,
       EXISTS(SELECT 1 FROM product_moderation_events me WHERE me.product_id=p.id AND me.to_status='rejected') AS ever_rejected
      FROM products p LEFT JOIN pro_entitlements e ON e.product_id=p.id
-     WHERE p.slug=$1 AND (p.created_by_user_id=$2 OR EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2))`,
-    [slug, user.id],
+     WHERE p.id=$1::uuid`,
+    [access.productId],
   );
   const product = rows[0];
   if (!product) notFound();

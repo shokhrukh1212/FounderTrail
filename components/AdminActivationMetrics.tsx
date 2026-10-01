@@ -1,0 +1,11 @@
+import { query } from "@/lib/db";
+export async function AdminActivationMetrics() {
+  const rows=await query<{current_launches:number;future_launches:number;ready:number;cohort:number;converted:number}>(`SELECT
+    (SELECT count(*)::int FROM product_launches pl JOIN products p ON p.id=pl.product_id JOIN launch_weeks lw ON lw.id=pl.launch_week_id WHERE p.status='published' AND NOT p.is_demo AND pl.state IN ('active','scheduled') AND pl.starts_at<=now() AND lw.starts_at<=now() AND now()<lw.ends_at) AS current_launches,
+    (SELECT count(*)::int FROM product_launches pl JOIN products p ON p.id=pl.product_id WHERE p.status='published' AND NOT p.is_demo AND pl.state='scheduled' AND pl.starts_at>now()) AS future_launches,
+    (SELECT count(*)::int FROM products p WHERE p.status='published' AND NOT p.is_demo AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id) AND NOT EXISTS(SELECT 1 FROM product_launches pl WHERE pl.product_id=p.id AND pl.state<>'cancelled')) AS ready,
+    (SELECT count(*)::int FROM products p WHERE NOT p.is_demo AND p.published_at>=now()-interval '30 days') AS cohort,
+    (SELECT count(*)::int FROM products p WHERE NOT p.is_demo AND p.published_at>=now()-interval '30 days' AND EXISTS(SELECT 1 FROM product_launches pl WHERE pl.product_id=p.id AND pl.state<>'cancelled' AND pl.starts_at<=now())) AS converted`);
+  const metrics=rows[0];
+  return <section className="settings-card"><h2>Founder activation</h2><div className="admin-health-grid"><div><span>Launching this UTC week</span><strong>{metrics.current_launches}</strong></div><div><span>Future scheduled launches</span><strong>{metrics.future_launches}</strong></div><div><span>Owned published pages ready to launch</span><strong>{metrics.ready}</strong></div><div><span>Publication → started launch</span><strong>{metrics.converted} / {metrics.cohort} ({metrics.cohort?Math.round(metrics.converted/metrics.cohort*100):0}%)</strong></div></div><p className="field-help">Conversion cohort: pages first published in the last 30 rolling days, UTC. Counts exclude demo records; cancelled and future launches are not completed conversions. Hidden listings remain in the historical publication cohort.</p></section>;
+}

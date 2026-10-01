@@ -1,6 +1,6 @@
 # FounderTrail migration runbook
 
-For the current release, use this preservation procedure together with
+For the current instant-launch release, follow [INSTANT_LAUNCH_RUNBOOK.md](INSTANT_LAUNCH_RUNBOOK.md) through migration `020`. The older deployment examples below are historical context. Use this preservation procedure together with
 [`PRO_LAUNCH_RUNBOOK.md`](PRO_LAUNCH_RUNBOOK.md) and
 [`CONTENT_UI_FOLLOWUP.md`](CONTENT_UI_FOLLOWUP.md). Rehearse every pending migration
 through `017_content_ui_followup`; the older numbered examples below describe the original

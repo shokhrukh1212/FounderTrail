@@ -15,7 +15,7 @@ test("FounderTrail uses the approved discovery positioning",()=>{
   assert.equal(brandCopy.metaTitle,"FounderTrail — Launch startups and find supporters");
   assert.equal(brandCopy.homepageHeadline,"Launch your startup. Find your first supporters.");
   assert.match(home,/Explore startups ranked by community upvotes/);
-  assert.match(home,/Submit your startup — free/);
+  assert.match(home,/Launch your startup — free/);
   assert.match(header,/>Discover</);
   assert.match(header,/>Updates</);
   assert.doesNotMatch(header,/Search products/);

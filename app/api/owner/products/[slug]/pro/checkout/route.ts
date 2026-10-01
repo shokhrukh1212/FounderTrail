@@ -37,7 +37,7 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.startsWith("PRICE_CHANGED:")) return NextResponse.json({ error: "The introductory allocation changed. Review and accept the current price.", currentPriceMinor: Number(message.split(":")[1]) }, { status: 409 });
-    if (message === "NOT_ELIGIBLE") return NextResponse.json({ error: "Only an authorized submitter awaiting review or a confirmed owner of an approved startup can upgrade it." }, { status: 403 });
+    if (message === "NOT_ELIGIBLE") return NextResponse.json({ error: "Open this startup from its authorized management account before upgrading." }, { status: 403 });
     if (message === "ALREADY_PRO") return NextResponse.json({ error: "This startup is already Pro.", redirectTo: `/manage/${encodeURIComponent(slug)}/launch-kit` }, { status: 409 });
     if (message === "PRO_SUSPENDED") return NextResponse.json({ error: "This startup's Pro access is suspended. Contact support before another purchase." }, { status: 409 });
     if (message === "ORDER_RECONCILING") return NextResponse.json({ error: "A previous checkout is still being confirmed. Please try again shortly." }, { status: 409 });
@@ -54,8 +54,8 @@ export async function POST(request: Request, context: RouteContext<"/api/owner/p
       product_cart: [{ product_id: providerProductId, quantity: 1 }],
       billing_currency: "USD",
       customer: { email: user.email, name: user.name },
-      return_url: `${config.siteUrl}/manage/${encodeURIComponent(order.slug)}/pro?order=${encodeURIComponent(order.id)}`,
-      cancel_url: `${config.siteUrl}/manage/${encodeURIComponent(order.slug)}/pro?order=${encodeURIComponent(order.id)}&cancelled=1`,
+      return_url: `${config.siteUrl}/manage/${encodeURIComponent(order.slug)}/launch?checkout=returned&order=${encodeURIComponent(order.id)}`,
+      cancel_url: `${config.siteUrl}/manage/${encodeURIComponent(order.slug)}/launch?checkout=cancelled&order=${encodeURIComponent(order.id)}`,
       metadata: {
         foundertrail_order_type: "pro_launch", foundertrail_pro_order_id: order.id,
         foundertrail_product_id: order.productId, foundertrail_environment: config.dodoPayments.environment,

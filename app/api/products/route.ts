@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { findDomainDuplicate } from "@/lib/duplicate-domain";
+import { revalidatePath } from "next/cache";
+import { parseLaunchChoice, productIdentity } from "@/lib/launch-policy";
+import { saveLaunch } from "@/lib/launch-service";
+import { insertFunnelEvent } from "@/lib/analytics";
 import type { PoolClient } from "pg";
-import { createHash, randomBytes } from "node:crypto";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { newBidIndexOwnerToken, hashBidIndexOwnerToken } from "@/lib/bidindex-owner";
 import { config } from "@/lib/config";
@@ -9,7 +11,7 @@ import { query, withTransaction } from "@/lib/db";
 import { ensureFounderPreference } from "@/lib/email-preferences";
 import { validateProductSubmission } from "@/lib/product-validation";
 import { consumeRateLimit } from "@/lib/rate-limit";
-import { networkHash, requestOriginIsSameSite } from "@/lib/request-security";
+import { eventHash, networkHash, requestOriginIsSameSite } from "@/lib/request-security";
 import { firstFreeSlug, slugify } from "@/lib/slug";
 import { removeStoredImage, validateAndStoreImage, type StoredImage } from "@/lib/storage";
 import { fetchPinnedPublic, fetchSubmissionMetadata, verifyMetadata } from "@/lib/submission-metadata";
@@ -19,6 +21,7 @@ export const dynamic = "force-dynamic";
 
 async function uniqueSlug(client: PoolClient, name: string): Promise<string> {
   const base = slugify(name);
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`product-slug:${base}`]);
   const rows = await client.query<{ slug: string }>(`SELECT slug FROM products WHERE slug = $1 OR slug LIKE $2`, [base, `${base}-%`]);
   return firstFreeSlug(base, rows.rows.map((row) => row.slug));
 }
@@ -36,22 +39,16 @@ export async function POST(request: Request) {
   }
   let form: FormData;
   try { form = await request.formData(); } catch { return NextResponse.json({ error: "Invalid form data." }, { status: 400 }); }
-  const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "pending";
+  const requestedStatus = form.get("submissionStatus") === "draft" ? "draft" : "published";
   const validated = validateProductSubmission(form, { draft: requestedStatus === "draft" });
   if (!validated.ok) return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
   const submissionKey = String(form.get("submissionKey") ?? "");
-  if (submissionKey && !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(submissionKey)) return NextResponse.json({ error: "Invalid submission key." }, { status: 400 });
+  if (submissionKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(submissionKey)) return NextResponse.json({ error: "Invalid submission key." }, { status: 400 });
   const replay = submissionKey ? await query<{ slug: string; status: string }>(`SELECT slug,status FROM products WHERE created_by_user_id=$1 AND submission_key=$2::uuid`, [user.id, submissionKey]) : [];
-  if (replay[0]) return NextResponse.json({ product: replay[0], managementUrl: `${config.siteUrl}/manage/${replay[0].slug}` });
-  // The same rule runs at step 1 of the form via /api/products/metadata, so the two
-  // must share one implementation or the messages drift apart.
-  const duplicate = await findDomainDuplicate(validated.value.normalizedDomain, user.id);
-  if (duplicate && form.get("distinctProduct") !== "on") {
-    return NextResponse.json({
-      error: duplicate.message,
-      existingProduct: duplicate.kind === "published" ? { slug: duplicate.slug, name: duplicate.name } : null,
-    }, { status: 409 });
-  }
+  if (replay[0]) return NextResponse.json({ product: replay[0], managementUrl: `${config.siteUrl}/manage/${replay[0].slug}/launch` });
+  const identity = productIdentity(validated.value.websiteUrl);
+  try { if (requestedStatus !== "draft") parseLaunchChoice(form.get("launchChoice"), form.get("launchStartsAt")); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
   const logoFiles = files(form, "logo");
   const screenshotFiles = files(form, "screenshots");
   if (logoFiles.length > 1) return NextResponse.json({ error: "Choose one logo only.", field: "logo" }, { status: 400 });
@@ -74,15 +71,24 @@ export async function POST(request: Request) {
   }
   const ownerToken = newBidIndexOwnerToken();
   const ownerHash = hashBidIndexOwnerToken(ownerToken);
-  const claimChallenge = randomBytes(24).toString("hex");
-  const claimChallengeHash = createHash("sha256").update(claimChallenge).digest("hex");
   try {
     const created = await withTransaction(async (client) => {
-      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`submission:${validated.value.normalizedDomain}`]);
+      if (submissionKey) await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`submission-key:${user.id}:${submissionKey}`]);
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`submission:${identity}`]);
       if (submissionKey) {
         const existing = await client.query<{ id: string; slug: string; status: string }>(`SELECT id::text,slug,status FROM products WHERE created_by_user_id=$1 AND submission_key=$2::uuid`, [user.id, submissionKey]);
         if (existing.rows[0]) return { ...existing.rows[0], replayed: true };
       }
+      // Exact product URL identity preserves separate products on shared hosts.
+      // Check historical rows too, including ambiguous duplicates excluded from the registry.
+      const candidates = await client.query<{ id: string; slug: string; status: string; website_url: string; allowed: boolean }>(`SELECT p.id::text,p.slug,p.status,p.website_url,EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2) AS allowed FROM products p WHERE normalized_domain=$1`, [validated.value.normalizedDomain, user.id]);
+      const duplicate = candidates.rows.find(row => productIdentity(row.website_url) === identity);
+      if (duplicate) {
+        if (duplicate.allowed) return { ...duplicate, replayed: true };
+        throw new Error(`DUPLICATE:${duplicate.status === "published" ? duplicate.slug : ""}`);
+      }
+      const accountAllowed = await consumeRateLimit(client, { action: "submission-account", keyHash: eventHash("submission:user", user.id), limit: 5, windowSeconds: 86400 });
+      if (!accountAllowed) throw new Error("RATE_LIMITED");
       const allowed = await consumeRateLimit(client, { action: "submission", keyHash: networkHash(request, "submission"), limit: 5, windowSeconds: 3600 });
       if (!allowed) throw new Error("RATE_LIMITED");
       const slug = await uniqueSlug(client, validated.value.name);
@@ -100,7 +106,7 @@ export async function POST(request: Request) {
             pricing_model, starting_price_minor, pricing_currency, pricing_basis, pricing_unit,
             pricing_per_seat,
             short_name, short_name_source, short_name_updated_at, short_name_updated_by,
-            pricing_source, pricing_confirmed_at, pricing_confirmed_by, category_provenance)
+            pricing_source, pricing_confirmed_at, pricing_confirmed_by, category_provenance, published_at, approved_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14::uuid,$15,$16,$17,
             $18,$19,$20,$21,$22,$23,
             $24, CASE WHEN $24::text IS NULL THEN NULL ELSE 'founder' END,
@@ -109,7 +115,7 @@ export async function POST(request: Request) {
             CASE WHEN $18::text IS NULL THEN NULL ELSE 'founder' END,
             CASE WHEN $18::text IS NULL THEN NULL ELSE now() END,
             CASE WHEN $18::text IS NULL THEN NULL ELSE $15 END,
-            'founder')
+            'founder', CASE WHEN $12='published' THEN now() END, CASE WHEN $12='published' THEN now() END)
          RETURNING id::text`,
         [slug, validated.value.websiteUrl, validated.value.websiteUrl, validated.value.normalizedDomain,
          validated.value.name, validated.value.tagline, validated.value.founderName,
@@ -124,7 +130,13 @@ export async function POST(request: Request) {
       await client.query(`UPDATE products SET submission_key=$2::uuid,submission_pro_selected=$3 WHERE id=$1::uuid`, [productId, submissionKey || null, form.get("proSelected") === "on"]);
       if (validated.value.categorySlugs.length) await applyProductCategories(client, productId, validated.value.categorySlugs, "founder");
       await client.query(`INSERT INTO product_owner_credentials (product_id, token_hash) VALUES ($1::uuid,$2)`, [productId, ownerHash]);
-      await client.query(`INSERT INTO product_claims(product_id,requester_id,evidence_method,challenge_token_hash,challenge_expires_at,evidence) VALUES($1::uuid,$2,'domain_file',$3,now()+interval '7 days',jsonb_build_object('source','new_submission'))`,[productId,user.id,claimChallengeHash]);
+      await client.query(`INSERT INTO product_owners(product_id,user_id,verified_at,verification_method) VALUES($1::uuid,$2,now(),'new_submission')`, [productId,user.id]);
+      await client.query(`UPDATE products SET launch_choice=$2,requested_launch_at=$3,published_at=CASE WHEN status='published' THEN now() END,approved_at=CASE WHEN status='published' THEN now() END WHERE id=$1::uuid`, [productId, ['now','scheduled','none'].includes(String(form.get('launchChoice'))) ? form.get('launchChoice') : 'now', form.get('launchChoice') === 'scheduled' && form.get('launchStartsAt') ? form.get('launchStartsAt') : null]);
+      if (requestedStatus === "published") {
+        await saveLaunch(client, productId, user.id, form.get("launchChoice"), form.get("launchStartsAt"));
+        await insertFunnelEvent(client, { name: "publication_completed", idempotencyKey: productId, eventData: { productId } });
+      }
+      await client.query(`INSERT INTO foundertrail_audit_events(actor_user_id,actor_kind,action,product_id) VALUES($1,'user','submission.management_associated',$2::uuid)`, [user.id,productId]);
       await client.query(
         `INSERT INTO product_submission_metadata
            (product_id, original_url, final_url, fetch_status, extracted_name, extracted_tagline,
@@ -146,17 +158,22 @@ export async function POST(request: Request) {
       return { id: productId, slug, status: requestedStatus, replayed: false };
     });
     if (created.replayed) await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
-    const localManagementUrl = `${config.siteUrl}/manage/${created.slug}`;
+    const localManagementUrl = `${config.siteUrl}/manage/${created.slug}${created.status === "draft" ? "" : "/launch"}`;
     const response = NextResponse.json({
       product: { slug: created.slug, status: created.status },
       managementUrl: localManagementUrl,
-      ownershipVerification: created.replayed ? undefined : { method: "domain_file", path: "/.well-known/foundertrail-claim.txt", value: claimChallenge },
-      message: requestedStatus === "draft" ? "Draft saved." : "Submission received for moderation.",
+      publicUrl: created.status === "published" ? `${config.siteUrl}/product/${created.slug}` : null,
+      message: requestedStatus === "draft" ? "Draft saved." : "Your startup is published.",
     }, { status: 201, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+    revalidatePath("/");
+    revalidatePath(`/product/${created.slug}`);
     return response;
   } catch (error) {
     await Promise.all(stored.map((image) => removeStoredImage(image.storageKey)));
     const code = error instanceof Error ? error.message : "";
+    if (code.startsWith("DUPLICATE:")) return NextResponse.json({ error: "This startup already has a listing. Continue through its management access page.", accessUrl: code.slice(10) ? `/activate/${code.slice(10)}` : null }, { status: 409 });
+    if (code === "Choose a future date and time within six months.") return NextResponse.json({ error: code }, { status: 400 });
+    if ((error as { code?: string }).code === "23505") return NextResponse.json({ error: "This startup already exists. Open My products to continue, or use Manage this startup on its public page." }, { status: 409 });
     if (code === "RATE_LIMITED") return NextResponse.json({ error: "Too many submissions. Try again later." }, { status: 429 });
     if (error instanceof InvalidCategorySelection) return NextResponse.json({ error: error.message, field: "categories" }, { status: 400 });
     // The founder only ever sees the generic message below, so the log has to carry
@@ -164,7 +181,7 @@ export async function POST(request: Request) {
     // repeat the founder's email back into the log.
     const failure = error as { code?: string; constraint?: string; table?: string };
     console.error("product submission failed", JSON.stringify({
-      message: code || "unknown error",
+      message: "submission transaction failed",
       code: failure?.code ?? null,
       constraint: failure?.constraint ?? null,
       table: failure?.table ?? null,

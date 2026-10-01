@@ -122,6 +122,8 @@ export async function reserveProOrder(
       WHERE p.id=$1::uuid AND (
         (p.status='published' AND EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id=$2))
         OR (p.status='pending' AND p.approved_at IS NULL AND p.created_by_user_id=$2
+          AND NOT EXISTS(SELECT 1 FROM product_owners po WHERE po.product_id=p.id AND po.user_id<>$2)
+          AND NOT EXISTS(SELECT 1 FROM product_claims pc WHERE pc.product_id=p.id AND pc.state='disputed')
           AND NOT EXISTS(SELECT 1 FROM product_moderation_events me WHERE me.product_id=p.id AND me.to_status='rejected')))
       FOR UPDATE`,
     [input.productId, input.purchaserId],
@@ -202,9 +204,9 @@ async function createResultWindow(client: PoolClient, productId: string, orderId
     if (orders.rows[0]?.purchased_before_approval) return;
   }
   const launches = await client.query<{ id: string; starts_at: Date }>(
-    `SELECT pl.id::text,lw.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
+    `SELECT pl.id::text,pl.starts_at FROM product_launches pl JOIN launch_weeks lw ON lw.id=pl.launch_week_id
       WHERE pl.product_id=$1::uuid AND pl.state IN ('scheduled','active') AND lw.state IN ('scheduled','active')
-        AND lw.starts_at>$2 ORDER BY lw.starts_at LIMIT 1`,
+        AND pl.starts_at>$2 ORDER BY pl.starts_at LIMIT 1`,
     [productId, activatedAt],
   );
   const future = launches.rows[0];

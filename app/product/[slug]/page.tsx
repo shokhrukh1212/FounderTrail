@@ -6,7 +6,6 @@ import { notFound } from "next/navigation";
 import { Discussion } from "@/components/Discussion";
 import { FollowButton } from "@/components/FollowButton";
 import { LocalTime } from "@/components/LocalTime";
-import { ProductClaim } from "@/components/ProductClaim";
 import { ProductLogo } from "@/components/ProductLogo";
 import { XShareLink } from "@/components/XShareLink";
 import { VoteButton } from "@/components/VoteButton";
@@ -69,7 +68,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   return <main>
     <section className="product-masthead"><div className="app-shell product-masthead-inner">
       <ProductLogo productName={product.displayName} productUrl={product.websiteUrl} imageUrl={product.logoUrl} className="product-detail-logo" eager />
-      <div className="product-identity"><div className={`product-title-line ${styles.titleLine}`}><h1>{product.displayName}</h1>{pro.status === "active" ? <ProBadge /> : null}{community.ownershipState === "claimed" ? <span className="verified-product-badge" title="Control of this product has been verified.">✓ Ownership confirmed</span> : null}{product.isDemo ? <span className="demo-label">Demo data</span> : null}</div><p>{product.tagline}</p><div className="product-meta">{product.founderName ? <span>By {product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}{pricing ? <span>{pricing}</span> : null}{product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}</div></div>
+      <div className="product-identity"><div className={`product-title-line ${styles.titleLine}`}><h1>{product.displayName}</h1>{pro.status === "active" ? <ProBadge /> : null}{community.domainOwnershipVerified ? <span className="verified-product-badge" title="Control of this product has been verified.">✓ Ownership confirmed</span> : null}{product.isDemo ? <span className="demo-label">Demo data</span> : null}</div><p>{product.tagline}</p><div className="product-meta">{product.founderName ? <span>By {product.founderName}</span> : null}{founderHandle ? <FounderXLink handle={founderHandle} /> : null}{pricing ? <span>{pricing}</span> : null}{product.categories.map((category) => <Link key={category.slug} href={categoryFilterHref(category.slug)}>{category.name}</Link>)}</div></div>
       <div className={styles.headerActions}>
         <div className={styles.primaryActions}>
           <VoteButton slug={product.slug} productName={product.displayName} initialCount={community.allTimeUpvotes} initialActive={community.upvoted} showLabel />
@@ -89,7 +88,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
           <a href="#overview">Overview</a>
           {product.updates.length ? <a href="#updates">Updates</a> : null}
           <a href="#discussion">Discussion</a>
-          {community.ownershipState !== "claimed" ? <a href="#claim">Claim</a> : null}
+          {community.ownershipState !== "claimed" ? <Link href={`/activate/${product.slug}`}>Manage this startup</Link> : null}
         </nav>
         {community.isOwner ? <div className={styles.ownerActions} role="group" aria-label="Owner tools">
           <Link className="button button-secondary" href={`/manage/${product.slug}`}>Manage</Link>
@@ -111,7 +110,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
       <section id="discussion" className="detail-section"><p className="eyebrow">Discussion</p><h2>Questions and feedback</h2><p className="section-lede">{community.commentCount === 0 ? "No questions yet." : `${community.commentCount.toLocaleString()} visible ${community.commentCount === 1 ? "post" : "posts"}, including replies.`}</p><Discussion slug={product.slug} initialComments={comments} signedIn={Boolean(user)} /></section>
 
       {/* Once ownership is confirmed, the claim block has nothing left to offer here. */}
-      {community.ownershipState !== "claimed" ? <ProductClaim slug={product.slug} signedIn={Boolean(user)} state={community.ownershipState} /> : null}
+      {community.ownershipState !== "claimed" ? <section id="claim" className="settings-card"><h2>Is this your startup?</h2><p>Manage this existing page and keep its community and history.</p><Link className="button button-secondary" href={`/activate/${product.slug}`}>Manage this startup</Link></section> : null}
     </article>
 
     <aside className="product-side-note">{community.launch ? <div><strong>{community.launch.active ? "Launching this week" : "Launch record"}</strong><p>{community.launch.startsAt.toLocaleDateString("en", { timeZone: "UTC", month: "short", day: "numeric" })}–{community.launch.endsAt.toLocaleDateString("en", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })} UTC · {community.launch.votes} this week&apos;s vote{community.launch.votes === 1 ? "" : "s"}</p><small>A first upvote cast during the live week counts here and in all-time support. Earlier support does not.</small></div> : null}<div><strong>{community.allTimeUpvotes.toLocaleString()} all-time upvote{community.allTimeUpvotes === 1 ? "" : "s"}</strong><p>Includes preserved historical support and active authenticated upvotes without double-counting launch votes.</p></div><div><strong>{community.outboundClicks.toLocaleString()} outbound click{community.outboundClicks === 1 ? "" : "s"}</strong><p>Clicks on the startup&apos;s website link; not unique customers or confirmed visits.</p></div><div><strong>{community.followerCount} follower{community.followerCount === 1 ? "" : "s"}</strong><p>Followers can find this startup’s published progress in their Following feed.</p></div>{product.biddingMechanism || product.minimumBidMinor !== null || product.currentBidMinor !== null ? <details className="legacy-details"><summary>Historical bidding details</summary><dl>{product.biddingMechanism ? <div><dt>Mechanism</dt><dd>{product.biddingMechanism}</dd></div> : null}{product.minimumBidMinor !== null && product.bidCurrency ? <div><dt>Minimum bid</dt><dd>{formatMinorUnits(product.minimumBidMinor, product.bidCurrency)}</dd></div> : null}{product.currentBidMinor !== null && product.bidCurrency ? <div><dt>Last recorded bid</dt><dd>{formatMinorUnits(product.currentBidMinor, product.bidCurrency)}</dd></div> : null}</dl></details> : null}</aside>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { query } from "@/lib/db";
 import { headers } from "next/headers";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { brandCopy } from "@/lib/brand";
@@ -55,9 +56,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   });
   const community = view === "this_week" ? await getFounderTrailDiscovery({ view: "discover", category: params.category, sort, page: 1, userId: user?.id }) : null;
   const feed = view === "updates" ? await getUpdateFeed(page, user?.id ?? null) : null;
+  const upcoming = await query<{slug:string;name:string;starts_at:Date}>(`SELECT p.slug,coalesce(p.short_name,p.name) AS name,pl.starts_at FROM product_launches pl JOIN products p ON p.id=pl.product_id WHERE p.status='published' AND NOT p.is_demo AND pl.state='scheduled' AND pl.starts_at>now() ORDER BY pl.starts_at,p.id LIMIT 3`);
   const week = discovery?.week;
   const products = discovery?.products ?? [];
-  const sectionTitle = view === "this_week" ? "Startups launching this week" : view === "discover" ? "All startups" : "Founder updates";
+  const sectionTitle = view === "this_week" ? (products.length || params.view ? "Startups launching this week" : "Discover startups") : view === "discover" ? "All startups" : "Founder updates";
   const result = view === "this_week" ? community : discovery;
   const pageTotal = discovery?.pageCount ?? feed?.pageCount ?? 1;
 
@@ -65,7 +67,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
     <section className="intro-section app-shell">
       <div><h1>{brandCopy.homepageHeadline}</h1><p>{brandCopy.homepageDescription}</p></div>
       <div className="intro-actions">
-        <Link className="button button-primary" href="/submit">Submit your startup — free</Link>
+        <Link className="button button-primary" href="/launch">Launch your startup — free</Link>
         <Link className="button button-secondary" href="/?view=discover#products">Explore startups</Link>
       </div>
     </section>
@@ -91,11 +93,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
       </article>) : <div className="empty-state compact-empty"><h3>No published updates yet</h3><p>{brandCopy.updatesIntroduction}</p></div>}</div> : null}
 
       {view === "this_week" ? <>
-        <div className={`weekly-layout${products.length ? "" : " is-empty"}`}>
-          <div>{products.length ? <ProductList products={products} page={discovery?.page ?? 1} sort={sort} weekly /> : <div className="weekly-empty"><div><h3>No launches this week yet.</h3><p>Discover the community below, or schedule your startup&apos;s launch.</p></div><div className="button-row"><Link className="button button-secondary" href="/my-products">Schedule your launch</Link><Link className="button button-secondary" href="#community">Browse startups</Link></div></div>}</div>
-        </div>
+        {products.length ? <div className="weekly-layout"><ProductList products={products} page={discovery?.page ?? 1} sort={sort} weekly /></div> : <div className="launch-invitation"><span>{params.view === "this_week" ? "No launches this week yet. " : ""}Be among this week’s launches.</span><Link className="text-link" href="/launch">Launch your startup →</Link></div>}
+        {upcoming.length ? <section className="coming-up"><h2>Coming up</h2><div className="coming-up-list">{upcoming.map(item=><Link key={item.slug} href={`/product/${item.slug}`}><strong>{item.name}</strong><small><LocalTime value={item.starts_at.toISOString()}/></small></Link>)}</div></section> : null}
         <section id="community" className="community-directory" aria-labelledby="community-heading">
-          <header><div><p className="eyebrow">Community directory</p><h2 id="community-heading">{sort === "newest" ? "Recently added startups" : "Community favourites"}</h2><p>{sort === "newest" ? "The latest approved startups." : "Explore startups ranked by community upvotes."}</p></div><div className="community-controls"><form action="/" method="get"><input type="hidden" name="view" value="this_week" /><label><span className="sr-only">Category</span><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label><label><span className="sr-only">Sort community</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label><button className="button button-secondary">Apply</button></form><Link className="text-link" href="/?view=discover&sort=most_upvoted#products">Browse and filter all →</Link></div></header>
+          <header><div><p className="eyebrow">Community directory</p><h2 id="community-heading">{sort === "newest" ? "Recently added startups" : "Community favourites"}</h2><p>{sort === "newest" ? "The latest published startups." : "Explore startups ranked by community upvotes."}</p></div><div className="community-controls"><form action="/" method="get"><input type="hidden" name="view" value="this_week" /><label><span className="sr-only">Category</span><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label><label><span className="sr-only">Sort community</span><select name="sort" defaultValue={sort}><option value="most_upvoted">Most upvoted</option><option value="newest">Newest</option></select></label><button className="button button-secondary">Apply</button></form><Link className="text-link" href="/?view=discover&sort=most_upvoted#products">Browse and filter all →</Link></div></header>
           {community?.products.length ? <ProductList products={community.products} page={1} sort={sort} /> : <div className="empty-state compact-empty"><h3>No startups found</h3></div>}
         </section>
       </> : null}

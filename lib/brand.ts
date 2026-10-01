@@ -24,7 +24,7 @@ export const brandCopy = {
   shortDescription: "Discover useful startups and follow what their founders build next.",
   mediumDescription: "FounderTrail helps people find useful software, ask founders questions, and follow meaningful product progress.",
   longDescription: [
-    "FounderTrail gives every approved startup a lasting public profile for its launch, feedback, and future progress.",
+    "FounderTrail gives every published startup a lasting public profile for its launch, feedback, and future progress.",
     "Founders can publish updates and optionally connect supporting business metrics. Every shared number identifies its source and scope.",
   ],
 } as const;

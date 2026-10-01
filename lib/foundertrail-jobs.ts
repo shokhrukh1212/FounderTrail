@@ -1,4 +1,5 @@
 import "server-only";
+import { insertFunnelEvent } from "./analytics";
 import { Resend } from "resend";
 import { brand } from "./brand";
 import { config, isDodoProviderConfigured } from "./config";
@@ -27,11 +28,11 @@ async function archiveLaunchWeeks() {
     const weeks = await client.query<{ id: string }>(`SELECT id::text FROM launch_weeks WHERE ends_at<=now() AND state IN ('scheduled','active') FOR UPDATE`);
     for (const week of weeks.rows) {
       await client.query(`WITH totals AS (
-        SELECT pl.id,pl.product_id,pl.approved_at,count(lv.*) FILTER(WHERE lv.active)::int AS votes
+        SELECT pl.id,pl.product_id,pl.starts_at,count(lv.*) FILTER(WHERE lv.active)::int AS votes
           FROM product_launches pl LEFT JOIN launch_votes lv ON lv.launch_id=pl.id
          WHERE pl.launch_week_id=$1::uuid AND pl.state IN ('scheduled','active') GROUP BY pl.id
       ), ranked AS (
-        SELECT id,votes,row_number() OVER(ORDER BY votes DESC,approved_at,product_id)::int AS position FROM totals
+        SELECT id,votes,row_number() OVER(ORDER BY votes DESC,starts_at,product_id)::int AS position FROM totals
       ) UPDATE product_launches pl SET state='completed',final_rank=ranked.position,final_vote_count=ranked.votes
           FROM ranked WHERE pl.id=ranked.id`, [week.id]);
       await client.query(`UPDATE launch_weeks SET state='completed',completed_at=coalesce(completed_at,now()) WHERE id=$1::uuid`, [week.id]);
@@ -221,6 +222,10 @@ async function sendWeeklyDigests(limit = 8) {
 }
 
 export async function runFounderTrailJobs() {
+  await withTransaction(async client=>{
+    const due=await client.query<{id:string;product_id:string;starts_at:Date}>(`UPDATE product_launches pl SET state='active' FROM products p WHERE p.id=pl.product_id AND p.status='published' AND pl.state='scheduled' AND pl.starts_at<=now() RETURNING pl.id::text,pl.product_id::text,pl.starts_at`);
+    for(const launch of due.rows) await insertFunnelEvent(client,{name:"scheduled_launch_activated",idempotencyKey:launch.id,eventData:{productId:launch.product_id,startsAt:launch.starts_at.toISOString()}});
+  });
   const recoveredJobLeases = await releaseStaleJobLeases();
   const [bookingStates, launchArchives, webhookRetries, refundRetries, checkoutReconciliations, proRefunds, proCheckoutReconciliations, finalizedProReports, digestQueued] = await Promise.all([
     maintainBookingStates(), archiveLaunchWeeks(), retryFailedWebhookReceipts(), retrySponsorRefunds(), reconcileExpiredDodoCheckouts(), retryProRefunds(), reconcileExpiredProCheckouts(), finalizeDueProReports(), queueWeeklyDigests(),

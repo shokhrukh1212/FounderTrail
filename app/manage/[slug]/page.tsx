@@ -9,12 +9,15 @@ import { query } from "@/lib/db";
 import { config } from "@/lib/config";
 import { getManagedProduct } from "@/lib/product-data";
 import { currentUserFromHeaders } from "@/lib/auth";
+import { authenticateOwner } from "@/lib/owner-auth";
 
 export const dynamic = "force-dynamic";
 export default async function ManagePage({ params, searchParams }: PageProps<"/manage/[slug]"> & { searchParams: Promise<{ tab?: string }> }) {
   const [{ slug }, queryParams] = await Promise.all([params, searchParams]); const product = await getManagedProduct(slug); if (!product) notFound();
-  const user = await currentUserFromHeaders(await headers()).catch(() => null);
-  const accountOwner = user ? (await query<{ allowed: boolean }>(`SELECT EXISTS(SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2) OR EXISTS(SELECT 1 FROM products WHERE id=$1::uuid AND created_by_user_id=$2) AS allowed`, [product.id, user.id]))[0]?.allowed : false;
+  const requestHeaders = await headers();
+  const user = await currentUserFromHeaders(requestHeaders).catch(() => null);
+  const access = user ? await authenticateOwner(new Request(config.siteUrl, { headers: requestHeaders }), slug) : null;
+  const accountOwner = access && user ? (await query<{ allowed: boolean }>(`SELECT EXISTS(SELECT 1 FROM product_owners WHERE product_id=$1::uuid AND user_id=$2) AS allowed`, [product.id, user.id]))[0]?.allowed : false;
   // Admins can open every product's workspace; a banner says they are not its owner.
   const adminView = !accountOwner && user?.role === "admin";
   if (!accountOwner && !adminView) return <main className="app-shell inner-page"><OwnerAccess slug={slug} /></main>;

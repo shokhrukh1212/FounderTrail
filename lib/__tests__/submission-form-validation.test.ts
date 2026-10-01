@@ -129,10 +129,11 @@ test("screenshots collect accessible alt text that reaches the database", () => 
   assert.match(productsRoute, /slice\(0, 240\)/); // the column caps alt_text at 240 characters
 });
 
-test("the duplicate-domain rule has exactly one implementation", () => {
+test("duplicate hints use URL identity while submission reserves it inside the transaction", () => {
   const productsRoute = readFileSync(new URL("../../app/api/products/route.ts", import.meta.url), "utf8");
   const metadataRoute = readFileSync(new URL("../../app/api/products/metadata/route.ts", import.meta.url), "utf8");
-  assert.match(productsRoute, /findDomainDuplicate\(/);
+  assert.match(productsRoute, /productIdentity\(/);
+  assert.match(productsRoute, /pg_advisory_xact_lock/);
   assert.match(metadataRoute, /findDomainDuplicate\(/);
   // Neither route may re-query the rule itself.
   assert.doesNotMatch(productsRoute, /normalized_domain=\$1 AND status IN/);

@@ -30,7 +30,8 @@
     "foundertrail:baseline:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/foundertrail-baseline.ts baseline",
     "foundertrail:reconcile:test": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/foundertrail-baseline.ts reconcile",
     "dev:test": "USE_TEST_DATABASE=true next dev",
-    "seed:sponsor": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/seed-sponsor-demo.ts"
+    "seed:sponsor": "USE_TEST_DATABASE=true tsx --env-file=.env.local scripts/seed-sponsor-demo.ts",
+    "foundertrail:instant-migrate": "tsx --env-file=.env.local scripts/instant-launch-migrate.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",

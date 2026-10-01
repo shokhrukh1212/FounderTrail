@@ -72,7 +72,7 @@ export async function getFounderTrailDiscovery(input: {
   const filters = [`p.status='published'`, `($1::boolean OR NOT p.is_demo)`];
   let launchJoin = `LEFT JOIN product_launches pl ON false LEFT JOIN launch_weeks lw ON false`;
   if (input.view === "this_week") {
-    launchJoin = `JOIN product_launches pl ON pl.product_id=p.id AND pl.state IN ('scheduled','active')
+    launchJoin = `JOIN product_launches pl ON pl.product_id=p.id AND pl.state IN ('scheduled','active') AND pl.starts_at<=now()
       JOIN launch_weeks lw ON lw.id=pl.launch_week_id AND lw.starts_at<=now() AND now()<lw.ends_at AND lw.state IN ('scheduled','active')`;
   }
   const search = (input.search ?? "").trim().slice(0, 80);
@@ -102,7 +102,7 @@ export async function getFounderTrailDiscovery(input: {
   const params=[...baseParams,input.userId??null];const userParameter=params.length;
   params.push(pageSize, (page - 1) * pageSize);
   const order = input.view === "this_week"
-    ? `launch_votes DESC,pl.approved_at,p.id`
+    ? `launch_votes DESC,pl.starts_at,p.id`
     : input.sort === "newest" ? `p.created_at DESC,p.id` : `all_time_upvotes DESC,p.created_at,p.id`;
   const isPro = await proEntitlementSelect();
   const rows = await query<StartupRow>(`SELECT p.id::text,p.slug,p.website_url,p.name,p.short_name,p.tagline,
