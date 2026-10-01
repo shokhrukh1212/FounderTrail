@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
 
 // Read-only deployment smoke check. No credentials or database access required.
 const origin = new URL(process.argv[2] || "https://bidindex.dev").origin;
@@ -10,6 +11,12 @@ const agents = [
 function attributes(tag) {
   return Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/g)]
     .map(([, key, value]) => [key.toLowerCase(), value.replaceAll("&amp;", "&")]));
+}
+
+export function assertCanonical(actual, expected, path) {
+  // Next emits a bare origin for the homepage. URL parsing treats that and
+  // origin + '/' identically while keeping distinct paths and query strings.
+  assert.equal(new URL(actual).href, new URL(expected).href, `${path}: incorrect canonical`);
 }
 
 async function request(path, agent) {
@@ -59,7 +66,7 @@ async function main() {
       const canonicals = [...body.matchAll(/<link\b[^>]*>/gi)].map(([tag]) => attributes(tag))
         .filter((link) => link.rel === "canonical");
       assert.equal(canonicals.length, 1, `${path}: expected exactly one canonical`);
-      assert.equal(canonicals[0].href, new URL(path, origin).href, `${path}: incorrect canonical`);
+      assertCanonical(canonicals[0].href, new URL(path, origin).href, path);
       console.log(`OK [${name}] ${path}`);
     }
     const { response, body } = await request("/sign-in", agent);
@@ -72,7 +79,13 @@ async function main() {
   console.log("SEO smoke checks passed. This checks user-agent access, not verified crawler IPs or backlink history.");
 }
 
-main().catch((error) => {
-  console.error(`SEO check failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`SEO check failed: ${error.message}`);
+    if (error instanceof assert.AssertionError) {
+      console.error(`Actual: ${JSON.stringify(error.actual)}`);
+      console.error(`Expected: ${JSON.stringify(error.expected)}`);
+    }
+    process.exitCode = 1;
+  });
+}
