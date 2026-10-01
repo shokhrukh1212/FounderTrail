@@ -19,6 +19,7 @@
     "foundertrail:readiness": "tsx --env-file=.env.local scripts/foundertrail-readiness.ts",
     "seed:demo": "tsx --env-file=.env.local scripts/seed-demo.ts",
     "test": "node --import tsx --test lib/__tests__/*.test.ts",
+    "seo:check": "node scripts/check-seo.mjs",
     "reset": "tsx --env-file=.env.local scripts/reset-board.ts",
     "votes:set": "tsx --env-file=.env.local scripts/set-product-upvotes.ts",
     "categories:restore": "tsx --env-file=.env.local scripts/restore-product-categories.ts",

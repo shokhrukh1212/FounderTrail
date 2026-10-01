@@ -8,6 +8,7 @@ import { StartupRow } from "@/components/StartupRow";
 import { ProductLogo } from "@/components/ProductLogo";
 import { LocalTime } from "@/components/LocalTime";
 import { PRICING_MODELS, PRICING_MODEL_LABELS } from "@/lib/product-pricing";
+import { discoveryPageMetadata, type HomeSearchParams } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,9 @@ const views: Array<{ id: FounderTrailView; label: string }> = [
   { id: "updates", label: "Updates" },
 ];
 
-type HomeSearchParams = { view?: string; q?: string; category?: string; pricing?: string; sort?: string; page?: string };
+export async function generateMetadata({ searchParams }: { searchParams: Promise<HomeSearchParams> }) {
+  return discoveryPageMetadata(await searchParams);
+}
 
 function href(input: Record<string, string | number | undefined>, hash = "products") {
   const params = new URLSearchParams();

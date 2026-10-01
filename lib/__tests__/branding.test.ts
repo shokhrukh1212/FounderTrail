@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { brand, brandCopy } from "../brand";
+import { siteSocialImage } from "../seo";
 
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),"utf8");
 const home=read("../../app/page.tsx");
@@ -23,10 +24,9 @@ test("FounderTrail uses the approved discovery positioning",()=>{
 });
 
 test("root and product social metadata use 1200 by 630 previews",()=>{
-  assert.match(layout,/url: "\/brand\/og\.png"/);
-  assert.match(layout,/type: "image\/png"/);
-  assert.match(layout,/width: 1200/);
-  assert.match(layout,/height: 630/);
+  assert.deepEqual({url:siteSocialImage.url,type:siteSocialImage.type,width:siteSocialImage.width,height:siteSocialImage.height},
+    {url:"/brand/og.png",type:"image/png",width:1200,height:630});
+  assert.match(layout,/openGraph: siteOpenGraph/);
   assert.match(productPage,/canonicalProductUrl\(config\.siteUrl, slug\)/);
   assert.match(productPage,/const image = productShareImageUrl\(config\.siteUrl, slug\)/);
   assert.match(productPage,/card: "summary_large_image"/);

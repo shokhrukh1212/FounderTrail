@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+import { publicPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { LegalContact } from "@/components/LegalContact";
 import { config } from "@/lib/config";
 
-export const metadata: Metadata = { title: "Terms of service", description: "The terms for using FounderTrail, listing a startup, and buying FounderTrail Pro." };
+export const metadata = publicPageMetadata("/terms", "Terms of service", "The terms for using FounderTrail, listing a startup, and buying FounderTrail Pro.");
 
 const UPDATED = "September 23, 2026";
 

@@ -1,4 +1,5 @@
 import { brand, brandCopy } from "./brand";
+import { resolveSiteUrl } from "./site-url";
 
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -8,7 +9,7 @@ function int(name: string, fallback: number): number {
 }
 
 export const config = {
-  siteUrl: (process.env.SITE_URL?.trim() || "http://localhost:3000").replace(/\/+$/, ""),
+  siteUrl: resolveSiteUrl(process.env.SITE_URL, process.env.NODE_ENV === "production"),
   // An empty SITE_NAME (as in a blank .env line) must fall back too, not print "".
   siteName: process.env.SITE_NAME?.trim() || brand.displayName,
   /** Public contact address shown on the privacy policy and terms. */

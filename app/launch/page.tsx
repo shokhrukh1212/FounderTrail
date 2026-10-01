@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { currentUserFromHeaders } from "@/lib/auth";
 import { query } from "@/lib/db";
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Launch your startup", robots: { index: false, follow: false } };
 export default async function LaunchSelection() {
   const user = await currentUserFromHeaders(await headers());
   if (!user) redirect('/sign-in?returnTo=%2Flaunch');

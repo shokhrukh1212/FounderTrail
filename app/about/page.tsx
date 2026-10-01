@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { brand, brandCopy } from "@/lib/brand";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "About", description: brandCopy.mediumDescription };
+export const metadata = publicPageMetadata("/about", "About", brandCopy.mediumDescription);
 
 const sources = [
   ["Measured by FounderTrail", "Directly measured by FounderTrail, such as eligible profile views and outbound clicks."],

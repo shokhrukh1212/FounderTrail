@@ -11,19 +11,13 @@ import { BidIndexVisitorTracker } from "@/components/BidIndexVisitorTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { brandCopy } from "@/lib/brand";
 import { config } from "@/lib/config";
+import { siteOpenGraph, siteTwitter } from "@/lib/seo";
 import { currentUserFromHeaders } from "@/lib/auth";
 import "./globals.css";
 
 const publicSiteUrl = new URL(config.siteUrl);
 const socialTitle = brandCopy.metaTitle;
 const socialDescription = brandCopy.metaDescription;
-const socialImage = {
-  url: "/brand/og.png",
-  width: 1200,
-  height: 630,
-  type: "image/png",
-  alt: `${config.siteName} — ${brandCopy.line}`,
-};
 
 // Next ships these exact variable fonts with the installed package. Loading them
 // locally keeps production builds deterministic and avoids a Google Fonts request.
@@ -50,24 +44,9 @@ export const metadata: Metadata = {
     template: `%s · ${config.siteName}`,
   },
   description: socialDescription,
-  alternates: {
-    canonical: "/",
-  },
-  openGraph: {
-    type: "website",
-    siteName: config.siteName,
-    locale: "en_US",
-    url: "/",
-    title: socialTitle,
-    description: socialDescription,
-    images: [socialImage],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: socialTitle,
-    description: socialDescription,
-    images: [socialImage],
-  },
+  // Canonical and og:url belong to each public page, never to the root layout.
+  openGraph: siteOpenGraph,
+  twitter: siteTwitter,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

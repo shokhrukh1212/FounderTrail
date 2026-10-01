@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+import { publicPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { LegalContact } from "@/components/LegalContact";
 import { config } from "@/lib/config";
 
-export const metadata: Metadata = { title: "Privacy policy", description: "How FounderTrail collects, uses and protects your information, including the Google account data used for sign-in." };
+export const metadata = publicPageMetadata("/privacy", "Privacy policy", "How FounderTrail collects, uses and protects your information, including the Google account data used for sign-in.");
 
 const UPDATED = "September 23, 2026";
 

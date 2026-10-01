@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { publicPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { LaunchStudio, type LaunchImageSource } from "@/components/LaunchStudio";
@@ -12,7 +12,7 @@ import { displayProductName } from "@/lib/display-text";
 import { FREE_PLAN_FEATURES, PRO_INTRO_SLOTS, PRO_PLAN_FEATURES, introPriceLine } from "@/lib/plan-features";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Pricing", description: "Create a FounderTrail startup page for free, or add professional launch tools with a one-time Pro upgrade." };
+export const metadata = publicPageMetadata("/pricing", "Pricing", "Create a FounderTrail startup page for free, or add professional launch tools with a one-time Pro upgrade.");
 
 // A fictional sample startup, so the preview shows what a finished launch graphic looks
 // like: a real logo, a real product screenshot and real copy, not empty placeholders.

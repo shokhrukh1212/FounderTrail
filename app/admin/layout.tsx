@@ -6,6 +6,7 @@ import { config } from "@/lib/config";
 import { getAdminVisitorStat } from "@/lib/visitors";
 import { headers } from "next/headers";
 import { currentUserFromHeaders } from "@/lib/auth";
+export const metadata = { robots: { index: false, follow: false } };
 export default async function AdminLayout({children}:{children:React.ReactNode}){
   const account=await currentUserFromHeaders(await headers()).catch(()=>null);
   const legacySession=validAdminSession((await cookies()).get(ADMIN_COOKIE)?.value??null);
