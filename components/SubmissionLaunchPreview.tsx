@@ -15,7 +15,7 @@ function loadImage(url: string | null): Promise<HTMLImageElement | null> {
   });
 }
 
-export default function SubmissionLaunchPreview({ name, tagline, websiteUrl, logoUrl }: { name: string; tagline: string; websiteUrl: string; logoUrl: string | null }) {
+export default function SubmissionLaunchPreview({ name, tagline, websiteUrl, logoUrl, onReady }: { name: string; tagline: string; websiteUrl: string; logoUrl: string | null; onReady?: (ready: boolean) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -24,6 +24,7 @@ export default function SubmissionLaunchPreview({ name, tagline, websiteUrl, log
   draft.image.cta = "Explore startup";
   useEffect(() => {
     let cancelled = false;
+    onReady?.(false);
     async function render() {
       try {
         const [logo, brand] = await Promise.all([loadImage(logoUrl), loadImage("/logo.png")]);
@@ -31,15 +32,15 @@ export default function SubmissionLaunchPreview({ name, tagline, websiteUrl, log
         const current = defaultLaunchKitDraft({ name, tagline, websiteUrl, founderTrailUrl: websiteUrl, launchState: "preview", useCase: null, audience: null });
         current.image.cta = "Explore startup";
         await paintLaunchGraphic(canvas.current, current.image, { logo, brand, screenshot: null }, { launchState: "preview", fontFamily: await launchFontFamily(), hostname: "" });
+        if (!cancelled) onReady?.(true);
       } catch { if (!cancelled) setFailed(true); }
     }
     void render();
     return () => { cancelled = true; };
-  }, [name, tagline, websiteUrl, logoUrl, retry]);
+  }, [name, tagline, websiteUrl, logoUrl, retry, onReady]);
   return <div className="submission-pro-preview">
-    <p className="eyebrow">Preview</p>
-    {failed ? <p role="status">Preview couldn’t load. <button type="button" className="text-button" onClick={() => { setFailed(false); setRetry(retry + 1); }}>Try again</button></p> : <canvas ref={canvas} aria-label={`Preview launch graphic for ${name}: ${tagline}`} role="img" />}
-    <strong>Post draft</strong><p className="submission-post-preview">{draft.social.short}</p>
-    <small>Sample only. Pro unlocks editing and downloads. Nothing is posted automatically.</small>
+    {failed ? <p role="status">Preview couldn’t load. <button type="button" className="text-button" onClick={() => { setFailed(false); setRetry(retry + 1); }}>Try again</button></p> : <canvas ref={canvas} width={1200} height={630} aria-label={`Preview launch graphic for ${name}: ${tagline}`} role="img" />}
+    <strong>Your launch post, started for you</strong><p className="submission-post-preview">{draft.social.short}</p>
+    <small>Preview · Edit and download with Pro. You choose what to post.</small>
   </div>;
 }

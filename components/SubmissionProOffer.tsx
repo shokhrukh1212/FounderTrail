@@ -1,6 +1,8 @@
 "use client";
 
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { ProductLogo } from "./ProductLogo";
+import { ProBadge } from "./ProBadge";
 
 const Preview = lazy(() => import("./SubmissionLaunchPreview"));
 class PreviewBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -11,7 +13,7 @@ class PreviewBoundary extends Component<{ children: ReactNode }, { failed: boole
 
 export function trackSubmissionPro(event: "pro_offer_viewed" | "pro_preview_opened" | "pro_selected", key: string) {
   if (!key) return;
-  void fetch("/api/analytics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event, eventId: `${event}:${key}` }), keepalive: true }).catch(() => {});
+  void fetch("/api/analytics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event, eventId: `${event}:${key}`, offerVersion: "inline_preview_v1" }), keepalive: true }).catch(() => {});
 }
 
 function BenefitIcon({ kind }: { kind: "image" | "edit" | "report" | "badge" }) {
@@ -28,26 +30,59 @@ export function SubmissionProOffer({ name, tagline, websiteUrl, logoUrl, selecte
   name: string; tagline: string; websiteUrl: string; logoUrl: string | null;
   selected: boolean; onSelect: (value: boolean) => void; price: number; configured: boolean; visible: boolean; submissionKey: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const viewed = useRef(false);
+  const heading = useRef<HTMLDivElement>(null);
+  const preview = useRef<HTMLDivElement>(null);
+  const [previewReady, setPreviewReady] = useState(false);
+  const tracked = useRef(new Set<string>());
   const shortName = Array.from(name || "your startup").slice(0, 60).join("");
   useEffect(() => {
-    if (visible && submissionKey && !viewed.current) { viewed.current = true; trackSubmissionPro("pro_offer_viewed", submissionKey); }
-  }, [visible, submissionKey]);
+    if (!visible || !submissionKey) return;
+    // Inactive form steps stay mounted. Count exposure only when it enters the viewport.
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.25) continue;
+        const event = entry.target === heading.current ? "pro_offer_viewed" : "pro_preview_opened";
+        const key = `${event}:${submissionKey}`;
+        if (!tracked.current.has(key)) { tracked.current.add(key); trackSubmissionPro(event, submissionKey); }
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.25 });
+    if (heading.current) observer.observe(heading.current);
+    if (previewReady && preview.current) observer.observe(preview.current);
+    return () => observer.disconnect();
+  }, [visible, submissionKey, previewReady]);
   return <section className="submission-pro-offer" aria-labelledby="submission-pro-heading">
-    <div className="submission-pro-heading"><div><p className="eyebrow">Optional · Pro Launch</p><h3 id="submission-pro-heading">Give your launch a polished start.</h3><p>Turn your startup details into a launch kit you can make your own.</p></div><div className="submission-pro-price"><strong>${price / 100}</strong><span>one-time / startup</span></div></div>
-    <ul className="submission-pro-benefits">{([
-      ["image", "Editable launch images", "Personalize and download."],
-      ["edit", "Ready-to-edit post drafts", "Make them sound like you."],
-      ["report", "Seven-day launch report", "See your launch activity clearly."],
-      ["badge", "A Pro badge on your startup", "Shows your Pro membership."],
-    ] as const).map(([kind, title, description]) => <li key={title}><span><BenefitIcon kind={kind} /></span><div><strong>{title}</strong><p>{description}</p></div></li>)}</ul>
-    <details onToggle={(event) => { const expanded = event.currentTarget.open; setOpen(expanded); if (expanded) trackSubmissionPro("pro_preview_opened", submissionKey); }}>
-      <summary>Preview {shortName}’s launch kit</summary>
-      {open ? <PreviewBoundary><Suspense fallback={<p role="status">Loading preview…</p>}><Preview name={shortName} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoUrl} /></Suspense></PreviewBoundary> : null}
-    </details>
-    <label className="submission-pro-choice" htmlFor="submission-pro-selected"><input id="submission-pro-selected" name="proSelected" type="checkbox" checked={selected} onChange={(event) => { onSelect(event.target.checked); if (event.target.checked) trackSubmissionPro("pro_selected", submissionKey); }} /><strong>Add Pro Launch</strong><span>${price / 100} once</span></label>
-    <p className="field-help">{price === 500 ? "First 20 startup purchases: $5. Then $9. No subscription." : "Pro Launch is $9 per startup. No subscription."}</p>
-    {!configured ? <p role="status">Pro is temporarily unavailable. You can still submit for free.</p> : <p className="field-help">Your page and launch go live independently of Pro checkout.</p>}
+    <div ref={heading} className="submission-pro-heading">
+      <div><p className="eyebrow">Pro Launch · Optional upgrade</p><h3 id="submission-pro-heading">Your startup. Ready to share.</h3><p>Give your launch a polished look with a kit made for {shortName}.</p></div>
+      <div className="submission-pro-price"><strong>${price / 100}</strong><span>once per startup</span><span>No subscription</span></div>
+    </div>
+    <div className="submission-pro-showcase">
+      <div ref={preview} className="submission-pro-sample">
+        <p className="submission-pro-sample-label">A preview of your launch kit</p>
+        {visible ? <PreviewBoundary><Suspense fallback={<div className="submission-pro-loading" role="status">Preparing your launch graphic…</div>}><Preview name={shortName} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoUrl} onReady={setPreviewReady} /></Suspense></PreviewBoundary> : null}
+      </div>
+      <div className="submission-pro-includes">
+        <h4>Everything to put your launch out there</h4>
+        <ul className="submission-pro-benefits">{([
+          ["image", "Make it yours, then download", "Edit your graphics. Export square and landscape PNGs."],
+          ["edit", "Spend less time on the first draft", "Personalize launch posts for X and LinkedIn."],
+          ["report", "See how your launch went", "A seven-day summary of views, clicks, and community activity."],
+          ["badge", "Show your Pro membership", "A Pro badge beside your startup’s name."],
+        ] as const).map(([kind, title, description]) => <li key={kind}><span><BenefitIcon kind={kind} /></span><div><strong>{title}</strong><p>{description}</p></div></li>)}</ul>
+        <div className="submission-pro-listing">
+          <p className="submission-pro-sample-label">Your listing with Pro · Preview</p>
+          <div><ProductLogo productName={shortName} productUrl={websiteUrl || null} imageUrl={logoUrl} compact /><strong>{shortName}</strong><ProBadge preview /></div>
+        </div>
+      </div>
+    </div>
+    <label className={`submission-pro-choice${selected && configured ? " is-selected" : ""}${!configured ? " is-unavailable" : ""}`} htmlFor="submission-pro-selected">
+      <input id="submission-pro-selected" name="proSelected" type="checkbox" checked={selected && configured} disabled={!configured} aria-describedby="submission-pro-terms" onChange={(event) => { onSelect(event.target.checked); if (event.target.checked) trackSubmissionPro("pro_selected", submissionKey); }} />
+      <span className="submission-pro-choice-copy"><strong>{selected && configured ? "Pro Launch added" : "Add Pro Launch"}</strong><small>{selected && configured ? "Your launch kit is included. Uncheck to remove." : "Get the launch kit, Pro badge, and results summary."}</small></span>
+      <span className="submission-pro-choice-price">${price / 100}<small>one time</small></span>
+    </label>
+    <div id="submission-pro-terms" className="submission-pro-terms">
+      <p>{price === 500 ? "Introductory price: $5 for the first 20 startup purchases, then $9." : "One purchase covers this startup."} Any applicable taxes are shown at checkout.</p>
+      {!configured ? <p role="status">Pro is temporarily unavailable. You can still publish for free.</p> : <p>Checkout opens after publishing. You can also launch for free and upgrade later.</p>}
+    </div>
   </section>;
 }

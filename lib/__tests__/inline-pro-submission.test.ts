@@ -11,7 +11,7 @@ const moderation = read("../../app/api/admin/products/[slug]/status/route.ts");
 const migration = read("../../migrations/018_inline_pro_submission.up.sql");
 
 test("the final submission step keeps Pro explicit and free submission available", () => {
-  assert.match(offer, /type="checkbox" checked=\{selected\}/);
+  assert.match(offer, /type="checkbox" checked=\{selected && configured\} disabled=\{!configured\}/);
   assert.match(form, /Publish & launch now/);
   assert.match(form, /Free publication/);
   assert.match(form, /submissionStatus" value="draft"/);

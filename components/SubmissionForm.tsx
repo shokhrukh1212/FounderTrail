@@ -472,6 +472,8 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
           </div>
         </div>
 
+        <SubmissionProOffer name={name} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoPreview} selected={proSelected} onSelect={setProSelected} price={proPrice} configured={proConfigured} visible={step === 3} submissionKey={submissionKey} />
+
         <div className="form-field">
           <label htmlFor="submission-contactEmail">Contact email</label>
           <input id="submission-contactEmail" name="contactEmail" type="email" required maxLength={320} defaultValue={accountEmail} placeholder="founder@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldDescription("contactEmail", fieldErrors, "submission-contactEmail-help")} />
@@ -496,8 +498,6 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
 
         <LaunchChoice choice={launchChoice} onChange={setLaunchChoice} localDate={launchDate} onDateChange={setLaunchDate} />
 
-        <details className="submission-pro-disclosure"><summary>Optional: prepare a Pro launch kit · ${proPrice / 100} one time</summary><SubmissionProOffer name={name} tagline={tagline} websiteUrl={websiteUrl} logoUrl={logoPreview} selected={proSelected} onSelect={setProSelected} price={proPrice} configured={proConfigured} visible={step === 3} submissionKey={submissionKey} /></details>
-
         <div className="consent-field">
           <label className="consent-row" htmlFor="submission-ownershipConsent"><input id="submission-ownershipConsent" name="ownershipConsent" type="checkbox" required aria-invalid={Boolean(fieldErrors.ownershipConsent)} aria-describedby={fieldDescription("ownershipConsent", fieldErrors)} /> <span>I built this startup or am authorized to submit it, and the information above is accurate. See the <Link href="/about#submission-guidelines">submission guidelines</Link>.</span></label>
           <FieldError field="ownershipConsent" errors={fieldErrors} />
@@ -509,7 +509,7 @@ export function SubmissionForm({ accountName = "", accountEmail = "" }: { accoun
         <div className="button-row submit-final-button">
           <button className="button button-secondary" type="button" onClick={() => goToStep(2)}>Back</button>
           <button name="submissionStatus" value="draft" className="button button-secondary" disabled={busy} type="submit">Save draft</button>
-          <button name="submissionStatus" value="published" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : launchChoice === "now" ? "Publish & launch now" : launchChoice === "scheduled" ? "Publish & schedule launch" : "Publish startup"}</button>
+          <button name="submissionStatus" value="published" className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : proSelected && proConfigured ? `Publish & go to checkout · $${proPrice / 100}` : launchChoice === "now" ? "Publish & launch now" : launchChoice === "scheduled" ? "Publish & schedule launch" : "Publish startup"}</button>
         </div>
         <p className="form-hint">{proSelected && proConfigured ? "Your page and launch are saved before optional Pro checkout opens." : "Your public page goes live immediately. You can edit it any time."}</p>
       </fieldset>

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     name: body.event,
     idempotencyKey: suppliedId,
     visitorId: visitor.id,
-    eventData: body.event === "buyer_landing_viewed" ? { ...attribution, ...requestAnalyticsContext(request) } : { entryPoint: "submission" },
+    eventData: body.event === "buyer_landing_viewed" ? { ...attribution, ...requestAnalyticsContext(request) } : { entryPoint: "submission", ...(body.offerVersion === "inline_preview_v1" ? { offerVersion: "inline_preview_v1", previewMode: "automatic" } : {}) },
   });
   const response = NextResponse.json({ ok: true });
   if (visitor.isNew) response.cookies.set(VISITOR_COOKIE, visitor.id, visitorCookieOptions);

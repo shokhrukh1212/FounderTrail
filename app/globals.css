@@ -149,35 +149,56 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .about-cta { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 
 .submit-page { max-width: 920px; }
-.submission-pro-offer { margin: 24px 0; padding: 24px; border: 1px solid #f0d8d5; border-radius: 16px; background: #fff8f7; color: var(--text); min-width: 0; }
+.submission-pro-offer { margin: 24px 0; padding: 24px; border: 1px solid #edc9bc; border-radius: 16px; background: linear-gradient(135deg, #fff9f4, #fff5f2); color: var(--text); min-width: 0; }
 .submission-pro-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .submission-pro-heading h3 { margin: 8px 0; font-size: clamp(21px, 3vw, 26px); line-height: 1.2; letter-spacing: -.025em; }
-.submission-pro-heading p { margin: 0; color: var(--muted); max-width: 390px; }
-.submission-pro-heading .eyebrow { color: #c63f35; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.submission-pro-heading p { margin: 0; color: var(--muted); max-width: 390px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.submission-pro-heading .eyebrow { color: #a74431; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .submission-pro-price { flex-shrink: 0; display: grid; text-align: right; gap: 2px; }
 .submission-pro-price strong { font-size: 36px; line-height: 1.1; }
 .submission-pro-price span { color: var(--muted); font-size: 12px; }
-.submission-pro-benefits { list-style: none; padding: 0; margin: 24px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
+.submission-pro-showcase { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 24px; margin: 24px 0; }
+.submission-pro-sample { min-width: 0; padding: 12px; border: 1px solid #eadbd4; border-radius: 12px; background: #fff; }
+.submission-pro-sample-label { margin: 0 0 10px; color: #71635c; font-size: 10px; font-weight: 650; line-height: 1.5; }
+.submission-pro-includes { min-width: 0; }
+.submission-pro-includes h4 { margin: 0 0 16px; font-size: 13px; line-height: 1.5; }
+.submission-pro-benefits { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
 .submission-pro-benefits li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
 .submission-pro-benefits li > span { color: #278265; line-height: 1; width: 20px; height: 20px; flex-shrink: 0; }
 .submission-pro-benefits li > span svg { display: block; width: 20px; height: 20px; }
-.submission-pro-benefits p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-.submission-pro-offer details { border-top: 1px solid #eadbd9; padding-top: 14px; margin-bottom: 20px; }
-.submission-pro-offer summary { cursor: pointer; color: #c63f35; font-weight: 650; font-size: 14px; overflow-wrap: anywhere; }
-.submission-form .submission-pro-choice { display: flex; align-items: center; gap: 12px; padding: 16px; margin: 0 0 10px; background: white; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.submission-pro-benefits p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.submission-pro-listing { margin-top: 20px; padding-top: 14px; border-top: 1px solid #eadbd4; }
+.submission-pro-listing > div { display: flex; align-items: center; gap: 8px; }
+.submission-pro-listing strong { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.submission-pro-listing .pro-badge { flex-shrink: 0; }
+.submission-form .submission-pro-choice { display: flex; align-items: center; gap: 12px; padding: 16px; margin: 0 0 10px; background: white; border: 1px solid #d78f78; border-radius: 10px; cursor: pointer; }
+.submission-form .submission-pro-choice:hover, .submission-form .submission-pro-choice.is-selected { border-color: #b94b32; background: #fff0e8; }
+.submission-form .submission-pro-choice:focus-within { outline: 2px solid #b94b32; outline-offset: 3px; }
+.submission-form .submission-pro-choice.is-unavailable { background: #f5f4f3; border-color: var(--border); cursor: not-allowed; }
 .submission-pro-choice input { width: 20px; height: 20px; flex-shrink: 0; accent-color: #ff6154; }
-.submission-pro-choice > span { margin-left: auto; white-space: nowrap; }
-.submission-pro-offer .field-help { display: block; margin: 6px 0 0; line-height: 1.5; }
-.submission-pro-preview { margin-top: 16px; padding: 12px; background: white; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.submission-pro-preview canvas { display: block; width: 100%; height: auto; border-radius: 7px; margin-bottom: 14px; }
-.submission-post-preview { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.submission-pro-choice-copy { display: grid; min-width: 0; gap: 4px; line-height: 1.5; }
+.submission-pro-choice-copy strong { font-size: 15px; }
+.submission-pro-choice-copy small { font-size: 11px; }
+.submission-pro-choice-price { display: grid; gap: 3px; margin-left: auto; flex-shrink: 0; text-align: right; font-size: 22px; line-height: 1.2; }
+.submission-pro-choice-price small { font-size: 10px; white-space: nowrap; }
+.submission-pro-terms p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.submission-pro-preview { min-width: 0; }
+.submission-pro-preview canvas { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; border: 1px solid #f0ebe7; border-radius: 7px; margin-bottom: 14px; }
+.submission-pro-preview > strong { display: block; margin-top: 14px; font-size: 11px; }
+.submission-pro-preview > small { display: block; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.submission-pro-loading { display: grid; place-items: center; aspect-ratio: 1200 / 630; border-radius: 7px; background: #fff7f2; color: var(--muted); font-size: 12px; text-align: center; }
+.submission-post-preview { margin: 8px 0 12px; padding: 10px; background: #f8f7f5; border-radius: 7px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.65; }
 .submission-plan-summary { border-top: 1px solid var(--border); padding-top: 20px; margin-top: 22px; }
 .submission-plan-summary p { margin: 3px 0 16px; color: var(--muted); font-size: 13px; }
+@media (max-width: 700px) {
+  .submission-pro-showcase { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+}
 @media (max-width: 540px) {
   .submission-pro-offer { padding: 16px; }
-  .submission-pro-heading { flex-direction: column; gap: 14px; }
-  .submission-pro-price { text-align: left; }
-  .submission-pro-benefits { grid-template-columns: 1fr; gap: 16px; }
+  .submission-pro-heading { gap: 12px; }
+  .submission-pro-heading h3 { font-size: 21px; }
+  .submission-pro-price strong { font-size: 30px; }
+  .submission-pro-price span { font-size: 10px; }
   .submission-form .submission-pro-choice { padding: 12px; gap: 8px; }
   .submit-final-button { flex-wrap: wrap; }
 }
@@ -992,9 +1013,6 @@ select:not([multiple]):not([size]):disabled{opacity:.6;cursor:not-allowed}
 @media(max-width:760px) { .activation-layout { grid-template-columns: minmax(0,1fr); } .activation-aside { display: none; } .activation-task { padding: 20px; } }
 @media(max-width:420px) { .activation-task { padding: 16px; border-radius: 14px; } .activation-hero { padding-top: 28px; } .activation-task-heading h2 { font-size: 18px; } .launch-choice-card { padding: 13px 11px; gap: 9px; flex-wrap: wrap; } .launch-recommended { margin-left: 27px; } .activation-task .button-row { gap: 10px; flex-wrap: wrap; } .activation-task .button { font-size: 12px; } .activation-pro-offer { padding: 16px; } .activation-footer { flex-direction: column; } }
 @media(prefers-reduced-motion:reduce) { .activation-page *, .launch-choice-group * { scroll-behavior: auto; animation: none; transition: none; } }
-.submission-pro-disclosure { margin: 22px 0; border: 1px solid #e7e0d9; border-radius: 12px; padding: 16px; }
-.submission-pro-disclosure > summary { font-size: 14px; font-weight: 600; cursor: pointer; }
-.submission-pro-disclosure .submission-pro-offer { margin-bottom: 0; }
 .submission-form .listing-preview .category-tags { display: flex; gap: 5px; flex-wrap: wrap; margin: 7px 0; }
 .submission-form .listing-preview .category-tags > span { padding: 3px 7px; border-radius: 5px; background: #e9ecef; color: #556170; font-size: 10px; }
 .submission-form .launch-date-fields label { margin-bottom: 0; }
